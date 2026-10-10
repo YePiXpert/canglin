@@ -313,7 +313,7 @@
 
 - 字段用 Input / Select / Textarea 自带的 `label`（字段上方）；必填用 `required`（朱砂星号）；补充说明用 `hint`；校验错误用 `error` 显示在字段下方（`.field-error`：12.5px 红字 + `alert-circle` 图标，输入框经 `aria-invalid` 转红框淡红底），不要只靠 Toast。手写的输入控件套全局类 `.control`（§5.2）。
 - 前后端共用 `packages/shared` 的 zod 契约，校验信息用中文（如数字的「必须大于 0」「不能为负数」）；新增校验延续中文文案。
-- 弹窗表单字段用 `grid gap-4 sm:grid-cols-2`，分组之间 `border-t border-line pt-4` 加 13px / 600 的分组标题；明细行（下单登记、发放登记）是 `bg-surface-2` 小块，行内控件统一 `size="sm"`；逐行录入的明细用「表格式输入」（列头只写一次，单元格 `Input variant="cell"`，行级错误在表下汇总「第 N 行：原因」）。
+- 弹窗表单字段用 `grid gap-4 sm:grid-cols-2`，分组之间 `border-t border-line pt-4` 加 13px / 600 的分组标题；明细（下单登记、到货登记、发放 / 入库 / 退回等数量类弹窗）用 `RegisterLineTable` 表格式明细：列头只写一次，行内控件统一 `size="sm"`，字段错误只在单元格标红框、原因在表下汇总「第 N 行 · 品名：原因」；人工录入申请的逐行录入用无框的 `Input variant="cell"`，错误同样在表下汇总「第 N 行：原因」。
 - 表单弹窗的提交状态用 `useDialogForm(() => JSON.stringify(form))`（`@/composables/useDialogForm`）：给出 `saving` / `failure` / `errors` / `dirty` / `reset` / `submit`。打开并填好初始值后调 `reset()`；提交写 `await submit(() => api…)`——保存中重复点击直接忽略，失败原因写进 `failure`，成功后 `dirty` 归零、关闭不再追问；字段错误由调用方在 `submit` 之前写进 `errors`。失败文案统一用 `@/utils/form`：`issueText`（zod issues 用「；」连成一句）、`failureText`（校验错误或 `apiError`），不再手写 `issues.map(…).join('；')`。
 
 **表格与列表**
