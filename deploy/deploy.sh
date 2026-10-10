@@ -25,10 +25,6 @@ docker info >/dev/null 2>&1 || die "docker 守护进程未运行或当前用户�
 
 # ---------- 准备部署目录 ----------
 # 源码可以位于 /workspace；部署始终使用显式目录或 /opt 默认目录。
-# 改名前的旧实例必须由 upgrade.sh 迁移目录、项目名和数据卷；在新目录重新部署只会得到空系统。
-if [ "$REPO_DIR" = /opt/canglin ] && [ ! -e "$REPO_DIR" ] && [ -d /opt/procure-lite ]; then
-  die "检测到改名前的部署 /opt/procure-lite；请改用 deploy/upgrade.sh 升级，它会自动迁移旧实例"
-fi
 if [ ! -e "$REPO_DIR" ]; then
   info "克隆仓库到 $REPO_DIR …"
   git clone https://github.com/YePiXpert/canglin.git "$REPO_DIR"

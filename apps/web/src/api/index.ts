@@ -83,7 +83,7 @@ export interface ImportTasksPage extends Paged {
 }
 /** Keep an uncertain operation's key across retries and browser reloads. Clear only after a known result. */
 async function mutation<T>(url: string, body?: unknown): Promise<T> {
-  const key = 'procure-operation:' + url + ':' + JSON.stringify(body ?? {});
+  const key = 'canglin-operation:' + url + ':' + JSON.stringify(body ?? {});
   const id = sessionStorage.getItem(key) || crypto.randomUUID();
   sessionStorage.setItem(key, id);
   // 失败时保留 key：下次重试沿用同一个 Idempotency-Key

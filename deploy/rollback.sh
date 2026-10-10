@@ -11,17 +11,15 @@ RELEASE_DIR=$(realpath "$RELEASE_DIR")
 for file in state.tar.gz old-compose.yml old-images.yml release.txt; do
   test -s "$RELEASE_DIR/$file" || { echo "Missing rollback artifact: $file" >&2; exit 1; }
 done
+# 升级前没有容器时 upgrade.sh 跳过回退点记录：没有旧镜像就无法回退，不做任何停机动作。
+awk '$1 == "image:" {found = 1} END {exit !found}' "$RELEASE_DIR/old-images.yml" \
+  || { echo "old-images.yml 没有任何旧镜像记录（升级时没有运行中的容器，未生成回退点），无法回退；服务未停止" >&2; exit 1; }
 # Validate images, volume and archive before stopping the application.
 docker volume inspect "$VOLUME" >/dev/null
 while IFS= read -r image; do
   docker image inspect "$image" >/dev/null
 done < <(awk '$1 == "image:" {print $2}' "$RELEASE_DIR/old-images.yml")
 docker run --rm -v "$RELEASE_DIR:/backup:ro" alpine tar tzf /backup/state.tar.gz >/dev/null
-# 改名前的旧配置用卷键 procure-state：钉到当前数据卷，否则会以 canglin 项目名新建空卷。
-if grep -q '^  procure-state:' "$RELEASE_DIR/old-compose.yml" && ! grep -q '^volumes:' "$RELEASE_DIR/old-images.yml"; then
-  printf 'volumes:\n  procure-state:\n    name: %s\n' "$VOLUME" >> "$RELEASE_DIR/old-images.yml"
-  echo "旧配置使用改名前的卷键 procure-state，已在 old-images.yml 中钉到 $VOLUME"
-fi
 docker compose down --remove-orphans
 # Retain the pre-rollback state, including any writes made since the upgrade.
 ROLLBACK_SNAPSHOT="before-rollback-$(date +%Y%m%d-%H%M%S)-$$.tar.gz"

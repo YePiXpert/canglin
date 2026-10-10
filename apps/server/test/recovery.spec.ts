@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip';
 import { execFileSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 import { createApp, closeApp, type TestApp } from './utils';
-import { BackupService } from '../src/system/backup.service';
+import { BackupService, LEGACY_DB_ENTRY } from '../src/system/backup.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { config } from '../src/config';
 import { recoverRestore, writeRestoreJournal } from '../src/system/restore-files';
@@ -60,24 +60,48 @@ it('rolls back an interrupted file replacement', async () => {
   expect(await sample()).toBe('12');
   expect(fs.readFileSync(path.join(config.uploadsDir, 'evidence.txt'), 'utf8')).toBe('original');
 });
+it('names the database canglin.db in new backups and their manifest', async () => {
+  const zip = new AdmZip(backup.path((await backup.create()).name)),
+    manifest = JSON.parse(zip.readAsText('manifest.json')) as { files: Record<string, string> },
+    topLevel = (names: string[]) => names.filter((n) => !n.startsWith('uploads/')).sort();
+  expect(topLevel(zip.getEntries().map((e) => e.entryName))).toEqual(['canglin.db', 'manifest.json']);
+  expect(topLevel(Object.keys(manifest.files))).toEqual(['canglin.db']);
+});
+it('restores a backup taken before the rename under the new database name', async () => {
+  // Rewrite a fresh backup the way releases before the rename stored it: entry and manifest key.
+  const saved = await backup.create(),
+    zip = new AdmZip(backup.path(saved.name)),
+    manifest = JSON.parse(zip.readAsText('manifest.json')) as { files: Record<string, string> };
+  zip.addFile(LEGACY_DB_ENTRY, zip.readFile('canglin.db')!);
+  zip.deleteFile('canglin.db');
+  manifest.files[LEGACY_DB_ENTRY] = manifest.files['canglin.db'];
+  delete manifest.files['canglin.db'];
+  zip.updateFile('manifest.json', Buffer.from(JSON.stringify(manifest)));
+  zip.writeZip(backup.path(saved.name));
+  await prisma.catalogProduct.update({ where: { id: sampleId }, data: { specification: '15' } });
+  await backup.restore(saved.name);
+  expect(await sample()).toBe('12');
+  expect(fs.readdirSync(config.dataDir).filter((n) => n.endsWith('.db'))).toEqual(['canglin.db']);
+});
 it('startup recovery restores files from a crash journal', () => {
-  const root = fs.mkdtempSync('/tmp/procure-recovery-'),
+  const root = fs.mkdtempSync('/tmp/canglin-recovery-'),
     dir = '.restore-test';
   fs.mkdirSync(path.join(root, dir, 'old', 'uploads'), { recursive: true });
-  fs.writeFileSync(path.join(root, dir, 'old', 'procure.db'), 'old');
-  fs.writeFileSync(path.join(root, 'procure.db'), 'partial');
+  fs.writeFileSync(path.join(root, dir, 'old', 'canglin.db'), 'old');
+  fs.writeFileSync(path.join(root, 'canglin.db'), 'partial');
   writeRestoreJournal(root, dir, 'SWAPPING');
   recoverRestore(root);
-  expect(fs.readFileSync(path.join(root, 'procure.db'), 'utf8')).toBe('old');
+  expect(fs.readFileSync(path.join(root, 'canglin.db'), 'utf8')).toBe('old');
   expect(fs.existsSync(path.join(root, 'restore-journal.json'))).toBe(false);
   fs.rmSync(root, { recursive: true });
 });
 /**
  * Writes a manifest-less backup the way an older release would: a database migrated with only the
- * migrations older than `before`, seeded with raw SQL (the current Prisma client no longer matches it).
+ * migrations older than `before`, seeded with raw SQL (the current Prisma client no longer matches it)
+ * and stored under the database entry name used before the rename.
  */
 async function olderBackup(name: string, before: string, seed: string[]) {
-  const root = fs.mkdtempSync('/tmp/procure-legacy-');
+  const root = fs.mkdtempSync('/tmp/canglin-legacy-');
   try {
     fs.mkdirSync(path.join(root, 'migrations'));
     const source = path.resolve(__dirname, '../prisma');
@@ -96,16 +120,16 @@ async function olderBackup(name: string, before: string, seed: string[]) {
         '--schema',
         path.join(root, 'schema.prisma'),
       ],
-      { env: { ...process.env, DATABASE_URL: `file:${root}/procure.db` }, stdio: 'pipe' },
+      { env: { ...process.env, DATABASE_URL: `file:${root}/canglin.db` }, stdio: 'pipe' },
     );
-    const legacy = new PrismaClient({ datasources: { db: { url: `file:${root}/procure.db` } } });
+    const legacy = new PrismaClient({ datasources: { db: { url: `file:${root}/canglin.db` } } });
     try {
       for (const sql of seed) await legacy.$executeRawUnsafe(sql);
     } finally {
       await legacy.$disconnect();
     }
     const zip = new AdmZip();
-    zip.addLocalFile(path.join(root, 'procure.db'));
+    zip.addLocalFile(path.join(root, 'canglin.db'), '', LEGACY_DB_ENTRY);
     zip.writeZip(path.join(config.backupsDir, name));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

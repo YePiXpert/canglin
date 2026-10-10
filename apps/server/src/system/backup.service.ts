@@ -19,6 +19,8 @@ export interface BackupInfo {
 }
 const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const schemaPath = path.resolve(__dirname, '../../prisma/schema.prisma');
+/** 2026-10-10 改名前的备份里数据库条目名 */
+export const LEGACY_DB_ENTRY = 'procure.db';
 function files(directory: string, prefix = ''): string[] {
   if (!fs.existsSync(directory)) return [];
   return fs
@@ -47,7 +49,7 @@ export class BackupService {
         snapshot = path.join(config.backupsDir, `.snapshot-${randomUUID()}.db`);
       try {
         await this.prisma.$executeRawUnsafe(`VACUUM INTO '${snapshot.replace(/'/g, "''")}'`);
-        const hashes: Record<string, string> = { 'procure.db': sha(fs.readFileSync(snapshot)) };
+        const hashes: Record<string, string> = { 'canglin.db': sha(fs.readFileSync(snapshot)) };
         for (const file of files(config.uploadsDir))
           hashes[`uploads/${file}`] = sha(fs.readFileSync(path.join(config.uploadsDir, file)));
         const manifest = {
@@ -63,7 +65,7 @@ export class BackupService {
           output.on('error', reject);
           archive.on('error', reject);
           archive.pipe(output);
-          archive.file(snapshot, { name: 'procure.db' });
+          archive.file(snapshot, { name: 'canglin.db' });
           archive.directory(config.uploadsDir, 'uploads');
           archive.append(JSON.stringify(manifest), { name: 'manifest.json' });
           void archive.finalize();
@@ -154,13 +156,13 @@ export class BackupService {
           throw new BadRequestException('备份内容超限');
         const names = new Set<string>();
         for (const e of entries) {
-          const n = e.entryName;
+          const n = e.entryName === LEGACY_DB_ENTRY ? 'canglin.db' : e.entryName;
           if (
             n.includes('..') ||
             n.includes('\\') ||
             path.isAbsolute(n) ||
             names.has(n) ||
-            !/^(procure\.db|manifest\.json|uploads\/.+|uploads\/)$/.test(n) ||
+            !/^(canglin\.db|manifest\.json|uploads\/.+|uploads\/)$/.test(n) ||
             ((e.header.attr >>> 16) & 0xf000) === 0xa000
           )
             throw new BadRequestException('备份包含非法路径或重复条目');
@@ -186,7 +188,9 @@ export class BackupService {
               throw new BadRequestException('备份文件未列入清单');
           sameSchema = manifest.schemaHash === sha(fs.readFileSync(schemaPath));
         }
-        const db = path.join(stage, 'procure.db');
+        const db = path.join(stage, 'canglin.db'),
+          legacyDb = path.join(stage, LEGACY_DB_ENTRY);
+        if (fs.existsSync(legacyDb)) fs.renameSync(legacyDb, db);
         if (!fs.existsSync(db)) throw new BadRequestException('备份缺少数据库');
         await this.validate(db, stage, !sameSchema);
         fs.mkdirSync(path.join(stage, 'uploads'), { recursive: true });
@@ -200,7 +204,7 @@ export class BackupService {
         writeRestoreJournal(config.dataDir, directory, 'SWAPPING');
         switched = true;
         for (const suffix of ['-wal', '-shm']) fs.rmSync(config.dbPath + suffix, { force: true });
-        for (const file of ['procure.db', 'uploads']) {
+        for (const file of ['canglin.db', 'uploads']) {
           const live = path.join(config.dataDir, file);
           if (fs.existsSync(live)) fs.renameSync(live, path.join(old, file));
           fs.renameSync(path.join(stage, file), live);

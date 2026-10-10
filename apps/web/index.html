@@ -7,7 +7,7 @@
     <script>
       // 防 FOUC：首帧前按本地偏好预置 .dark（与 src/stores/theme.ts 的 STORAGE_KEY 保持一致）
       try {
-        var t = localStorage.getItem('pl-theme');
+        var t = localStorage.getItem('canglin-theme');
         if (t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('dark');
         }

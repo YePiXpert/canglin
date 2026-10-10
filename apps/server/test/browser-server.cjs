@@ -3,9 +3,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'procure-browser-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'canglin-browser-'));
 process.env.DATA_DIR = directory;
-process.env.DATABASE_URL = `file:${directory}/procure.db`;
+process.env.DATABASE_URL = `file:${directory}/canglin.db`;
 process.env.LLM_API_KEY = '';
 delete process.env.LLM_API_KEY_FILE;
 execFileSync(

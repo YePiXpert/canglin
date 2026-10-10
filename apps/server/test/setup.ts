@@ -14,7 +14,7 @@ afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 process.env.DATA_DIR = dataDir;
 process.env.OCR_BASE_URL = 'http://127.0.0.1:59999'; // 不会真实调用
 
-const databaseUrl = `file:${path.join(dataDir, 'procure.db').replace(/\\/g, '/')}`;
+const databaseUrl = `file:${path.join(dataDir, 'canglin.db').replace(/\\/g, '/')}`;
 process.env.DATABASE_URL = databaseUrl;
 
 execSync('npx prisma db push --skip-generate --accept-data-loss', {

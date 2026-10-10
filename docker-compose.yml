@@ -25,7 +25,7 @@ services:
       # 服务器时区：每日 3 点的维护任务和本地日期按它计算
       TZ: ${TZ:-Asia/Shanghai}
       DATA_DIR: /app/state
-      DATABASE_URL: file:/app/state/procure.db
+      DATABASE_URL: file:/app/state/canglin.db
       OCR_BASE_URL: http://ocr:8000
       OCR_API_KEY: ${OCR_API_KEY:-please-change-ocr-key}
       # AI 首次默认值（可选）；运行时配置存数据库，可在设置页修改
@@ -60,5 +60,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  # 完整卷名 canglin_state；旧实例的 procure-lite_procure-state 由 upgrade.sh 复制迁移
+  # 完整卷名 canglin_state
   state:

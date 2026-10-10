@@ -11,7 +11,7 @@ export function recoverRestore(dataDir: string) {
   if (!/^\.restore-[a-z0-9-]+$/.test(state.directory)) throw new Error('恢复日志路径非法');
   const old = path.join(dataDir, state.directory, 'old');
   if (state.phase !== 'COMMITTED') {
-    for (const file of ['procure.db', 'uploads']) {
+    for (const file of ['canglin.db', 'uploads']) {
       const saved = path.join(old, file),
         live = path.join(dataDir, file);
       if (fs.existsSync(saved)) {
@@ -20,7 +20,7 @@ export function recoverRestore(dataDir: string) {
       }
     }
     for (const suffix of ['-wal', '-shm'])
-      fs.rmSync(path.join(dataDir, 'procure.db' + suffix), { force: true });
+      fs.rmSync(path.join(dataDir, 'canglin.db' + suffix), { force: true });
   }
   fs.rmSync(path.join(dataDir, state.directory), { recursive: true, force: true });
   fs.rmSync(journal, { force: true });

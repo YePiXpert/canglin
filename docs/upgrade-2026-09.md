@@ -96,7 +96,7 @@ services:
 
 ## 2026-10-10 改名为仓廪并发布 v2.0.0
 
-项目改名为「仓廪」（技术名 `canglin`），版本从 v2.0.0 重新开始。只有一位使用者，旧实例由升级脚本一次迁移，不保留旧名兼容期。业务数据不变，数据库文件名仍为 `procure.db`（procure 是业务词，改名会多一次数据迁移）。
+项目改名为「仓廪」（技术名 `canglin`），版本从 v2.0.0 重新开始。只有一位使用者，不保留旧名兼容期。
 
 | 项目 | 旧名 | 新名 |
 | --- | --- | --- |
@@ -109,25 +109,17 @@ services:
 | 包作用域 | `@procure-lite/*` | `@canglin/*` |
 | 目录环境变量 | `PROCURE_REPO`、`PROCURE_TRIAL_DIR` | `CANGLIN_REPO`、`CANGLIN_TRIAL_DIR` |
 | 回退镜像标签 | `procure-lite-rollback-*` | `canglin-rollback-*` |
+| 数据库文件 | `procure.db` | `canglin.db` |
+| 浏览器主题存储键 | `pl-theme` | `canglin-theme` |
+| 前端内部幂等键前缀 | `procure-operation:`、`procure-workflow:` | `canglin-operation:`、`canglin-workflow:` |
 
-**自动迁移**：先在 GitHub 完成改名，等 CI 推送 `canglin-*` 镜像（新包默认私有，按 README 设为 Public 或 `docker login`；拉取失败时脚本回退本地构建），再在 VPS 上执行新的一行升级命令（不要改跑首次部署脚本，它发现 `/opt/procure-lite` 时会拒绝在 `/opt/canglin` 另起一套空系统）。升级脚本先完成全部前置检查（docker、`.env`、数据卷、已跟踪文件改动），任一项失败都不做改动；之后依次：
+**迁移**已于 2026-10-10 在唯一实例上一次性完成：停止旧项目 → 目录 `/opt/procure-lite` 改为 `/opt/canglin`、Git 远端与 `.env` 的项目名改写 → 旧卷内容复制到 `canglin_state` 并把数据库文件改名、属主交给 uid 1000 → 用新脚本升级。脚本不含迁移逻辑，旧卷、旧网络、旧镜像已清理。2026-10-10 之前的备份归档里数据库条目名为 `procure.db`，恢复时仍能识别。
 
-1. **目录**：使用默认目录且 `/opt/canglin` 不存在、`/opt/procure-lite` 存在时，执行 `mv /opt/procure-lite /opt/canglin`（`.env`、override 与 `pre-upgrade-backups/` 随之移动）；显式指定的其他目录不做猜测。Git 远端仍指向 `YePiXpert/procure-lite` 时改为 `YePiXpert/canglin`。
-2. **记录旧镜像**：旧项目 `procure-lite` 还有容器时，从它记录三个旧镜像并打 `canglin-rollback-*` 标签。
-3. **拉代码后**：确认 `docker-compose.yml` 已是 `name: canglin`（否则在停机前退出，例如误用 `--no-pull`）；把 `.env` 的 `COMPOSE_PROJECT_NAME=procure-lite` 改为 `canglin`，因为它优先于 compose 文件的 `name:`，不改会以旧项目名新建一个空卷；再核对 `docker compose config` 解析出的项目和数据卷确为 `canglin` / `canglin_state`。
-4. **获取新镜像**（不停机）。
-5. **停机**：`docker compose down` 后，停止带 `com.docker.compose.project=procure-lite` 标签的旧容器（先不删除）。
-6. **复制数据卷**：`canglin_state` 不存在而旧卷存在时，创建 `canglin_state`，用一次性 alpine 容器只读挂载旧卷，执行 `cp -a` 并 `chown -R 1000:1000`。复制失败会删除不完整的新卷后退出：旧卷和已停止的旧容器都还在，可 `docker start` 恢复旧服务，或排除原因后重跑。
-7. **备份**：照常把 `canglin_state` 打包为 `release-*/state.tar.gz`，然后对数据卷执行 `chown -R 1000:1000`（每次升级都做，回退到 root 运行的旧版期间写入的文件也会交还给 node）。
-8. **启动**：删除旧项目的容器（释放端口），`docker compose up` 启动新版本。
-
-各步骤都按当前状态判断：目录已迁移、`.env` 已改名、`canglin_state` 已存在、没有旧项目容器时对应步骤跳过，所以停机前任何一步失败都可以直接重跑，迁移完成后的升级与普通升级相同。复制若被强制中断（如断电），`canglin_state` 可能不完整，重跑前先 `docker volume rm canglin_state`，脚本会从旧卷重新复制。旧卷 `procure-lite_procure-state` 始终保留，确认新版本数据完整后可自行 `docker volume rm procure-lite_procure-state`；遗留网络 `procure-lite_default` 和旧的 `procure-lite-rollback-*` 标签也可在不再需要回退时清理。cron、反向代理等引用 `/opt/procure-lite` 的外部配置需自行更新；override 中挂载的宿主机文件（如 `/etc/procure-lite/llm_api_key`）未被移动，原路径仍然有效。
-
-**回退**：`rollback.sh` 固定使用项目 `canglin` 和数据卷 `canglin_state`。回退到改名前的版本时，旧配置的卷键是 `procure-state`，脚本会在该 release 的 `old-images.yml` 末尾追加一次 `volumes: procure-state: name: canglin_state`，旧版继续使用当前数据卷；回退后的手工管理命令见下文（`-p canglin`）。
+**回退**：`rollback.sh` 固定使用项目 `canglin` 和数据卷 `canglin_state`；回退后的手工管理命令见下文（`-p canglin`）。
 
 **容器加固**：
 
-- **server 以 node 用户运行**（uid 1000）：运行阶段用 `COPY --chown=node:node` 复制产物，不在事后 `chown -R /app`（那样会把整个 node_modules 再复制成一层，每个版本都要重新下载）；`/app/state` 归 node，新建的数据卷首次挂载时继承该属主，已有数据卷由升级脚本修正。入口脚本在数据目录或 `procure.db` 不可写时直接报错并给出 chown 命令；`npx prisma migrate deploy` 与 `node dist/main.js` 均无需 root。
+- **server 以 node 用户运行**（uid 1000）：运行阶段用 `COPY --chown=node:node` 复制产物，不在事后 `chown -R /app`（那样会把整个 node_modules 再复制成一层，每个版本都要重新下载）；`/app/state` 归 node，新建的数据卷首次挂载时继承该属主，唯一实例的数据卷已在迁移时交给 uid 1000。入口脚本在数据目录或 `canglin.db` 不可写时直接报错并给出 chown 命令；`npx prisma migrate deploy` 与 `node dist/main.js` 均无需 root。
 - **server 健康检查**：`GET http://127.0.0.1:3000/api/auth/status`（全局前缀 `api` 下的公开路由，会查询数据库），间隔 30 秒、超时 5 秒、启动宽限 40 秒、重试 3 次。web 用 `depends_on: server: {condition: service_healthy}` 等 server 健康后再启动，因此 `docker compose up` 要等首次检查通过（约 30 秒）才返回；server 起不来时 `up` 直接失败，部署脚本打印日志，升级脚本打印回退命令。
 - **web 健康检查**：`wget -qO- http://127.0.0.1/`（nginx:alpine 自带 busybox wget），只检查静态页。
 - server 对 ocr 仍是普通 `depends_on`：OCR 加载模型慢，不让 server 等 OCR 健康；OCR 就绪仍由部署和升级脚本单独检查。
@@ -135,7 +127,7 @@ services:
 
 **版本与标签**：旧的 v1.2.x 标签属于重写前的旧代码库，已从仓库删除，版本从 v2.0.0 重新开始，变更见 [CHANGELOG](../CHANGELOG.md)。早先拉取到本机的旧标签不会被 `git fetch --tags` 自动删除，不影响升级。
 
-**试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 已钉到 v2.0.0（提交 `ce8fe2e`）：项目名 `canglin-trial-ce8fe2e`，数据卷 `canglin-trial-ce8fe2e_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。[trial-aa981bc](./trial-aa981bc.md) 记录的是上一候选版本，其旧名镜像仍在 GHCR 上。若曾用旧项目名启动过试用，先停掉 `procure-lite-trial-*` 项目的容器，以免占用 18080 端口。
+**试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 已钉到 v2.0.0（提交 `ce8fe2e`）：项目名 `canglin-trial-ce8fe2e`，数据卷 `canglin-trial-ce8fe2e_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。
 
 ## 验证命令
 
@@ -173,9 +165,9 @@ bash deploy/upgrade.sh /opt/canglin --build
 bash deploy/rollback.sh /opt/canglin /opt/canglin/pre-upgrade-backups/release-TIMESTAMP
 ```
 
-升级脚本先检查旧数据卷、旧镜像和备份工具，拉取或构建三个新镜像后才停机。仓库更新使用 `git merge --ff-only origin/main`，已跟踪文件有改动时退出，不再清理本机未跟踪的配置。成功获取镜像后将源码标签持久化为 `.env` 中的 `RELEASE_TAG`；首次部署同样如此。日常 `docker compose up` 沿用该版本，不会自行切换到 latest。默认项目名和数据卷为 `canglin` / `canglin_state`（改名前的旧实例由升级脚本迁移，见[改名为仓廪](#2026-10-10-改名为仓廪并发布-v200)），自定义项目名需单独调整部署流程。
+升级脚本先检查旧数据卷、旧镜像和备份工具，拉取或构建三个新镜像后才停机。仓库更新使用 `git merge --ff-only origin/main`，已跟踪文件有改动时退出，不再清理本机未跟踪的配置。成功获取镜像后将源码标签持久化为 `.env` 中的 `RELEASE_TAG`；首次部署同样如此。日常 `docker compose up` 沿用该版本，不会自行切换到 latest。默认项目名和数据卷为 `canglin` / `canglin_state`，自定义项目名需单独调整部署流程。
 
-发布记录包含旧/新源码、迁移校验、三个镜像 ID、OCR 版本及模型就绪结果。自动回退点不会清理，稳定后由管理员归档。不要仅回退代码而继续使用迁移后的数据库。旧版服务器凭据仍由部署环境管理，应用不会自动替换服务商或密钥。
+发布记录包含旧/新源码、迁移校验、三个镜像 ID、OCR 版本及模型就绪结果。升级前三个服务都没有容器（例如已手工停机）时没有旧镜像可记，脚本警告后跳过回退点记录、数据照常备份，这样的发布目录不能用 `rollback.sh` 回退（脚本在停机前拒绝）；只有部分服务缺容器时升级在停机前退出。自动回退点不会清理，稳定后由管理员归档。不要仅回退代码而继续使用迁移后的数据库。旧版服务器凭据仍由部署环境管理，应用不会自动替换服务商或密钥。
 
 回退前会验证备份、旧镜像和数据卷；停止服务后，先另存 `before-rollback-*.tar.gz`，再恢复升级前的数据。回退会移除升级后新增的业务记录，但这些记录保留在回退前快照中。恢复旧版使用保存的旧 Compose 配置、当前本机 override 和固定旧镜像；外部 secret 由管理员保持兼容。中途失败时服务保持停止，应先核对日志和两份完整数据快照后恢复，不能直接启动残留数据。
 
@@ -195,6 +187,6 @@ docker compose --env-file .env -p canglin --project-directory "$PWD" \
 
 ## 仍需完成的外部验收
 
-见 [验收记录](./upgrade-acceptance.md)。真实第三方地址/密钥、30—50 份脱敏业务单据以及生产数据库未提供。模拟测试和合成样例不能代替第三方能力、业务准确率、真实页面 P95/持续内存、历史精度差异或目标部署环境回退演练。因此发布验收保持未通过。
+验收记录见 git 历史（提交 `ce8fe2e` 前的 `docs/upgrade-acceptance.md`）。真实第三方地址/密钥、30—50 份脱敏业务单据以及生产数据库未提供。模拟测试和合成样例不能代替第三方能力、业务准确率、真实页面 P95/持续内存、历史精度差异或目标部署环境回退演练。因此发布验收保持未通过。
 
 协议参考：[Responses 迁移](https://developers.openai.com/api/docs/guides/migrate-to-responses)、[结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)、[无状态推理条目回传](https://developers.openai.com/api/docs/guides/reasoning)。使用 SDK 的 `toResponseInputItems` 保留可回传条目及不透明的加密推理内容。

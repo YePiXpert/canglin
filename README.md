@@ -2,7 +2,7 @@
 
 供一位行政采购管理员使用的采购与领用系统：OA 已审批单导入或人工录入 → 分次采购 → 部分到货 → 按量直发或明确入库 → 库存领用。支持供应商退款/换货、员工归还、撤销纠错、付款与报销状态、原件/发票/签收附件。原名 Procure Lite，2026-10-10 改名并发布 v2.0.0。
 
-确认的产品范围与验收示例见 [重构需求](docs/rebuild-requirements.md)。部署、导入与识别接口、备份及回退见 [升级说明](docs/upgrade-2026-09.md)；前端维护见 [设计规范](apps/web/DESIGN.md)。本轮（2026-10-10，v2.0.0）本地验证为服务端 155 项、前端 114 项、浏览器 15 条、部署脚本 23 项与评测脚本 2 项通过，类型检查、lint、前后端构建通过；server 与 web 镜像在本机构建并以非 root 用户启动、健康检查通过；数据库迁移本轮未改动。OCR 本轮只改了服务标题，轻量套件未重跑。真实模型和目标部署环境验收另行记录。历史试用与验收记录仍保留各自的版本标识。
+确认的产品范围与验收示例见 [重构需求](docs/rebuild-requirements.md)。部署、导入与识别接口、备份及回退见 [升级说明](docs/upgrade-2026-09.md)；前端维护见 [设计规范](apps/web/DESIGN.md)。本轮（2026-10-10，v2.0.0）本地验证为服务端 157 项、前端 114 项、浏览器 15 条、部署脚本 19 项与评测脚本 2 项通过，类型检查、lint、前后端构建通过；server 与 web 镜像在本机构建并以非 root 用户启动、健康检查通过；数据库迁移本轮未改动。OCR 本轮只改了服务标题，轻量套件未重跑。真实模型和目标部署环境验收另行记录。改名前的试用与验收记录保留在 git 历史里（提交 `ce8fe2e` 及更早的 `docs/`）。
 
 ## 适用范围
 
@@ -63,7 +63,7 @@ pip install -e ".[paddle]"        # 完整 OCR 能力（较重）
 uvicorn app.main:app --port 8000
 
 # 终端 2：API + 前端（API 默认把数据放在 apps/server/state/；迁移命令需要指向同一个数据库文件）
-export DATABASE_URL="file:$PWD/apps/server/state/procure.db"
+export DATABASE_URL="file:$PWD/apps/server/state/canglin.db"
 pnpm db:migrate                   # 初始化开发数据库
 pnpm dev                          # API :3000 + Vite :5173（自动代理 /api）
 ```
@@ -107,8 +107,6 @@ curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/deplo
 curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/upgrade.sh | bash
 ```
 
-改名前部署在 `/opt/procure-lite` 的旧实例也用这条命令：脚本会自动迁移目录、Compose 项目名和数据卷（旧卷保留），可重复执行，见 [改名迁移](docs/upgrade-2026-09.md#2026-10-10-改名为仓廪并发布-v200)。
-
 自定义部署在其他位置时，必须显式指定目录（`CANGLIN_REPO` 环境变量也行）。即使从开发仓库运行脚本，默认目标仍是 `/opt/canglin`：
 
 ```bash
@@ -121,7 +119,7 @@ bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像�
 
 ## 数据与安全提醒
 
-- **数据在哪**：Docker 部署的全部状态在 `canglin_state` 卷里（本地开发默认是 API 运行目录下的 `state/`，即 `apps/server/state/`，可用 `DATA_DIR` 指定）：`procure.db`（SQLite）、`uploads/`（单据原件与附件）、`backups/`（系统设置里生成的备份）、`session-secret`（会话签名密钥）。
+- **数据在哪**：Docker 部署的全部状态在 `canglin_state` 卷里（本地开发默认是 API 运行目录下的 `state/`，即 `apps/server/state/`，可用 `DATA_DIR` 指定）：`canglin.db`（SQLite）、`uploads/`（单据原件与附件）、`backups/`（系统设置里生成的备份）、`session-secret`（会话签名密钥）。
 - **什么会离开本机**：启用 AI 后，问答的问题、近几轮对话与只读查询结果，智能搜索的搜索词和库内品名词表，以及开启自动识别的单据每页原件图像与本页解析结果，会发送给所配置的服务商（服务商侧的留存说明见 [升级说明](docs/upgrade-2026-09.md#配置第三方-responses)）。不启用 AI 时不发送。
 - **备份**：系统设置里的备份包含数据库与 `uploads/`（附清单和逐文件哈希），不含 `.env`、`session-secret` 和外部 secret；备份就放在同一个数据卷里，请下载后异地保存。自动备份默认关闭。
 - **恢复**会覆盖当前数据库与附件，恢复前先创建一份备份；恢复后现有登录会话失效。升级回退点见上文「版本升级」。
@@ -145,4 +143,4 @@ bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像�
 
 ## 隔离试用
 
-当前隔离试用固定为候选版本 `aa981bc`，三个镜像使用 CI 发布的不可变摘要，项目、配置目录及数据卷独立于正式环境和旧试用版本。启动、检查与清理方式见 [隔离试用说明](docs/trial-aa981bc.md)；2026-09-27 的 `b10744b` 验证证据保留在 [历史试用记录](docs/trial-b10744b.md)。
+当前候选见 `deploy/compose.trial.yml` 顶部注释；三个镜像使用 CI 发布的不可变摘要，项目、配置目录及数据卷独立于正式环境。启动、检查与清理用 `bash deploy/trial.sh up|check|status|logs|stop|smoke`，入口为服务器本机 `http://127.0.0.1:18080`，`stop` 只停容器、保留试用数据。

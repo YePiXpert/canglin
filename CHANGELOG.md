@@ -35,13 +35,16 @@
 - 一行升级（`3245148`、`cbd5842`）：`curl | bash` 即可升级，默认部署到 `/opt` 下的固定目录，不会自动选中开发副本。
 - 固定版本、停机前备份与完整回退（`e390771`）：三个服务绑定同一源码的 `sha-` 标签并写入 `.env` 的 `RELEASE_TAG`；新镜像就绪后才停机，停机后把整个数据卷和三个旧镜像引用保存到 `pre-upgrade-backups/release-*`；`rollback.sh` 同时恢复旧数据与旧镜像，并先另存回退前快照。
 - 隔离试用（`5ae6ab4`）：`deploy/trial.sh` 与 `compose.trial.yml` 以不可变摘要固定候选镜像，使用独立项目、端口与数据卷。
+- 升级脚本在没有运行中容器时跳过回退点记录并给出警告；`rollback.sh` 在没有镜像记录时拒绝执行、不做任何停机动作。
 - 安全与健壮性（`4771764`）：`@Public` 改为方法级标注，改密后旧会话失效，登录失败计数原子递增，只信任一层反向代理；SQLite 启用 WAL、busy_timeout 与外键，恢复期间全站返回 503，备份与恢复互斥。
 
 ### 改名
 
-- 项目改名为「仓廪」，技术名 `canglin`：仓库 `YePiXpert/canglin`，镜像 `ghcr.io/yepixpert/canglin-{web,server,ocr}`，Compose 项目 `canglin`，数据卷 `canglin_state`，安装目录 `/opt/canglin`，包作用域 `@canglin/*`；数据库文件名 `procure.db` 不变。
-- `upgrade.sh` 自动迁移改名前的实例：目录、Git 远端、`.env` 的 `COMPOSE_PROJECT_NAME`、旧项目容器和数据卷（复制到新卷，旧卷保留），可重复执行；`rollback.sh` 回退到改名前的版本时继续使用 `canglin_state`。
+- 项目改名为「仓廪」，技术名 `canglin`：仓库 `YePiXpert/canglin`，镜像 `ghcr.io/yepixpert/canglin-{web,server,ocr}`，Compose 项目 `canglin`，数据卷 `canglin_state`，安装目录 `/opt/canglin`，包作用域 `@canglin/*`。
+- 数据库文件 `procure.db` 改为 `canglin.db`（此前备份里的 `procure.db` 条目恢复时仍能识别），浏览器主题存储键 `pl-theme` 改为 `canglin-theme`，前端内部幂等键前缀 `procure-operation:`、`procure-workflow:` 改为 `canglin-operation:`、`canglin-workflow:`。
+- 唯一实例已一次性迁移，脚本不含迁移逻辑。
 - 容器加固：server 以 node 用户运行并通过 `/api/auth/status` 做健康检查，web 检查静态页，web 等 server 健康后启动；OCR 镜像因 PaddleOCR 模型与缓存路径仍以 root 运行。
-- 目录环境变量 `PROCURE_REPO`、`PROCURE_TRIAL_DIR` 改为 `CANGLIN_REPO`、`CANGLIN_TRIAL_DIR`；首次部署脚本发现 `/opt/procure-lite` 时拒绝另起空系统，提示改用升级脚本。
+- 目录环境变量 `PROCURE_REPO`、`PROCURE_TRIAL_DIR` 改为 `CANGLIN_REPO`、`CANGLIN_TRIAL_DIR`。
+- 改名前的试用与验收记录移出仓库树，保留在 git 历史（提交 `ce8fe2e` 及更早的 `docs/`）。
 
 v1.x 标签（v1.2.x）属于重写前的旧代码库，不在当前提交历史中，已删除；版本号从 v2.0.0 重新开始。

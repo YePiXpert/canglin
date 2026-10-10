@@ -3,7 +3,7 @@ import { ref } from 'vue';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-const STORAGE_KEY = 'pl-theme';
+const STORAGE_KEY = 'canglin-theme';
 const DARK_MEDIA = '(prefers-color-scheme: dark)';
 
 function readStored(): ThemeMode {

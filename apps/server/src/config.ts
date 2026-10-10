@@ -14,11 +14,11 @@ const dataDir = resolveDataDir();
 
 export const config = {
   dataDir,
-  dbPath: path.join(dataDir, 'procure.db'),
+  dbPath: path.join(dataDir, 'canglin.db'),
   uploadsDir: path.join(dataDir, 'uploads'),
   backupsDir: path.join(dataDir, 'backups'),
   secretPath: path.join(dataDir, 'session-secret'),
-  databaseUrl: `file:${path.join(dataDir, 'procure.db').replace(/\\/g, '/')}`,
+  databaseUrl: `file:${path.join(dataDir, 'canglin.db').replace(/\\/g, '/')}`,
   port: Number(process.env.PORT ?? 3000),
   ocrBaseUrl: process.env.OCR_BASE_URL ?? 'http://127.0.0.1:8000',
   ocrApiKey: process.env.OCR_API_KEY ?? 'dev-ocr-key',

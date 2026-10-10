@@ -16,7 +16,7 @@ export type {
 
 /** Preserve an uncertain submission's key through retries and browser reloads. */
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const key = `procure-workflow:${path}:${JSON.stringify(body)}`;
+  const key = `canglin-workflow:${path}:${JSON.stringify(body)}`;
   const operationId = sessionStorage.getItem(key) || crypto.randomUUID();
   sessionStorage.setItem(key, operationId);
   const response = await http.post<T>(`/workflow${path}`, body, {
@@ -55,7 +55,7 @@ export const workflowApi = {
   createProduct: (body: WorkflowProductCreateInput) => post<{ productId: number; itemName: string; specification: string; unit: string }>('/products', body),
   metadata: async (id: number, body: WorkflowMetadataInput) => {
     const path = `/documents/${id}/metadata`;
-    const key = `procure-workflow:${path}:${JSON.stringify(body)}`;
+    const key = `canglin-workflow:${path}:${JSON.stringify(body)}`;
     const operationId = sessionStorage.getItem(key) || crypto.randomUUID();
     sessionStorage.setItem(key, operationId);
     const response = await http.patch<WorkflowDocumentRow>(`/workflow${path}`, body, { headers: { 'Idempotency-Key': operationId } });

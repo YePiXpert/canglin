@@ -70,7 +70,7 @@
 - 面板靠 1px `line` 描边分层，不靠阴影；`shadow-pop` 与 `shadow-(--shadow-pop)` 两种写法都跟随主题。
 - 实心底上的字用 `text-primary-fg`（`bg-primary text-primary-fg`，Button 已处理）；不要写 `bg-primary text-white`，深色下 primary 近白。
 - 局部翻转：深色浮层（Toast 图标、批量操作条）在子树上挂 `.dark`，令牌就地换成深色主题的值（别名也在 `.dark` 里重新求值）。
-- 主题由 `useThemeStore` 管理，`localStorage` 键 `pl-theme`（`light` / `dark` / `system`）；`index.html` 在首帧前预置 `.dark`，避免闪烁。
+- 主题由 `useThemeStore` 管理，`localStorage` 键 `canglin-theme`（`light` / `dark` / `system`）；`index.html` 在首帧前预置 `.dark`，避免闪烁。
 
 ## 3. 布局与外壳
 

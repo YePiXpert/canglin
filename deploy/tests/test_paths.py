@@ -2,7 +2,7 @@
 """Exercise deployment paths with fake Git/Docker; never contact live services.
 
 Tests that depend on the default /opt paths run a copy of the script whose /opt/ prefix
-points into the temporary directory, so a real /opt/procure-lite is never moved."""
+points into the temporary directory, so a real /opt/canglin is never touched."""
 import json
 import os
 from pathlib import Path
@@ -27,30 +27,24 @@ if tool == "git":
         sys.exit(1)
     elif args[0] == "rev-parse":
         print("abc1234")
-    elif args[:2] == ["remote", "get-url"]:
-        if not os.environ.get("ORIGIN_URL"):
-            sys.exit(2)
-        print(os.environ["ORIGIN_URL"])
 elif tool == "docker":
     if os.environ.get("FAIL_PULL") == "1" and args[:2] == ["compose", "pull"]:
         sys.exit(1)
     if os.environ.get("STOP_DOCKER") == "1":
         sys.exit(23)
-    if args[:2] == ["volume", "inspect"] and (os.environ.get("MISSING_VOLUME") == "1"
-            or args[2] in os.environ.get("MISSING_VOLUMES", "").split(",")):
+    if args[:2] == ["volume", "inspect"] and os.environ.get("MISSING_VOLUME") == "1":
         sys.exit(1)
     if args[:2] == ["image", "inspect"] and os.environ.get("MISSING_IMAGE") == "1":
         sys.exit(1)
     if args[0] == "compose" and "images" in args:
-        print("sha256:test-image")
+        # NO_CONTAINERS lists services without containers; a query without a service covers all three.
+        services = ["web", "server", "ocr"] if args[-1] == "-q" else [args[-1]]
+        if set(services) - set(os.environ.get("NO_CONTAINERS", "").split(",")):
+            print("sha256:test-image")
     if args[0] == "compose" and args[-1] == "config":
         print(os.environ.get("RESOLVED_CONFIG",
                              "name: canglin\nvolumes:\n  state:\n    name: canglin_state"))
-    if args[0] == "ps" and "label=com.docker.compose.project=procure-lite" in args:
-        print("\n".join(os.environ.get("LEGACY_CONTAINERS", "").split()))
     if args[0] == "run":
-        if os.environ.get("FAIL_COPY") == "1" and any("cp -a" in a for a in args):
-            sys.exit(1)
         p = pathlib.Path("pre-upgrade-backups")
         p.mkdir(exist_ok=True)
         (p / "pre-upgrade-test.tar.gz").touch()
@@ -140,15 +134,6 @@ class DeploymentPaths(unittest.TestCase):
         self.assertFalse((target / ".env").exists())
         self.assertEqual((target / "important").read_text(), "keep")
 
-    def test_install_default_refuses_to_shadow_legacy_instance(self):
-        script, opt = self.patched("deploy.sh")
-        self.repository("opt/procure-lite")
-        r = self.run_script(script, "8080")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("upgrade.sh", r.stderr)
-        self.assertFalse((opt / "canglin").exists())
-        self.assertFalse(any(c[0] == "git" and c[2][0] == "clone" for c in self.commands()))
-
     def test_upgrade_default_does_not_select_source_checkout_or_home(self):
         script, opt = self.patched("upgrade.sh")
         self.repository("canglin")
@@ -202,105 +187,30 @@ class DeploymentPaths(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
 
-    def test_upgrade_migrates_legacy_instance_once(self):
-        script, opt = self.patched("upgrade.sh")
-        legacy = self.repository("opt/procure-lite")
-        (legacy / ".env").write_text(
-            "OCR_API_KEY=keep-me\nCOMPOSE_PROJECT_NAME=procure-lite\nWEB_PORT=8080\n")
-        (legacy / "docker-compose.override.yml").write_text("services: {}\n")
-        r = self.run_script(script, MISSING_VOLUMES="canglin_state",
-                            LEGACY_CONTAINERS="old-web old-server old-ocr",
-                            ORIGIN_URL="https://github.com/YePiXpert/procure-lite.git")
+    def test_upgrade_without_containers_skips_rollback_point(self):
+        target = self.repository("no-containers")
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", NO_CONTAINERS="web,server,ocr")
         self.assertEqual(r.returncode, 0, r.stderr)
-        target = opt / "canglin"
-        self.assertFalse(legacy.exists())
-        env = (target / ".env").read_text()
-        self.assertIn("OCR_API_KEY=keep-me", env)
-        self.assertIn("COMPOSE_PROJECT_NAME=canglin\n", env)
-        self.assertNotIn("procure-lite", env)
-        self.assertEqual((target / ".env").stat().st_mode & 0o777, 0o600)
-        self.assertEqual((target / "docker-compose.override.yml").read_text(), "services: {}\n")
-        calls = self.commands()
-        self.assertIn(["remote", "set-url", "origin", "https://github.com/YePiXpert/canglin.git"],
-                      [c[2] for c in calls if c[0] == "git"])
-        docker = [c for c in calls if c[0] == "docker"]
-
-        def first(predicate):
-            return next(i for i, c in enumerate(docker) if predicate(c[2]))
-
-        record = first(lambda a: a[:3] == ["compose", "-p", "procure-lite"] and "images" in a)
-        pull = first(lambda a: a[:2] == ["compose", "pull"])
-        down = first(lambda a: a[:2] == ["compose", "down"])
-        stop = first(lambda a: a[0] == "stop")
-        create = first(lambda a: a[:2] == ["volume", "create"])
-        copy = first(lambda a: a[0] == "run" and any("cp -a /from/. /to/" in x for x in a))
-        backup = first(lambda a: a[0] == "run" and "czf" in a)
-        chown = first(lambda a: a[0] == "run" and a[-4:] == ["chown", "-R", "1000:1000", "/state"])
-        remove = first(lambda a: a[0] == "rm")
-        up = first(lambda a: a[:2] == ["compose", "up"])
-        self.assertEqual([record, pull, down, stop, create, copy, backup, chown, remove, up],
-                         sorted([record, pull, down, stop, create, copy, backup, chown, remove, up]))
-        self.assertEqual(docker[stop][2][1:], ["old-web", "old-server", "old-ocr"])
-        self.assertEqual(docker[remove][2][1:], ["old-web", "old-server", "old-ocr"])
-        self.assertEqual(docker[create][2][-1], "canglin_state")
-        self.assertIn("com.docker.compose.project=canglin", docker[create][2])
-        self.assertIn("procure-lite_procure-state:/from:ro", docker[copy][2])
-        self.assertIn("canglin_state:/to", docker[copy][2])
-        self.assertIn("chown -R 1000:1000 /to", docker[copy][2][-1])
-        self.assertIn("canglin_state:/state:ro", docker[backup][2])
-        self.assertEqual(docker[up][1], str(target))
-        self.assertFalse(any(c[2][:2] == ["volume", "rm"] for c in docker))
+        self.assertIn("没有运行中的容器，跳过回退点记录", r.stdout)
+        docker = [c[2] for c in self.commands() if c[0] == "docker"]
+        self.assertFalse(any(a[0] == "tag" for a in docker))
+        self.assertTrue(any(a[0] == "run" and "czf" in a for a in docker))
+        self.assertTrue(any(a[:2] == ["compose", "up"] for a in docker))
         release = next((target / "pre-upgrade-backups").glob("release-*"))
-        self.assertIn("image: canglin-rollback-server:", (release / "old-images.yml").read_text())
+        self.assertNotIn("image:", (release / "old-images.yml").read_text())
 
-        # A second run finds everything migrated and behaves like an ordinary upgrade.
+        # Containers for only some services means a broken deployment: stop before pulling or stopping.
         self.log.unlink()
-        r = self.run_script(script, ORIGIN_URL="https://github.com/YePiXpert/canglin.git")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        calls = self.commands()
-        docker = [c[2] for c in calls if c[0] == "docker"]
-        self.assertTrue(all(c[1] == str(target) for c in calls))
-        self.assertTrue(any(a[:3] == ["compose", "-p", "canglin"] and "images" in a for a in docker))
-        self.assertFalse(any(a[0] in ("stop", "rm") or a[:2] == ["volume", "create"]
-                             or any("cp -a" in x for x in a) for a in docker))
-        self.assertFalse(any(c[0] == "git" and c[2][:2] == ["remote", "set-url"] for c in calls))
-        self.assertEqual((target / ".env").read_text().count("COMPOSE_PROJECT_NAME="), 1)
-
-    def test_upgrade_custom_path_does_not_adopt_legacy_directory(self):
-        script, opt = self.patched("upgrade.sh")
-        legacy = self.repository("opt/procure-lite")
-        r = self.run_script(script, CANGLIN_REPO=str(self.root / "elsewhere"))
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", NO_CONTAINERS="server")
         self.assertNotEqual(r.returncode, 0)
-        self.assertTrue(legacy.exists())
-        self.assertFalse((opt / "canglin").exists())
-        self.assertEqual(self.commands(), [])
-
-    def test_upgrade_failed_volume_copy_keeps_legacy_containers_and_volume(self):
-        target = self.repository("copy-fails")
-        r = self.run_script("upgrade.sh", str(target), MISSING_VOLUMES="canglin_state",
-                            LEGACY_CONTAINERS="old-server", FAIL_COPY="1")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("docker start old-server", r.stderr)
+        self.assertIn("server", r.stderr)
         docker = [c[2] for c in self.commands() if c[0] == "docker"]
-        self.assertIn(["volume", "rm", "canglin_state"], docker)
-        self.assertFalse(any(a[0] == "rm" or a[:2] == ["compose", "up"] for a in docker))
-        self.assertFalse(any("procure-lite_procure-state" in a and a[:2] == ["volume", "rm"]
-                             for a in docker))
-
-    def test_upgrade_legacy_compose_fails_before_touching_env_or_services(self):
-        target = self.repository("still-legacy")
-        (target / "docker-compose.yml").write_text("name: procure-lite\nservices: {}\n")
-        (target / ".env").write_text("COMPOSE_PROJECT_NAME=procure-lite\n")
-        r = self.run_script("upgrade.sh", str(target), "--no-pull", LEGACY_CONTAINERS="old-web")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertEqual((target / ".env").read_text(), "COMPOSE_PROJECT_NAME=procure-lite\n")
-        docker = [c[2] for c in self.commands() if c[0] == "docker"]
-        self.assertFalse(any(a[:2] == ["compose", "down"] or a[0] == "stop" for a in docker))
+        self.assertFalse(any(a[:2] in (["compose", "pull"], ["compose", "down"]) for a in docker))
 
     def test_upgrade_unexpected_resolved_project_fails_before_stopping(self):
         target = self.repository("shell-override")
         r = self.run_script("upgrade.sh", str(target), "--no-pull",
-                            RESOLVED_CONFIG="name: procure-lite\nvolumes:\n  state:\n    name: procure-lite_state")
+                            RESOLVED_CONFIG="name: canglin-dev\nvolumes:\n  state:\n    name: canglin-dev_state")
         self.assertNotEqual(r.returncode, 0)
         self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
 
@@ -311,6 +221,15 @@ class DeploymentPaths(unittest.TestCase):
             (release / name).write_text("fixture")
         (release / "old-images.yml").write_text("services:\n  server:\n    image: pinned-server:test\n")
         return release
+
+    def test_rollback_without_recorded_images_refuses_before_any_docker_call(self):
+        target = self.repository("rollback-no-images")
+        release = self.rollback_artifacts(target)
+        (release / "old-images.yml").write_text("services:\n")
+        r = self.run_script("rollback.sh", str(target), str(release))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("old-images.yml", r.stderr)
+        self.assertEqual(self.commands(), [])
 
     def test_rollback_missing_image_fails_before_stopping(self):
         target = self.repository("missing-rollback-image")
@@ -333,20 +252,6 @@ class DeploymentPaths(unittest.TestCase):
         self.assertIn(str(target / "docker-compose.override.yml"), up)
         self.assertIn(str(release / "old-images.yml"), up)
         self.assertEqual(up[up.index("-p") + 1], "canglin")
-
-    def test_rollback_across_rename_pins_legacy_volume_key(self):
-        target = self.repository("rollback-rename")
-        release = self.rollback_artifacts(target)
-        (release / "old-compose.yml").write_text("name: procure-lite\nvolumes:\n  procure-state:\n")
-        for _ in range(2):
-            r = self.run_script("rollback.sh", str(target), str(release))
-            self.assertEqual(r.returncode, 0, r.stderr)
-        pinned = (release / "old-images.yml").read_text()
-        self.assertEqual(pinned.count("volumes:"), 1)
-        self.assertTrue(pinned.endswith("volumes:\n  procure-state:\n    name: canglin_state\n"))
-        commands = [c[2] for c in self.commands()]
-        self.assertIn(["volume", "inspect", "canglin_state"], commands)
-        self.assertFalse(any("procure-lite" in x for c in commands for x in c))
 
 if __name__ == "__main__":
     unittest.main()
