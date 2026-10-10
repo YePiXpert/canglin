@@ -135,7 +135,7 @@ services:
 
 **版本与标签**：旧的 v1.2.x 标签属于重写前的旧代码库，已从仓库删除，版本从 v2.0.0 重新开始，变更见 [CHANGELOG](../CHANGELOG.md)。早先拉取到本机的旧标签不会被 `git fetch --tags` 自动删除，不影响升级。
 
-**试用环境**：`deploy/trial.sh` 的项目名改为 `canglin-trial-aa981bc`，数据卷随之变为 `canglin-trial-aa981bc_trial-state`（旧项目名下的试用数据不再被使用）。`deploy/compose.trial.yml` 的三个 image 行仍钉在候选版本 `aa981bc` 的旧名镜像摘要（`procure-lite-*`，仍在 GHCR 上）；CI 推送 `canglin-*` 新镜像后再重新钉住候选版本和摘要。若曾用旧项目名启动过试用，先停掉 `procure-lite-trial-aa981bc` 项目的容器，以免占用 18080 端口。
+**试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 已钉到 v2.0.0（提交 `ce8fe2e`）：项目名 `canglin-trial-ce8fe2e`，数据卷 `canglin-trial-ce8fe2e_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。[trial-aa981bc](./trial-aa981bc.md) 记录的是上一候选版本，其旧名镜像仍在 GHCR 上。若曾用旧项目名启动过试用，先停掉 `procure-lite-trial-*` 项目的容器，以免占用 18080 端口。
 
 ## 验证命令
 
