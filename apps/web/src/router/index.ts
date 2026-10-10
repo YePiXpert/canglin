@@ -20,7 +20,7 @@ export const router = createRouter({
           path: 'settings',
           component: () => import('@/components/layout/SettingsLayout.vue'),
           children: [
-            { path: '', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '系统设置', icon: 'settings' } },
+            { path: '', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置', icon: 'settings' } },
             { path: 'suppliers', name: 'suppliers', component: () => import('@/views/SuppliersView.vue'), meta: { title: '供应商与比价', icon: 'supplier' } },
             { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: '审计日志', icon: 'audit' } },
           ],

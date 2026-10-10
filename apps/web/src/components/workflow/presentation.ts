@@ -7,8 +7,13 @@ export function quantityLabel(value: string | number, unit: string | null | unde
   return `${value} ${unit || '（单位未填写）'}`;
 }
 
+/** ¥ 前缀 + 千分位；接口给的是十进制字符串，负号写在 ¥ 之后（¥-0.34），小数位原样保留 */
 export function moneyLabel(value: string | null | undefined): string {
-  return value == null ? '金额待补' : `¥${value}`;
+  if (value == null) return '金额待补';
+  const negative = value.startsWith('-');
+  const [whole, fraction] = (negative ? value.slice(1) : value).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `¥${negative ? '-' : ''}${grouped}${fraction === undefined ? '' : `.${fraction}`}`;
 }
 
 export function draftLineAmount(quantity: string, price: string): string | null {

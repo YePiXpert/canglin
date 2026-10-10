@@ -1,4 +1,4 @@
-/** Tabs.vue（按值切换）与 RouteTabs.vue（按路由切换）共用的类型与外观 */
+/** Tabs.vue（按值切换）的类型与外观；路由级分区用页面自己的 <nav>（如 SettingsLayout 的子导航） */
 
 export interface TabItem<T extends string | number = string> {
   value: T;
@@ -7,15 +7,6 @@ export interface TabItem<T extends string | number = string> {
   count?: number | string;
   icon?: string;
   disabled?: boolean;
-}
-
-export interface RouteTabItem {
-  to: string;
-  label: string;
-  icon?: string;
-  count?: number | string;
-  /** 只在完全匹配时算当前项（如 /settings 不应在 /settings/audit 时高亮） */
-  exact?: boolean;
 }
 
 /*

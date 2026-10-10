@@ -17,6 +17,7 @@ import type { TabItem } from '@/components/ui/tabs';
 import { downloadCsv } from '@/utils/csv';
 import { createRequestGuard } from '@/utils/request';
 import { useUrlState } from '@/composables/useUrlState';
+import { moneyLabel } from '@/components/workflow/presentation';
 
 const defaults = { dateFrom: '', dateTo: '', groupBy: 'month' };
 const filters = reactive({ ...defaults });
@@ -113,13 +114,6 @@ function selectPeriod(value: Period): void {
 
 /* ------------------------------ 展示 ------------------------------ */
 
-/** ¥ 前缀 + 千分位；接口给的是两位小数的十进制字符串，负号在 ¥ 之后（¥-0.34） */
-function money(value: string): string {
-  const negative = value.startsWith('-');
-  const [whole, fraction] = (negative ? value.slice(1) : value).split('.');
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `¥${negative ? '-' : ''}${grouped}${fraction === undefined ? '' : `.${fraction}`}`;
-}
 /** 金额（分）：只用来算条形的比例，解析失败按 0 */
 function cents(value: string): bigint {
   try {
@@ -159,9 +153,9 @@ const kpis = computed(() => {
       value: `${purchaseCount.value} 单`,
       hint: applied.value.groupBy === 'department' ? '跨部门单据各计一次' : '期间内的采购成交单',
     },
-    { label: '到货原额', value: money(r.grossReceiptAmount), hint: '登记到货的物品金额' },
-    { label: '净到货金额', value: money(r.netReceiptAmount), hint: '到货原额 − 实物退货' },
-    { label: '实物退货金额', value: money(r.supplierReturnAmount), hint: '包含退款与换货' },
+    { label: '到货原额', value: moneyLabel(r.grossReceiptAmount), hint: '登记到货的物品金额' },
+    { label: '净到货金额', value: moneyLabel(r.netReceiptAmount), hint: '到货原额 − 实物退货' },
+    { label: '实物退货金额', value: moneyLabel(r.supplierReturnAmount), hint: '包含退款与换货' },
   ];
 });
 /** 查的是「全部」时，没有记录就是还没有业务；否则给一个回到全部时间的入口 */
@@ -193,11 +187,11 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
           <p class="flex flex-wrap items-baseline gap-x-2 text-[13px] text-muted">
             净成交金额<span class="text-meta num">{{ dateLabel }}</span>
           </p>
-          <p class="mt-1 text-[30px] leading-[1.15] font-bold tracking-[-0.02em] text-ink num sm:text-[34px]">{{ money(report.netPurchaseAmount) }}</p>
+          <p class="mt-1 text-[30px] leading-[1.15] font-bold tracking-[-0.02em] text-ink num sm:text-[34px]">{{ moneyLabel(report.netPurchaseAmount) }}</p>
           <p class="mt-2 text-[13px] leading-5 text-muted">
-            = 成交原额 <span class="num font-medium text-text">{{ money(report.grossPurchaseAmount) }}</span>
-            − 采购取消 <span class="num font-medium text-text">{{ money(report.cancelledPurchaseAmount) }}</span>
-            − 退款退货 <span class="num font-medium text-text">{{ money(report.refundedPurchaseAmount) }}</span>
+            = 成交原额 <span class="num font-medium text-text">{{ moneyLabel(report.grossPurchaseAmount) }}</span>
+            − 采购取消 <span class="num font-medium text-text">{{ moneyLabel(report.cancelledPurchaseAmount) }}</span>
+            − 退款退货 <span class="num font-medium text-text">{{ moneyLabel(report.refundedPurchaseAmount) }}</span>
             <span class="ml-1 text-meta">换货保留成交金额</span>
           </p>
         </div>
@@ -236,12 +230,12 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
                     <span class="h-2 min-w-0 flex-1 max-sm:hidden" aria-hidden="true">
                       <span v-if="barWidth(row.netPurchaseAmount)" class="block h-full min-w-0.5 rounded-r-[4px] bg-blue" :style="{ width: barWidth(row.netPurchaseAmount) }" />
                     </span>
-                    <span class="num font-semibold text-ink">{{ money(row.netPurchaseAmount) }}</span>
+                    <span class="num font-semibold text-ink">{{ moneyLabel(row.netPurchaseAmount) }}</span>
                   </div>
                 </td>
-                <td data-label="成交原额" class="text-right num" :class="zeroClass(row.grossPurchaseAmount)">{{ money(row.grossPurchaseAmount) }}</td>
-                <td data-label="取消金额" class="text-right num" :class="zeroClass(row.cancelledPurchaseAmount)">{{ money(row.cancelledPurchaseAmount) }}</td>
-                <td data-label="退款金额" class="text-right num" :class="zeroClass(row.refundedPurchaseAmount)">{{ money(row.refundedPurchaseAmount) }}</td>
+                <td data-label="成交原额" class="text-right num" :class="zeroClass(row.grossPurchaseAmount)">{{ moneyLabel(row.grossPurchaseAmount) }}</td>
+                <td data-label="取消金额" class="text-right num" :class="zeroClass(row.cancelledPurchaseAmount)">{{ moneyLabel(row.cancelledPurchaseAmount) }}</td>
+                <td data-label="退款金额" class="text-right num" :class="zeroClass(row.refundedPurchaseAmount)">{{ moneyLabel(row.refundedPurchaseAmount) }}</td>
                 <td data-label="采购单数" class="text-right num">{{ row.purchaseCount }}</td>
               </tr>
             </tbody>
@@ -249,10 +243,10 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
             <tfoot class="max-sm:hidden">
               <tr>
                 <td>合计</td>
-                <td class="text-right num">{{ money(report.netPurchaseAmount) }}</td>
-                <td class="text-right num">{{ money(report.grossPurchaseAmount) }}</td>
-                <td class="text-right num">{{ money(report.cancelledPurchaseAmount) }}</td>
-                <td class="text-right num">{{ money(report.refundedPurchaseAmount) }}</td>
+                <td class="text-right num">{{ moneyLabel(report.netPurchaseAmount) }}</td>
+                <td class="text-right num">{{ moneyLabel(report.grossPurchaseAmount) }}</td>
+                <td class="text-right num">{{ moneyLabel(report.cancelledPurchaseAmount) }}</td>
+                <td class="text-right num">{{ moneyLabel(report.refundedPurchaseAmount) }}</td>
                 <td class="text-right num">{{ purchaseCount }}</td>
               </tr>
             </tfoot>

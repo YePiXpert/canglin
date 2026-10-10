@@ -28,6 +28,10 @@ describe('moneyLabel', () => {
     expect(moneyLabel(undefined)).toBe('金额待补');
     expect(moneyLabel('12.30')).toBe('¥12.30');
     expect(moneyLabel('0.00')).toBe('¥0.00');
+    expect(moneyLabel('1236.00')).toBe('¥1,236.00');
+    expect(moneyLabel('1234567.5')).toBe('¥1,234,567.5');
+    expect(moneyLabel('-0.34')).toBe('¥-0.34');
+    expect(moneyLabel('-12500')).toBe('¥-12,500');
   });
 });
 

@@ -77,7 +77,7 @@ async function send(preset?: string): Promise<void> {
   const question = (preset ?? draft.value).trim();
   if (!question || asking.value) return;
   if (!configured.value) {
-    toast.info('请先在系统设置中配置并启用 AI 助手');
+    toast.info('请先在设置中配置并启用 AI 助手');
     return;
   }
   draft.value = '';
@@ -174,12 +174,12 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
               配置一个 OpenAI 兼容的大模型接口（默认 DeepSeek，也支持智谱 GLM 等）后，即可用自然语言查询申请、采购与领用单据和库存。
             </p>
             <router-link
-              to="/settings"
+              to="/settings#ai"
               class="mt-5"
               :class="buttonClass({ variant: 'primary', size: 'sm' })"
               @click="emit('close')"
             >
-              前往系统设置
+              前往设置
             </router-link>
           </div>
 

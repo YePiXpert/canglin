@@ -60,15 +60,15 @@ const LINK =
 
 /* sm 28：表格行内与工具栏；md 34：页面默认；lg 40：登录与整宽主动作（手机主动作再由调用方加高到 44） */
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-7 px-2.5 text-xs gap-1.5',
-  md: 'h-8.5 px-3.5 text-[13px] gap-1.5',
-  lg: 'h-10 px-4.5 text-sm gap-2',
+  sm: 'h-7 px-2.5 text-xs gap-1.5 pointer-coarse:h-10',
+  md: 'h-8.5 px-3.5 text-[13px] gap-1.5 pointer-coarse:h-11',
+  lg: 'h-10 px-4.5 text-sm gap-2 pointer-coarse:h-11',
 };
 
 const ICON_SIZES: Record<ButtonSize, string> = {
-  sm: 'size-7 text-xs',
-  md: 'size-8.5 text-[13px]',
-  lg: 'size-10 text-sm',
+  sm: 'size-7 text-xs pointer-coarse:size-10',
+  md: 'size-8.5 text-[13px] pointer-coarse:size-11',
+  lg: 'size-10 text-sm pointer-coarse:size-11',
 };
 
 export function buttonClass({

@@ -17,7 +17,6 @@ import {
  * - segmented：分段控件（列表筛选、快捷区间、主题、直发 / 库存发放 …），surface-2 轨道 + 当前项白底轻阴影
  * 每项是普通 <button>（aria-pressed 标记当前项），与原来手写的按钮组角色一致。
  * count 会并入按钮的可访问名称（「有待采购 2」）：e2e 按精确名称点的页签加 count 前先改测试。
- * 路由切换请用 RouteTabs.vue。
  */
 const props = withDefaults(
   defineProps<{
