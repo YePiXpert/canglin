@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f5f4f0" />
+    <meta name="theme-color" content="#f8f6f1" />
     <script>
       // 防 FOUC：首帧前按本地偏好预置 .dark（与 src/stores/theme.ts 的 STORAGE_KEY 保持一致）
       try {
@@ -26,50 +26,51 @@
         align-items: center;
         justify-content: center;
         gap: 14px;
-        background: #f5f4f0;
+        background: #f8f6f1;
         font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, "PingFang SC", "Hiragino Sans GB",
           "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
+      /* 朱砂方印（与 AppShell 顶栏一致） */
       #boot .mark {
         display: flex;
         align-items: center;
         justify-content: center;
         width: 40px;
         height: 40px;
-        border-radius: 10px;
-        background: #1b1a17;
+        border-radius: 5px;
+        background: #b6432a;
         color: #fff;
-        font-weight: 600;
-        font-size: 16px;
-        letter-spacing: -0.3px;
+        font-weight: 700;
+        font-size: 14px;
+        line-height: 1;
       }
       #boot .spin {
         width: 18px;
         height: 18px;
-        border: 2px solid rgba(27, 26, 23, 0.12);
-        border-top-color: #1f7a53;
+        border: 2px solid rgba(26, 25, 21, 0.12);
+        border-top-color: #1a1915;
         border-radius: 50%;
         animation: boot-spin 0.7s linear infinite;
       }
       #boot p {
         margin: 0;
-        color: #7b7973;
+        color: #6b665c;
         font-size: 13px;
       }
       html.dark #boot {
-        background: #131311;
+        background: #141311;
       }
       html.dark #boot .mark {
-        background: #f3f2ed;
-        color: #1b1a17;
+        background: #e0674b;
+        color: #1a1915;
       }
       html.dark #boot .spin {
-        border-color: rgba(243, 242, 237, 0.14);
-        border-top-color: #4cc38a;
+        border-color: rgba(242, 239, 232, 0.14);
+        border-top-color: #f2efe8;
       }
       html.dark #boot p {
-        color: #85837b;
+        color: #a39e93;
       }
       @keyframes boot-spin {
         to { transform: rotate(360deg); }
@@ -84,12 +85,12 @@
   <body>
     <div id="app"></div>
     <div id="boot">
-      <div class="mark">仓</div>
+      <div class="mark">仓廪</div>
       <div class="spin"></div>
       <p>正在启动仓廪…</p>
     </div>
     <noscript>
-      <p style="padding: 24px; font-family: system-ui, sans-serif; color: #1b1a17">
+      <p style="padding: 24px; font-family: system-ui, sans-serif; color: #1a1915">
         本系统需要启用 JavaScript 才能使用。
       </p>
     </noscript>

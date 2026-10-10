@@ -20,8 +20,8 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
 <template>
   <label class="block">
-    <span v-if="label" class="block mb-1.5 text-[13px] leading-5 font-medium text-text">
-      {{ label }}<span v-if="required" class="text-red ml-0.5">*</span>
+    <span v-if="label" class="block mb-1.5 text-[12.5px] leading-[18px] font-medium text-text">
+      {{ label }}<span v-if="required" class="text-accent ml-0.5">*</span>
     </span>
     <textarea
       :value="modelValue ?? ''"
@@ -31,14 +31,11 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
       :required="required"
       :aria-label="label"
       :aria-invalid="error ? 'true' : undefined"
-      class="block w-full px-3 py-2 text-base sm:text-sm leading-relaxed bg-surface text-text border rounded-(--radius-control) placeholder:text-faint resize-y transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus:outline-hidden focus:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed"
-      :class="error
-        ? 'border-red focus:border-red focus:ring-red/20'
-        : 'border-line-strong hover:border-faint focus:border-accent focus:ring-accent/20 disabled:hover:border-line-strong'"
+      class="control block w-full px-3 py-2 text-base sm:text-sm leading-relaxed resize-y"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     />
     <span v-if="error" class="field-error">
-      <Icon name="alert" :size="12" class="mt-0.5 shrink-0" />{{ error }}
+      <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
     </span>
     <span v-else-if="hint" class="block mt-1.5 text-xs text-faint">{{ hint }}</span>
   </label>

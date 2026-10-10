@@ -26,8 +26,13 @@ const props = withDefaults(
      * 只有「一句话 + 两个按钮」的确认框（ConfirmDialog）传 false，保持居中小卡片。
      */
     mobileFullscreen?: boolean;
+    /**
+     * 确认框排版（ConfirmDialog 用）：16px / 700 标题，头部、页脚都没有分隔线与底色，也没有右上角 ×
+     * （「取消」、Esc、点遮罩照样能关）。
+     */
+    compact?: boolean;
   }>(),
-  { width: '560px', persistent: false, dirty: false, mobileFullscreen: true },
+  { width: '560px', persistent: false, dirty: false, mobileFullscreen: true, compact: false },
 );
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
 
@@ -84,7 +89,7 @@ function onBackdropPointerDown(e: PointerEvent): void {
 <template>
   <DialogRoot :open="props.open" @update:open="(v) => { if (!v) requestClose(); }">
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-40 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
+      <DialogOverlay class="fixed inset-0 z-40 bg-ink/40 dark:bg-black/60 data-[state=open]:animate-fade-in" />
       <!--
         DialogContent 是全屏透明容器（滚动 + 关闭手势都挂在它上面），面板才是视觉卡片。
         不能给 DialogContent 加 translate 居中：transform/translate 会让它成为 fixed
@@ -99,37 +104,50 @@ function onBackdropPointerDown(e: PointerEvent): void {
           :class="fullscreen ? 'sm:p-4' : 'p-4'"
           @pointerdown.self="onBackdropPointerDown"
         >
+          <!--
+            「墨线」弹窗：12px 圆角；头部 18px / 700 标题 + 13px 说明，底边发丝线；正文左右 24px；
+            页脚 canvas 底、顶边发丝线（左侧提示或失败原因，右侧「取消」+ 主按钮）。compact 是确认框的紧凑排版。
+          -->
           <div
             class="flex flex-col w-full overflow-hidden bg-surface shadow-(--shadow-pop) group-data-[state=open]/dialog:animate-pop-in"
             :class="fullscreen
-              ? 'h-dvh rounded-none sm:h-auto sm:max-h-[88vh] sm:max-w-(--dialog-w) sm:rounded-[14px] sm:border sm:border-line'
-              : 'max-h-[88vh] max-w-(--dialog-w) rounded-[14px] border border-line'"
+              ? 'h-dvh rounded-none sm:h-auto sm:max-h-[88vh] sm:max-w-(--dialog-w) sm:rounded-xl sm:border sm:border-line'
+              : 'max-h-[88vh] max-w-(--dialog-w) rounded-xl border border-line'"
             :style="{ '--dialog-w': props.width }"
           >
-            <div class="flex shrink-0 items-start justify-between gap-4 px-5 sm:px-6 pt-5 pb-4">
+            <div
+              class="flex shrink-0 items-start justify-between gap-4"
+              :class="compact ? 'px-5 pt-5' : 'px-5 sm:px-6 pt-5 pb-4 border-b border-line'"
+            >
               <div class="min-w-0">
-                <DialogTitle class="text-[17px] leading-6 font-semibold tracking-tight text-ink">{{ title }}</DialogTitle>
+                <DialogTitle class="font-bold text-ink" :class="compact ? 'text-base leading-6' : 'text-lg leading-6.5'">{{ title }}</DialogTitle>
                 <DialogDescription v-if="description" class="mt-1 text-[13px] text-muted break-words">
                   {{ description }}
                 </DialogDescription>
               </div>
               <button
-                v-if="!persistent"
+                v-if="!persistent && !compact"
                 type="button"
-                class="shrink-0 -mr-2 -mt-1 inline-flex items-center justify-center size-8 rounded-md text-faint hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer"
+                class="shrink-0 -mr-1.5 inline-flex items-center justify-center size-7 rounded-md text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer"
                 aria-label="关闭"
                 @click="requestClose"
               >
                 <Icon name="close" :size="16" />
               </button>
             </div>
-            <div class="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6" :class="$slots.footer ? 'pb-5' : 'pb-6'">
+            <div
+              class="flex-1 min-h-0 overflow-y-auto"
+              :class="compact ? ['px-5 pt-1.5', $slots.footer ? 'pb-1' : 'pb-5'] : ['px-5 sm:px-6 pt-5', $slots.footer ? 'pb-5' : 'pb-6']"
+            >
               <slot />
             </div>
             <div
               v-if="$slots.footer"
-              class="flex shrink-0 flex-wrap justify-end gap-2 px-5 sm:px-6 py-4 border-t border-line bg-surface"
-              :class="fullscreen ? 'pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4' : ''"
+              class="flex shrink-0 flex-wrap items-center justify-end gap-2"
+              :class="[
+                compact ? 'px-5 pt-4 pb-5' : 'px-5 sm:px-6 py-3.5 border-t border-line bg-canvas',
+                fullscreen && !compact ? 'pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:pb-3.5' : '',
+              ]"
             >
               <slot name="footer" :close="requestClose" />
             </div>
@@ -139,14 +157,14 @@ function onBackdropPointerDown(e: PointerEvent): void {
         <!-- 放弃未保存内容的二次确认：盖满全屏，弹窗外的点击也进不来 -->
         <div
           v-if="confirmDiscard"
-          class="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 dark:bg-black/60 backdrop-blur-[2px] animate-fade-in"
+          class="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 dark:bg-black/60 animate-fade-in"
           role="alertdialog"
           aria-modal="true"
           aria-label="放弃未保存的修改"
         >
-          <div class="mx-4 w-full max-w-xs bg-surface border border-line rounded-[14px] shadow-(--shadow-pop) p-5 animate-pop-in">
-            <p class="text-[15px] font-semibold text-ink">放弃未保存的修改？</p>
-            <p class="mt-1 text-[13px] text-muted">关闭后这次填写的内容不会保留。</p>
+          <div class="mx-4 w-full max-w-xs bg-surface border border-line rounded-xl shadow-(--shadow-pop) p-5 animate-pop-in">
+            <p class="text-base font-bold text-ink">放弃未保存的修改？</p>
+            <p class="mt-1.5 text-[13px] text-muted">关闭后这次填写的内容不会保留。</p>
             <div class="mt-5 flex justify-end gap-2">
               <button
                 ref="keepEditingBtn"

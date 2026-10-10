@@ -1,45 +1,51 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Icon from './Icon.vue';
-import IlluBox from '../illustrations/IlluBox.vue';
-import IlluLedger from '../illustrations/IlluLedger.vue';
-import IlluTruck from '../illustrations/IlluTruck.vue';
-import IlluSearch from '../illustrations/IlluSearch.vue';
-import IlluEmpty from '../illustrations/IlluEmpty.vue';
-import type { IlluTone } from '../illustrations/tone';
 
-/** 空态场景插画（手绘 SVG，见 components/illustrations/）。动作按钮建议 variant="secondary" size="sm" */
-const scenes = {
-  box: IlluBox,
-  ledger: IlluLedger,
-  truck: IlluTruck,
-  search: IlluSearch,
-  empty: IlluEmpty,
+/**
+ * 空态：44px surface-2 圆角图标块 + 15px / 600 标题 + 13px muted 一句话 + 最多两个 sm 按钮（默认插槽）。
+ * - 首次使用：给图标和两个入口（主动作 primary sm + 次要 secondary sm）
+ * - 搜索 / 筛选无结果：icon=false，标题复述条件，按钮给「清除全部条件」(secondary sm) /「只清除关键词」(ghost sm)
+ * - 没有大插画；illustration 是旧的场景名，现在只用来挑一个对应的线性图标，新代码直接传 icon。
+ */
+const ILLUSTRATION_ICONS = {
+  box: 'box',
+  ledger: 'ledger',
+  truck: 'truck',
+  search: 'search',
+  empty: 'layers',
 } as const;
 
+// icon 的类型里有 false：不写默认值的话，Vue 会把「没传」按布尔 prop 转成 false
 const props = withDefaults(
   defineProps<{
-    /** 场景插画名；不传则回退到圆圈里的线条图标 */
-    illustration?: keyof typeof scenes;
-    tone?: IlluTone;
-    icon?: string;
+    /** 旧的场景名（box / ledger / truck / search / empty），只换成对应图标 */
+    illustration?: keyof typeof ILLUSTRATION_ICONS;
+    /** 图标名；false = 不画图标（搜索无结果时） */
+    icon?: string | false;
     title: string;
     description?: string;
   }>(),
-  { icon: 'box', tone: 'blue' },
+  { icon: undefined },
 );
 
-const illu = computed(() => (props.illustration ? scenes[props.illustration] : null));
+const iconName = computed(() => {
+  if (props.icon === false) return null;
+  return props.icon || (props.illustration ? ILLUSTRATION_ICONS[props.illustration] : 'box');
+});
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center py-14 px-4 text-center">
-    <component :is="illu" v-if="illu" :tone="tone" :size="120" class="mb-3" />
-    <div v-else class="mb-3 flex items-center justify-center size-11 rounded-xl bg-surface-2 border border-line text-faint">
-      <Icon :name="icon" :size="20" />
-    </div>
-    <p class="text-sm font-semibold text-ink">{{ title }}</p>
-    <p v-if="description" class="mt-1 text-[13px] text-muted max-w-xs">{{ description }}</p>
+  <div class="flex flex-col items-center justify-center px-6 py-10 text-center">
+    <span
+      v-if="iconName"
+      class="mb-3 flex size-11 items-center justify-center rounded-xl bg-surface-2 text-muted"
+      aria-hidden="true"
+    >
+      <Icon :name="iconName" :size="20" />
+    </span>
+    <p class="text-[15px] leading-6 font-semibold text-ink">{{ title }}</p>
+    <p v-if="description" class="mt-1 max-w-sm text-[13px] text-muted">{{ description }}</p>
     <div v-if="$slots.default" class="mt-4 flex flex-wrap items-center justify-center gap-2">
       <slot />
     </div>

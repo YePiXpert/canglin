@@ -4,52 +4,53 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * 设计令牌 ——「墨与纸」（语义与用法见 apps/web/DESIGN.md §2）
- * - 暖纸色画布 + 白色面板 + 墨色文字与主按钮；品牌绿（accent）只做点睛
- * - 语义色：blue = 进行中、amber = 等待、red = 危险，只用于状态
+ * 设计令牌 ——「墨线」（语义与用法见 apps/web/DESIGN.md §2）
+ * - 纸色画布 + 白色面板 + 墨色文字与主按钮；朱砂（accent）只做印记：品牌印、当前导航、焦点环、需处理计数、危险确认
+ * - 语义色只给状态：teal = 成功 / 已办结，blue = 待处理 / 进行中 / 文字链接，amber = 等待 / 提醒，red = 错误 / 危险
  * - 深色模式只在下方 .dark 里改令牌值，全站工具类自动翻转
- * - static：插画在运行时按名字读令牌，没被工具类引用的也必须输出
+ * - static：页面里有 var(--color-*) 写进任意值类（shadow-[…]、bg-[…]）或运行时读取的地方，没被工具类引用的令牌也必须输出
  */
 @theme static {
   /* 纸与墨 */
-  --color-canvas: #f5f4f0;
+  --color-canvas: #f8f6f1;
   --color-surface: #ffffff;
-  --color-surface-2: #faf9f6;
-  --color-ink: #1b1a17;
-  --color-text: #2b2a26;
-  --color-muted: #5f5d57;
-  --color-faint: #7b7973;
-  --color-line: #e7e5df;
-  --color-line-strong: #d6d3cb;
+  --color-surface-2: #f3f0e9;
+  --color-ink: #1a1915;
+  --color-text: #2b2925;
+  --color-muted: #6b665c;
+  --color-faint: #9a948a;
+  --color-line: #e5e0d5;
+  --color-line-strong: #cfc8ba;
 
   /* 主按钮 = 墨色；primary-soft 是中性的选中 / 悬停底 */
-  --color-primary: #1b1a17;
-  --color-primary-hover: #2f2e2a;
+  --color-primary: #1a1915;
+  --color-primary-hover: #2e2c27;
   --color-primary-fg: #ffffff;
-  --color-primary-soft: #efede8;
+  --color-primary-soft: #efebe2;
 
-  /* 品牌绿：链接、当前导航、焦点环、成功 */
-  --color-accent: #1f7a53;
-  --color-accent-hover: #196343;
-  --color-accent-soft: #e4f2ea;
-  /* 兼容别名：Badge / StatCard / 插画的 tone="teal" 就是品牌绿 */
-  --color-teal: var(--color-accent);
-  --color-teal-soft: var(--color-accent-soft);
+  /* 朱砂：品牌印、当前导航下划线、焦点环、需处理计数、危险实心按钮。不做链接、成功或完成性按钮 */
+  --color-accent: #b6432a;
+  --color-accent-hover: #9c3620;
+  --color-accent-soft: #f7e5df;
 
-  /* 语义色 */
-  --color-blue: #2f6bd6;
-  --color-blue-soft: #e6eefb;
-  --color-amber: #96550c; /* 在 amber-soft 上 ≥ 5:1，12px 警示文字也过 AA */
-  --color-amber-soft: #fbf0dc;
-  --color-red: #c2412d;
-  --color-red-soft: #fbe8e4;
+  /* 语义色（teal 是独立的成功绿，不再是 accent 的别名） */
+  --color-teal: #2b7a4b;
+  --color-teal-soft: #e1f0e5;
+  --color-blue: #2e5cae;
+  --color-blue-soft: #e3ebf9;
+  --color-amber: #8f5f00; /* 在 amber-soft 上约 4.8:1，12px 提醒文字也过 AA */
+  --color-amber-soft: #f9efd3;
+  --color-red: #b6432a;
+  --color-red-soft: #f7e5df;
 
-  /* 深色浮层（Toast、批量操作条），两个主题下都保持深色 */
-  --color-panel: #1b1a17;
-  --color-panel-soft: #2a2925;
+  /* 深色浮层（Toast、批量操作条），两个主题下都保持深色；panel-red 是错误浮层的深朱砂底 */
+  --color-panel: #1a1915;
+  --color-panel-soft: #2a2824;
+  --color-panel-red: #3a1f18;
 
-  --radius-card: 12px;
-  --radius-control: 8px;
+  /* 面板 10、控件 6；弹窗用 rounded-xl（12），状态 chip 用 rounded-sm（4），药丸 rounded-full */
+  --radius-card: 10px;
+  --radius-control: 6px;
 
   --font-sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC",
@@ -95,58 +96,59 @@
  */
 @layer base {
   :root {
-    --elevation-xs: 0 1px 2px rgb(27 26 23 / 0.06);
-    --elevation-card: 0 1px 2px rgb(27 26 23 / 0.04), 0 1px 3px rgb(27 26 23 / 0.06);
-    --elevation-pop: 0 8px 24px -8px rgb(27 26 23 / 0.18), 0 24px 48px -16px rgb(27 26 23 / 0.16);
+    --elevation-xs: 0 1px 2px rgb(26 25 21 / 0.08);
+    --elevation-card: 0 1px 2px rgb(26 25 21 / 0.04), 0 1px 3px rgb(26 25 21 / 0.06);
+    --elevation-pop: 0 2px 6px -2px rgb(26 25 21 / 0.1), 0 24px 56px -16px rgb(26 25 21 / 0.32);
 
     --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 7.2 5.9 9.6 10.5 4.6'/%3E%3C/svg%3E");
     --icon-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 7h6'/%3E%3C/svg%3E");
-    --icon-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237b7973' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18'/%3E%3C/svg%3E");
-    --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237b7973' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    --icon-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a948a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18'/%3E%3C/svg%3E");
+    --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a948a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 
-  /* 深色令牌：暖黑中性底；soft 色改为半透明着色面；面板靠 1px 描边而不是阴影分层 */
+  /* 深色令牌：暖黑中性底；soft 色改为半透明着色面；朱砂与状态色提亮一档；面板靠 1px 描边而不是阴影分层 */
   .dark {
-    --color-canvas: #131311;
-    --color-surface: #1b1b19;
-    --color-surface-2: #222220;
-    --color-ink: #f3f2ed;
-    --color-text: #dfded8;
-    --color-muted: #a3a199;
-    --color-faint: #85837b;
-    --color-line: #2b2b28;
-    --color-line-strong: #3b3a36;
+    --color-canvas: #141311;
+    --color-surface: #1c1b19;
+    --color-surface-2: #232220;
+    --color-ink: #f2efe8;
+    --color-text: #dedad1;
+    --color-muted: #a39e93;
+    --color-faint: #857f74;
+    --color-line: #2c2a26;
+    --color-line-strong: #3c3934;
 
-    --color-primary: #f3f2ed;
-    --color-primary-hover: #e2e1db;
-    --color-primary-fg: #1b1a17;
-    --color-primary-soft: #262622;
+    --color-primary: #f2efe8;
+    --color-primary-hover: #e2ded5;
+    --color-primary-fg: #1a1915;
+    --color-primary-soft: #2a2824;
 
-    --color-accent: #4cc38a;
-    --color-accent-hover: #5fd39b;
-    --color-accent-soft: rgb(76 195 138 / 0.14);
-    /* 别名在这里重新求值：.dark 若挂在子树上（深色浮层里的局部翻转），别名也要跟着变 */
-    --color-teal: var(--color-accent);
-    --color-teal-soft: var(--color-accent-soft);
+    --color-accent: #e0674b;
+    --color-accent-hover: #ea7d63;
+    --color-accent-soft: rgb(224 103 75 / 0.16);
 
-    --color-blue: #6d9ef2;
-    --color-blue-soft: rgb(109 158 242 / 0.16);
-    --color-amber: #e0a24a;
-    --color-amber-soft: rgb(224 162 74 / 0.14);
+    --color-teal: #5cc08a;
+    --color-teal-soft: rgb(92 192 138 / 0.14);
+    --color-blue: #7aa2ea;
+    --color-blue-soft: rgb(122 162 234 / 0.16);
+    --color-amber: #e2a64c;
+    --color-amber-soft: rgb(226 166 76 / 0.14);
     --color-red: #ef6d5c;
     --color-red-soft: rgb(239 109 92 / 0.15);
 
-    --color-panel: #262622;
-    --color-panel-soft: #33332e;
+    /* 深色主题里浮层要比面板（surface）亮一点才分得出层次 */
+    --color-panel: #2a2824;
+    --color-panel-soft: #36342f;
+    --color-panel-red: #4a261d;
 
     --elevation-xs: 0 1px 2px rgb(0 0 0 / 0.3);
     --elevation-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.3);
     --elevation-pop: 0 8px 24px -8px rgb(0 0 0 / 0.55), 0 24px 48px -16px rgb(0 0 0 / 0.5);
 
-    --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231b1a17' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 7.2 5.9 9.6 10.5 4.6'/%3E%3C/svg%3E");
-    --icon-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231b1a17' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 7h6'/%3E%3C/svg%3E");
-    --icon-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2385837b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18'/%3E%3C/svg%3E");
-    --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2385837b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231a1915' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 7.2 5.9 9.6 10.5 4.6'/%3E%3C/svg%3E");
+    --icon-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%231a1915' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 7h6'/%3E%3C/svg%3E");
+    --icon-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23857f74' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18'/%3E%3C/svg%3E");
+    --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23857f74' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 }
 
@@ -174,7 +176,7 @@
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+    background: color-mix(in oklab, var(--color-blue) 20%, transparent);
     color: var(--color-ink);
   }
 
@@ -201,7 +203,7 @@
     background: transparent;
   }
 
-  /* 焦点环统一用品牌绿；输入类控件在组件里改用 ring */
+  /* 键盘焦点环统一用朱砂（2px、外扩 2px）；文本类输入框改用 .control 的墨色描边 + 淡环 */
   *:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
@@ -215,18 +217,18 @@
   }
 
   /*
-   * 表格：表头小而淡，行高约 44px，最后一行无底边。
-   * 数字列在 th / td 上加 text-right + .num；主字段 text-ink font-medium，副行用 .text-meta。
+   * 表格：表头 surface-2 淡底、12px / 500 muted（不加粗不大写），单行的行高约 44px，发丝线分隔，最后一行无底边。
+   * 数字列在 th / td 上加 text-right + .num；主字段 text-ink font-medium，副行用 .text-meta；操作列靠右。
    */
   .table-base {
-    @apply w-full border-collapse text-[13.5px] leading-[1.4];
+    @apply w-full border-collapse text-[13px] leading-[1.45];
   }
   /* 表头不透明：sticky 时下面滚动的行不能透上来 */
   .table-base th {
-    @apply h-10 px-4 text-left align-middle text-xs font-medium text-muted bg-surface border-b border-line whitespace-nowrap;
+    @apply h-9 px-3.5 text-left align-middle text-xs font-medium text-muted bg-surface-2 border-b border-line whitespace-nowrap;
   }
   .table-base td {
-    @apply px-4 py-3 align-middle border-b border-line/80;
+    @apply px-3.5 py-3 align-middle border-b border-line;
   }
   .table-base tbody tr:last-child td {
     @apply border-b-0;
@@ -235,7 +237,11 @@
     @apply transition-colors duration-150;
   }
   .table-base tbody tr:hover {
-    @apply bg-surface-2;
+    @apply bg-surface-2/40;
+  }
+  /* 合计行：上方一条加深的线，墨色加粗；表格最后一行，不再画底线 */
+  .table-base tfoot td {
+    @apply px-3.5 py-3 align-middle border-t border-b-0 border-line-strong font-semibold text-ink;
   }
 
   /*
@@ -257,12 +263,12 @@
   }
 
   /*
-   * 表格行内的图标操作按钮：默认淡一些，行悬停 / 聚焦时显眼；触屏没有悬停，常亮。
+   * 表格行内的图标操作按钮（28px，与 sm 按钮同高）：默认淡一些，行悬停 / 聚焦时显眼；触屏没有悬停，常亮并放大到 40px。
    * <button class="row-action" aria-label="编辑"><Icon name="edit" /></button>
    * 危险动作再加 .row-action-danger（悬停转红）。
    */
   .row-action {
-    @apply inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md text-faint opacity-60 cursor-pointer transition-[color,background-color,opacity] duration-150 ease-out hover:text-ink hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-30;
+    @apply inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md text-faint opacity-60 cursor-pointer transition-[color,background-color,opacity] duration-150 ease-out hover:text-ink hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-30;
   }
   /* 列表行（非 table）用 .group 包住整行，悬停同样显出 */
   tr:hover .row-action:not(:disabled),
@@ -271,19 +277,19 @@
     @apply opacity-100;
   }
   /*
-   * 行高统一在 44px：放了 24px 药丸（Badge 根元素带 .badge）的单元格上下各 10px，
-   * 放了 32px 操作按钮的单元格上下各 6px；页面不用再手写 py-*。
+   * 单行的行高统一在 44px 上下：放了 22px 状态 chip（Badge 根元素带 .badge）的单元格上下各 10px，
+   * 放了 28px 操作按钮的单元格上下各 8px；页面不用再手写 py-*。
    */
   .table-base td:has(.badge) {
     @apply py-2.5;
   }
   .table-base td:has(.row-action) {
-    @apply py-1.5;
+    @apply py-2;
   }
   .row-action-danger:hover:not(:disabled) {
     @apply text-red bg-red-soft;
   }
-  /* 触屏：没有悬停所以常亮；按钮放大到 40px 触控目标，单元格上下再收到 2px，行高仍是 44px */
+  /* 触屏：没有悬停所以常亮；按钮放大到 40px 触控目标，单元格上下再收到 2px，行高约 44px */
   @media (hover: none) {
     .row-action {
       @apply h-10 min-w-10;
@@ -369,15 +375,81 @@
     color: var(--color-faint);
   }
 
-  /* 表单字段级错误：校验不再只靠 toast */
+  /* 表单字段级错误：12.5px 红字贴在字段下方，校验不再只靠 toast */
   .field-error {
-    @apply mt-1.5 flex items-start gap-1 text-xs text-red;
+    @apply mt-1.5 flex items-start gap-1 text-[12.5px] leading-[18px] text-red;
+  }
+
+  /*
+   * 文本类输入控件的外观：Input / Textarea / SearchInput / NativeSelect 与 Select 的触发框共用，
+   * 页面里手写的输入框（AI 对话框、导入明细单元格）同样套 class="control"。
+   * - surface 底 + line-strong 描边，悬停描边加深；聚焦（或下拉展开 data-state=open）= 墨色描边 + 3px 墨色淡环
+   * - aria-invalid="true" 自动转错误态：red 描边 + 淡红底，聚焦环也换成红色
+   * - 禁用：surface-2 底、muted 字
+   * 高度、内边距、字号由组件用工具类给（工具类层级高于这里）；只设 background-color，不碰 background-image（日期框的日历图标）。
+   */
+  .control {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-control);
+    transition:
+      color 150ms ease-out,
+      background-color 150ms ease-out,
+      border-color 150ms ease-out,
+      box-shadow 150ms ease-out;
+  }
+  .control::placeholder {
+    color: var(--color-faint);
+    opacity: 1;
+  }
+  /* 悬停只在「普通」状态下加深描边：聚焦、展开、出错时的描边颜色不被悬停盖掉 */
+  .control:hover:not(:disabled, :focus-visible, [data-state='open'], [aria-invalid='true']) {
+    border-color: var(--color-faint);
+  }
+  .control:focus-visible,
+  .control[data-state='open'] {
+    outline: none;
+    border-color: var(--color-ink);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ink) 8%, transparent);
+  }
+  .control[aria-invalid='true'] {
+    border-color: var(--color-red);
+    background-color: color-mix(in oklab, var(--color-red-soft) 45%, var(--color-surface));
+  }
+  .control[aria-invalid='true']:focus-visible,
+  .control[aria-invalid='true'][data-state='open'] {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-red) 14%, transparent);
+  }
+  .control:disabled {
+    background-color: var(--color-surface-2);
+    color: var(--color-muted);
+    border-color: var(--color-line);
+    cursor: not-allowed;
+  }
+  /*
+   * 表格式输入的单元格（明细录入）：平时无框无底，悬停显出描边，聚焦与普通输入框一样是墨色环；
+   * 出错时仍显示红框淡红底。Input 组件的 variant="cell" 就是它；手写时 class="control control-cell"。
+   */
+  .control-cell {
+    border-color: transparent;
+    background-color: transparent;
+  }
+  .control-cell:hover:not(:disabled, :focus-visible, [aria-invalid='true']) {
+    border-color: var(--color-line-strong);
+  }
+  .control-cell:focus-visible {
+    background-color: var(--color-surface);
+  }
+  .control-cell:disabled {
+    border-color: transparent;
+    background-color: transparent;
   }
 
   /*
    * 自绘复选框 / 单选框：直接给原生 input 加类，保留原生键盘操作与 role。
    * <input type="checkbox" class="checkbox"> / <input type="radio" class="radio">
-   * 尺寸固定 16px，不要再叠 size-* / accent-*。
+   * 尺寸固定 16px，不要再叠 size-* / accent-*。选中 = 墨色实心；键盘焦点沿用全局的朱砂外框。
    */
   .checkbox,
   .radio {
@@ -432,18 +504,9 @@
     border-color: var(--color-primary-hover);
     background-color: var(--color-primary-hover);
   }
-  .checkbox:focus-visible,
-  .radio:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent) 30%, transparent);
-  }
-  .checkbox:focus-visible:not(:checked):not(:indeterminate),
-  .radio:focus-visible:not(:checked) {
-    border-color: var(--color-accent);
-  }
   .checkbox:disabled,
   .radio:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
   }
   /* 14px 小号（Checkbox 组件的 size="sm" 与单选输入）：class="checkbox checkbox-sm" / "radio radio-sm" */
@@ -557,7 +620,7 @@
     @apply border-b border-line/80 px-2 py-1.5 align-top;
   }
   .md a {
-    @apply text-accent underline underline-offset-2 hover:text-accent-hover;
+    @apply text-blue underline underline-offset-2;
   }
 }
 

@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, useId } from 'vue';
 
 /**
- * 开关：36×20 药丸，关 line-strong、开 accent。
+ * 开关：36×20 药丸，关 line-strong、开墨色（primary）；圆钮开时换成 primary-fg，深色主题下也看得清。
  * 底下仍是原生 <input type="checkbox">（role 仍是 checkbox，键盘空格切换、label 关联都是原生的），
  * 所以把设置页原有的复选框换成它不会改变可访问角色。
  */
@@ -56,7 +56,7 @@ function onChange(event: Event): void {
         :id="id"
         ref="inputEl"
         type="checkbox"
-        class="peer appearance-none m-0 w-9 h-5 rounded-full bg-line-strong cursor-pointer transition-colors duration-150 ease-out checked:bg-accent hover:brightness-95 disabled:cursor-not-allowed disabled:hover:brightness-100"
+        class="peer appearance-none m-0 w-9 h-5 rounded-full bg-line-strong cursor-pointer transition-colors duration-150 ease-out checked:bg-primary hover:brightness-95 disabled:cursor-not-allowed disabled:hover:brightness-100"
         :checked="isOn"
         :disabled="disabled"
         :name="name"
@@ -65,7 +65,7 @@ function onChange(event: Event): void {
         @change="onChange"
       />
       <span
-        class="pointer-events-none absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-(--shadow-xs) transition-transform duration-150 ease-out peer-checked:translate-x-4"
+        class="pointer-events-none absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-(--shadow-xs) transition-[translate,background-color] duration-150 ease-out peer-checked:translate-x-4 peer-checked:bg-primary-fg"
         aria-hidden="true"
       />
     </span>

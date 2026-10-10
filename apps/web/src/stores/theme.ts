@@ -28,7 +28,7 @@ export const useThemeStore = defineStore('theme', () => {
     document.documentElement.classList.toggle('dark', dark);
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', dark ? '#131311' : '#f5f4f0');
+      ?.setAttribute('content', dark ? '#141311' : '#f8f6f1');
   }
 
   function setMode(next: ThemeMode): void {

@@ -8,7 +8,6 @@ import Notice from '@/components/ui/Notice.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import { apiError } from '@/api/client';
-import PatternGrid from '@/components/illustrations/PatternGrid.vue';
 
 type Mode = 'login' | 'setup' | 'recover';
 
@@ -115,22 +114,14 @@ const subheading = computed(() =>
 </script>
 
 <template>
-  <div class="relative isolate min-h-dvh overflow-hidden bg-canvas flex flex-col items-center justify-center px-4 py-10">
-    <!-- 背景：点阵往四周淡出 + 左上角隐约一点品牌绿柔光（尺寸、透明度都压低，深浅色同样克制） -->
-    <PatternGrid class="-z-10 text-ink/[0.05] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
-    <div
-      class="pointer-events-none absolute -z-10 -top-24 -left-24 size-[20rem] rounded-full opacity-50 bg-[radial-gradient(closest-side,var(--color-accent-soft),transparent)]"
-      aria-hidden="true"
-    />
-
-    <div class="w-full max-w-[420px] bg-surface border border-line rounded-2xl p-6 sm:p-8 sm:shadow-(--shadow-pop)">
-      <!-- 品牌 -->
+  <!-- 「墨线」：纸色画布上一张居中的面板，没有背景纹理 -->
+  <div class="min-h-dvh bg-canvas flex flex-col items-center justify-center px-4 py-10">
+    <div class="w-full max-w-[420px] bg-surface border border-line rounded-xl p-6 sm:p-8">
+      <!-- 品牌：朱砂方印 + 词标（与顶栏一致） -->
       <div class="flex items-center gap-3">
-        <span class="flex items-center justify-center size-10 shrink-0 rounded-xl bg-ink text-surface">
-          <Icon name="inventory" :size="20" />
-        </span>
+        <span class="flex items-center justify-center size-10 shrink-0 rounded-[5px] bg-accent text-sm font-bold leading-none text-primary-fg select-none" aria-hidden="true">仓廪</span>
         <div class="min-w-0">
-          <p class="text-lg leading-6 font-semibold tracking-tight text-ink">仓廪</p>
+          <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
           <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
         </div>
       </div>
@@ -138,18 +129,18 @@ const subheading = computed(() =>
       <!-- 服务端不可达 -->
       <div v-if="auth.unreachable" class="mt-8 text-center">
         <span class="mx-auto flex items-center justify-center size-11 rounded-full bg-red-soft text-red">
-          <Icon name="alert" :size="20" />
+          <Icon name="alert-circle" :size="20" />
         </span>
-        <p class="mt-4 text-[17px] font-semibold text-ink">连接不上后端服务</p>
+        <p class="mt-4 text-lg font-bold text-ink">连接不上后端服务</p>
         <p class="mt-1 text-[13px] text-muted">服务可能还在启动，或者容器没跑起来。</p>
         <Button variant="primary" size="lg" class="w-full mt-6" :loading="loading" @click="auth.refresh()">重试</Button>
       </div>
 
       <!-- 恢复码已生成（初始化成功） -->
       <div v-else-if="recoveryCodeIssued" class="mt-8">
-        <div class="flex items-center gap-2 text-accent">
+        <div class="flex items-center gap-2 text-teal">
           <Icon name="check-circle" :size="18" />
-          <p class="text-[17px] font-semibold">初始化完成</p>
+          <p class="text-lg font-bold">初始化完成</p>
         </div>
         <p class="mt-2 text-[13px] text-muted leading-relaxed">
           请把恢复码保存在安全的地方，密码遗忘时用它重置：
@@ -165,7 +156,7 @@ const subheading = computed(() =>
       </div>
 
       <template v-else>
-        <h1 class="mt-8 text-[17px] font-semibold tracking-tight text-ink">{{ heading }}</h1>
+        <h1 class="mt-8 text-lg font-bold text-ink">{{ heading }}</h1>
         <p class="mt-1 mb-6 text-[13px] text-muted">{{ subheading }}</p>
 
         <form class="space-y-4" @submit.prevent="submit">

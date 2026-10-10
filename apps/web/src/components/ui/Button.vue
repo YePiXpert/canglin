@@ -5,15 +5,17 @@ import { buttonClass, type ButtonSize, type ButtonVariant } from './button';
 const props = withDefaults(
   defineProps<{
     /**
-     * accent 只用于「确认入账 / 确认发放」这类完成性动作；danger-ghost 用于「清空回收站」这类低强调危险动作；
-     * link 是文字链接样式的按钮，字号随上下文（size / iconOnly / pressed 对它不起作用）
+     * primary 墨色实心（一个区域只放一个）；accent 是旧名字，与 primary 同样式；danger 朱砂实心，只用于确认弹窗；
+     * danger-ghost 用于「删除第 N 行」这类低强调危险动作；link 是蓝色文字链接样式的按钮，字号随上下文
+     * （size / iconOnly / pressed 对它不起作用）
      */
     variant?: ButtonVariant;
+    /** sm 28（表格行内、工具栏）/ md 34（默认）/ lg 40（登录、整宽主动作） */
     size?: ButtonSize;
     disabled?: boolean;
     loading?: boolean;
     type?: 'button' | 'submit';
-    /** 只有图标（记得配 aria-label）：正方形 sm 32 / md 36 / lg 40 */
+    /** 只有图标（记得配 aria-label）：正方形 sm 28 / md 34 / lg 40 */
     iconOnly?: boolean;
     /**
      * 开关按钮（「只看低库存」「筛选」）：传了就渲染 aria-pressed，true 时是中性选中底。

@@ -33,13 +33,8 @@ const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
         :disabled="disabled"
         :aria-label="ariaLabel"
         :aria-invalid="error ? 'true' : undefined"
-        class="appearance-none w-full bg-surface text-text border rounded-(--radius-control) cursor-pointer transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus:outline-hidden focus:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed"
-        :class="[
-          size === 'sm' ? 'h-7 pl-2 pr-6 text-xs' : 'h-9 pl-3 pr-9 text-base sm:text-sm',
-          error
-            ? 'border-red focus:border-red focus:ring-red/20'
-            : 'border-line-strong hover:border-faint focus:border-accent focus:ring-accent/20 disabled:hover:border-line-strong',
-        ]"
+        class="control appearance-none w-full cursor-pointer"
+        :class="size === 'sm' ? 'h-7 pl-2 pr-6 text-xs' : 'h-11 sm:h-9 pl-3 pr-9 text-base sm:text-sm'"
         @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
       >
         <option v-if="placeholder" value="">{{ placeholder }}</option>
@@ -53,7 +48,7 @@ const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
       />
     </div>
     <span v-if="error" class="field-error">
-      <Icon name="alert" :size="12" class="mt-0.5 shrink-0" />{{ error }}
+      <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
     </span>
   </div>
 </template>

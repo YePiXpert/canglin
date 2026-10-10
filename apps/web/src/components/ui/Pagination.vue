@@ -3,6 +3,10 @@ import { computed } from 'vue';
 import Button from './Button.vue';
 import Icon from './Icon.vue';
 
+/**
+ * 分页：左边「第 1–20 条 · 共 128 条」，右边页码（当前页墨色实心小方块）。
+ * total 为 0 时整个组件不渲染：放在 Panel 的 #footer 里时，空页脚也跟着隐藏，不出现「第 0–0 条」。
+ */
 const props = withDefaults(
   defineProps<{ page?: number; pageSize?: number; total?: number }>(),
   { page: 1, pageSize: 20, total: 0 },
@@ -31,19 +35,19 @@ const pages = computed<(number | '…')[]>(() => {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
-    <span class="tabular-nums">共 {{ total }} 条 · 第 {{ from }}-{{ to }} 条</span>
-    <div class="flex items-center gap-1">
+  <div v-if="total > 0" class="flex flex-wrap items-center justify-between gap-3">
+    <span class="text-meta tabular-nums">第 {{ from }}–{{ to }} 条 · 共 {{ total }} 条</span>
+    <nav class="flex items-center gap-0.5" aria-label="分页">
       <Button size="sm" variant="ghost" icon-only :disabled="page <= 1" aria-label="上一页" @click="emit('change', page - 1)">
         <Icon name="chevron-left" :size="16" />
       </Button>
       <template v-for="(p, i) in pages" :key="i">
-        <span v-if="p === '…'" class="inline-flex size-8 items-center justify-center text-faint">…</span>
+        <span v-if="p === '…'" class="inline-flex size-7 items-center justify-center text-xs text-faint" aria-hidden="true">…</span>
         <button
           v-else
           type="button"
-          class="h-8 min-w-8 px-1.5 rounded-(--radius-control) text-xs font-medium tabular-nums cursor-pointer transition-colors duration-150"
-          :class="p === page ? 'bg-ink text-surface' : 'text-muted hover:bg-primary-soft hover:text-ink'"
+          class="h-7 min-w-7 px-1.5 rounded-[5px] text-xs font-medium tabular-nums cursor-pointer transition-colors duration-150"
+          :class="p === page ? 'bg-primary text-primary-fg' : 'text-muted hover:bg-surface-2 hover:text-ink'"
           :aria-current="p === page ? 'page' : undefined"
           @click="emit('change', p)"
         >
@@ -53,6 +57,6 @@ const pages = computed<(number | '…')[]>(() => {
       <Button size="sm" variant="ghost" icon-only :disabled="page >= pageCount" aria-label="下一页" @click="emit('change', page + 1)">
         <Icon name="chevron-right" :size="16" />
       </Button>
-    </div>
+    </nav>
   </div>
 </template>

@@ -8,8 +8,9 @@ import Icon from './Icon.vue';
  *   文字区 basis-64，放不下时动作换到下一行。size="sm" 是收紧的小块（面板、表单里的一段说明）。
  * - variant="inline"：只有图标 + 同色文字、没有底，放在弹窗页脚、StickyActionBar 的 #start、字段组下方；
  *   #actions 紧跟在文字后面，放 variant="link" 的文字按钮。
- * - tone：amber = 提醒、需要人工处理（默认），red = 失败与错误，blue = 信息，teal = 成功（品牌绿）。
- * - icon：默认按 tone 取（amber / red → alert，blue → info，teal → check-circle）；false = 不画图标。
+ * - tone：amber = 提醒、需要人工处理（默认），red = 失败与错误，blue = 信息，teal = 成功（绿色）。
+ *   柔底同色字，不画大图标：只有文字前一个 14–16px 的线性图标。
+ * - icon：默认按 tone 取（amber → alert，red → alert-circle，blue → info，teal → check-circle）；false = 不画图标。
  *
  * 不声明 role：role="alert" / "status" 由调用方给，和 class 一样落在根元素上。
  * 根元素里除了 aria-hidden 的图标只有插槽内容，getByRole('alert') 读到的文字就是提示原文。
@@ -30,7 +31,7 @@ const props = withDefaults(
 
 const DEFAULT_ICONS: Record<NoticeTone, string> = {
   amber: 'alert',
-  red: 'alert',
+  red: 'alert-circle',
   blue: 'info',
   teal: 'check-circle',
 };
@@ -41,13 +42,13 @@ const TONES: Record<'box' | 'inline', Record<NoticeTone, string>> = {
     amber: 'bg-amber-soft text-amber',
     red: 'bg-red-soft text-red',
     blue: 'bg-blue-soft text-blue',
-    teal: 'bg-accent-soft text-accent',
+    teal: 'bg-teal-soft text-teal',
   },
   inline: {
     amber: 'text-amber',
     red: 'text-red',
     blue: 'text-blue',
-    teal: 'text-accent',
+    teal: 'text-teal',
   },
 };
 
@@ -59,7 +60,7 @@ const LAYOUTS = {
       iconClass: 'mt-0.5 shrink-0',
     },
     sm: {
-      root: 'flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-3 py-2 text-xs leading-5',
+      root: 'flex flex-wrap items-center gap-x-4 gap-y-2 rounded-(--radius-control) px-3 py-2 text-xs leading-5',
       icon: 14,
       iconClass: 'mt-[3px] shrink-0',
     },

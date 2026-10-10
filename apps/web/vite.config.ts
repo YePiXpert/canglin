@@ -17,8 +17,8 @@ export default defineConfig({
         name: '仓廪 · 采购与领用',
         short_name: '仓廪',
         description: '办公用品采购与领用：OA 单导入、分次采购、到货入库、库存领用',
-        theme_color: '#F5F4F0',
-        background_color: '#F5F4F0',
+        theme_color: '#F8F6F1',
+        background_color: '#F8F6F1',
         display: 'standalone',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },

@@ -3,3 +3,14 @@ export interface SelectOption {
   label: string;
   value: string;
 }
+
+/** 下拉菜单项：Menu.vue 用 */
+export interface MenuItem {
+  label: string;
+  icon?: string;
+  /** 危险动作（删除、撤销）：朱砂字；动作本身仍要走确认弹窗 */
+  danger?: boolean;
+  disabled?: boolean;
+  /** 选中后执行；菜单会先自己关上 */
+  onSelect?: () => void;
+}

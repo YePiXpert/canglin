@@ -26,7 +26,7 @@ const props = withDefaults(
     required?: boolean;
     /** 字段级错误：有值时触发框转红并在下方给出原因（与 Input 对齐） */
     error?: string;
-    /** sm = h-8 / 13px、弹层选项 h-7（明细行里与 Input size="sm" 同高）；md = h-9（默认） */
+    /** sm = h-8 / 13px、弹层选项 h-7（明细行里与 Input size="sm" 同高）；md = 桌面 h-9、手机 h-11（默认，与 Input 同高） */
     size?: 'sm' | 'md';
   }>(),
   { placeholder: '请选择', size: 'md' },
@@ -49,8 +49,8 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
 
 <template>
   <div class="block">
-    <span v-if="label" class="block mb-1.5 text-[13px] leading-5 font-medium text-text">
-      {{ label }}<span v-if="required" class="text-red ml-0.5">*</span>
+    <span v-if="label" class="block mb-1.5 text-[12.5px] leading-[18px] font-medium text-text">
+      {{ label }}<span v-if="required" class="text-accent ml-0.5">*</span>
     </span>
     <SelectRoot
       :model-value="modelValue ?? undefined"
@@ -58,14 +58,12 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
     >
       <!-- 清除按钮独立于 trigger 之外，避免 button 嵌套 button 的非法 DOM -->
       <div class="relative">
+        <!-- 外观来自全局 .control：聚焦或展开（data-state=open）时墨色描边 + 淡环，aria-invalid 时转错误态 -->
         <SelectTrigger
-          class="group inline-flex w-full items-center justify-between gap-2 text-text bg-surface border rounded-(--radius-control) data-[placeholder]:text-faint transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-hidden focus-visible:ring-2 data-[state=open]:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed cursor-pointer"
+          class="control group inline-flex w-full items-center justify-between gap-2 data-[placeholder]:text-faint cursor-pointer"
           :class="[
-            size === 'sm' ? 'h-8 pl-2.5 text-[13px]' : 'h-9 pl-3 text-sm',
+            size === 'sm' ? 'h-8 pl-2.5 text-[13px]' : 'h-11 sm:h-9 pl-3 text-base sm:text-sm',
             clearable && modelValue ? (size === 'sm' ? 'pr-7' : 'pr-8') : size === 'sm' ? 'pr-2' : 'pr-2.5',
-            error
-              ? 'border-red focus-visible:border-red focus-visible:ring-red/20 data-[state=open]:ring-red/20'
-              : 'border-line-strong hover:border-faint focus-visible:border-accent focus-visible:ring-accent/20 data-[state=open]:border-accent data-[state=open]:ring-accent/20 disabled:hover:border-line-strong',
           ]"
           :disabled="disabled"
           :aria-label="label"
@@ -84,7 +82,7 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
         <button
           v-if="clearable && modelValue"
           type="button"
-          class="absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:pointer-events-none"
+          class="absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer disabled:pointer-events-none"
           :class="size === 'sm' ? 'right-1' : 'right-1.5'"
           aria-label="清除选择"
           :disabled="disabled"
@@ -94,13 +92,13 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
         </button>
       </div>
       <span v-if="error" class="field-error">
-        <Icon name="alert" :size="12" class="mt-0.5 shrink-0" />{{ error }}
+        <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
       </span>
       <SelectPortal>
         <SelectContent
           position="popper"
           :side-offset="4"
-          class="z-50 max-h-72 data-[state=open]:animate-pop-in min-w-(--reka-select-trigger-width) overflow-hidden bg-surface border border-line rounded-[10px] shadow-(--shadow-pop)"
+          class="z-50 max-h-72 data-[state=open]:animate-pop-in min-w-(--reka-select-trigger-width) overflow-hidden bg-surface border border-line rounded-lg shadow-(--shadow-pop)"
         >
           <SelectScrollUpButton class="flex h-6 items-center justify-center text-faint"><Icon name="chevron-down" :size="14" class="rotate-180" /></SelectScrollUpButton>
           <SelectViewport class="p-1">
@@ -108,11 +106,11 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
               v-for="opt in items"
               :key="opt.value"
               :value="opt.value"
-              class="relative flex items-center pl-7 pr-2 text-text rounded-md cursor-pointer select-none outline-hidden data-[highlighted]:bg-primary-soft data-[highlighted]:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+              class="relative flex items-center pl-7 pr-2 text-text rounded-md cursor-pointer select-none outline-hidden data-[highlighted]:bg-surface-2 data-[highlighted]:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
               :class="size === 'sm' ? 'h-7 text-[13px]' : 'h-8 text-[13.5px]'"
             >
               <SelectItemIndicator class="absolute left-2 inline-flex items-center">
-                <Icon name="check" :size="14" class="text-accent" />
+                <Icon name="check" :size="14" class="text-ink" />
               </SelectItemIndicator>
               <span class="truncate">{{ opt.label }}</span>
             </SelectItem>

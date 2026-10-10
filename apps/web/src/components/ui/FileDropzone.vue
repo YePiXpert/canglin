@@ -120,14 +120,15 @@ function onDrop(e: DragEvent): void {
 
 <template>
   <div>
+    <!-- 虚线上传区：surface 底 + 1.5px line-strong 虚线；悬停 / 拖入时描边转墨色、底色转 surface-2；键盘焦点是全局的朱砂外框 -->
     <label
-      class="group relative flex flex-col items-center justify-center gap-1 p-10 text-center bg-surface border-2 border-dashed rounded-(--radius-card) transition-colors duration-150 has-[:focus-visible]:border-accent has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/20"
+      class="group relative flex flex-col items-center justify-center gap-1 p-10 text-center bg-surface border-[1.5px] border-dashed rounded-xl transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
       :class="
         disabled
           ? 'cursor-not-allowed opacity-60 border-line-strong'
           : dragging
-            ? 'cursor-copy border-accent bg-accent-soft/40'
-            : 'cursor-pointer border-line-strong hover:border-accent hover:bg-accent-soft/30'
+            ? 'cursor-copy border-ink bg-surface-2'
+            : 'cursor-pointer border-line-strong hover:border-faint hover:bg-surface-2/40'
       "
       @click="onAreaClick"
       @dragenter.prevent="onDragEnter"
@@ -145,13 +146,14 @@ function onDrop(e: DragEvent): void {
         @change="onChange"
         @cancel="resetInput"
       />
-      <Icon
-        name="upload-cloud"
-        :size="28"
-        class="mb-2 transition-colors duration-150"
-        :class="dragging ? 'text-accent' : disabled ? 'text-faint' : 'text-faint group-hover:text-accent'"
-      />
-      <span class="text-sm font-medium text-ink">{{ label }}</span>
+      <span
+        class="mb-2 flex size-12 items-center justify-center rounded-xl transition-colors duration-150"
+        :class="dragging ? 'bg-surface text-ink' : disabled ? 'bg-surface-2 text-faint' : 'bg-surface-2 text-ink'"
+        aria-hidden="true"
+      >
+        <Icon name="upload-cloud" :size="22" />
+      </span>
+      <span class="text-[15px] font-semibold text-ink">{{ label }}</span>
       <span v-if="hint" class="text-xs text-faint">{{ hint }}</span>
       <slot />
     </label>

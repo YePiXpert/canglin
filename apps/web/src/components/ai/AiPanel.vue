@@ -251,7 +251,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
                 v-model="draft"
                 rows="2"
                 placeholder="问点什么，如：上月行政部买了什么？（Enter 发送，Shift+Enter 换行）"
-                class="flex-1 min-w-0 px-3 py-2 text-base sm:text-sm leading-relaxed text-text bg-surface border border-line-strong rounded-(--radius-control) placeholder:text-faint hover:border-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent/20 disabled:bg-surface-2 disabled:text-muted transition-[color,background-color,border-color,box-shadow] duration-150 ease-out resize-none"
+                class="control flex-1 min-w-0 px-3 py-2 text-base sm:text-sm leading-relaxed resize-none"
                 :disabled="asking"
                 @keydown.enter.exact.prevent="send()"
               />

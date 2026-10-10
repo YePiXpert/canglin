@@ -18,28 +18,30 @@ describe('Notice', () => {
     expect(wrapper.get('path').attributes('d')).toBe(iconPath('alert'));
   });
 
-  it('tone 换配色：red / blue / teal（teal 是品牌绿 accent）', () => {
+  it('tone 换配色：red / blue / teal（teal 是独立的成功绿，不再借用朱砂 accent）', () => {
     const tones = {
       red: ['bg-red-soft', 'text-red'],
       blue: ['bg-blue-soft', 'text-blue'],
-      teal: ['bg-accent-soft', 'text-accent'],
+      teal: ['bg-teal-soft', 'text-teal'],
     } as const;
     for (const [tone, classes] of Object.entries(tones)) {
       const wrapper = mount(Notice, { props: { tone: tone as keyof typeof tones }, slots: { default: '提示' } });
       expect(wrapper.classes()).toEqual(expect.arrayContaining([...classes]));
       expect(wrapper.classes()).not.toContain('bg-amber-soft');
+      expect(wrapper.classes().some((c) => c.includes('accent'))).toBe(false);
     }
   });
 
-  it('图标默认按 tone 取：blue → info，teal → check-circle；也可以指定', () => {
+  it('图标默认按 tone 取：red → alert-circle，blue → info，teal → check-circle；也可以指定', () => {
+    expect(mount(Notice, { props: { tone: 'red' } }).get('path').attributes('d')).toBe(iconPath('alert-circle'));
     expect(mount(Notice, { props: { tone: 'blue' } }).get('path').attributes('d')).toBe(iconPath('info'));
     expect(mount(Notice, { props: { tone: 'teal' } }).get('path').attributes('d')).toBe(iconPath('check-circle'));
     expect(mount(Notice, { props: { tone: 'red', icon: 'sparkles' } }).get('path').attributes('d')).toBe(iconPath('sparkles'));
   });
 
-  it('size="sm" 收紧成小块：rounded-lg、12px 字、14px 图标', () => {
+  it('size="sm" 收紧成小块：控件圆角（6px）、12px 字、14px 图标', () => {
     const wrapper = mount(Notice, { props: { size: 'sm' }, slots: { default: 'OCR 不可用' } });
-    expect(wrapper.classes()).toEqual(expect.arrayContaining(['rounded-lg', 'px-3', 'py-2', 'text-xs', 'leading-5']));
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(['rounded-(--radius-control)', 'px-3', 'py-2', 'text-xs', 'leading-5']));
     expect(wrapper.classes()).not.toContain('rounded-(--radius-card)');
     expect(wrapper.get('svg').attributes('width')).toBe('14');
   });
@@ -51,7 +53,7 @@ describe('Notice', () => {
     expect(wrapper.classes()).not.toContain('px-4');
     expect(wrapper.get('svg').attributes('width')).toBe('15');
     const small = mount(Notice, { props: { tone: 'teal', variant: 'inline', size: 'sm' } });
-    expect(small.classes()).toEqual(expect.arrayContaining(['text-xs', 'text-accent']));
+    expect(small.classes()).toEqual(expect.arrayContaining(['text-xs', 'text-teal']));
     expect(small.get('svg').attributes('width')).toBe('13');
   });
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
 import Icon from './Icon.vue';
-import { UNDERLINE_INDICATOR, UNDERLINE_LIST, underlineItemClass, type RouteTabItem } from './tabs';
+import { UNDERLINE_INDICATOR, UNDERLINE_LIST, underlineCountClass, underlineItemClass, type RouteTabItem } from './tabs';
 
 /**
  * 路由版 underline 标签（SettingsLayout 用）：每项是 router-link，
@@ -21,7 +21,7 @@ defineProps<{ tabs: RouteTabItem[]; ariaLabel?: string }>();
       >
         <Icon v-if="t.icon" :name="t.icon" :size="15" class="shrink-0" />
         {{ t.label }}
-        <span v-if="t.count !== undefined && t.count !== null" class="text-xs font-normal text-faint tabular-nums">{{ t.count }}</span>
+        <span v-if="t.count !== undefined && t.count !== null" :class="underlineCountClass(t.exact ? isExactActive : isActive)">{{ t.count }}</span>
         <span v-if="t.exact ? isExactActive : isActive" :class="UNDERLINE_INDICATOR" aria-hidden="true" />
       </a>
     </RouterLink>

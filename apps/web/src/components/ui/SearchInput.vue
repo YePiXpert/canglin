@@ -53,14 +53,17 @@ onBeforeUnmount(() => fire.cancel());
 
 <template>
   <div class="relative">
-    <!-- 图标与清除按钮按 h-9 输入框定位（不用 top-1/2）：根元素被 grid / flex 拉高时也不会错位 -->
-    <Icon :name="icon" :size="16" class="absolute left-3 top-2.5 text-faint pointer-events-none" />
+    <!--
+      搜索图标固定在左侧。图标与清除按钮按输入框高度（手机 44 / 桌面 36）定位，不用 top-1/2：
+      根元素被 grid / flex 拉高时也不会错位。外观来自全局 .control。
+    -->
+    <Icon :name="icon" :size="16" class="absolute left-3 top-3.5 sm:top-2.5 text-faint pointer-events-none" />
     <input
       :value="draft"
       type="search"
       :placeholder="placeholder"
       :aria-label="ariaLabel ?? placeholder"
-      class="w-full h-9 pl-9 pr-9 text-base sm:text-sm bg-surface text-text border border-line-strong rounded-(--radius-control) placeholder:text-faint transition-[color,background-color,border-color,box-shadow] duration-150 ease-out hover:border-faint focus:border-accent focus:outline-hidden focus:ring-2 focus:ring-accent/20 [&::-webkit-search-cancel-button]:hidden"
+      class="control w-full h-11 sm:h-9 pl-9 pr-9 text-base sm:text-sm [&::-webkit-search-cancel-button]:hidden"
       @input="onInput"
       @keyup.enter="submit"
       @keyup.escape="clear"
@@ -68,7 +71,7 @@ onBeforeUnmount(() => fire.cancel());
     <button
       v-if="draft"
       type="button"
-      class="absolute right-1.5 top-1.5 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer"
+      class="absolute right-1.5 top-2.5 sm:top-1.5 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer"
       aria-label="清除搜索"
       @click="clear"
     >

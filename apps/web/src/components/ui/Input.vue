@@ -19,12 +19,17 @@ const props = withDefaults(
     autocomplete?: string;
     /** 输入建议来源（datalist），如历史领用人、部门 */
     suggestions?: string[];
-    /** sm = h-8（表格行内、明细行）；md = h-9（默认） */
+    /** sm = h-8（表格行内、明细行）；md = 桌面 h-9（36px）、手机 h-11（44px，默认） */
     size?: 'sm' | 'md';
     /** label 只留给读屏（视觉隐藏，输入框的 aria-label 照旧）：表格里列头已经说明了字段时用 */
     hideLabel?: boolean;
+    /**
+     * cell = 表格式输入的单元格（明细录入）：平时无框无底，悬停显描边，聚焦墨色环，出错仍是红框；
+     * 通常配 size="sm" 与 hideLabel（列头只写一次）
+     */
+    variant?: 'default' | 'cell';
   }>(),
-  { type: 'text', size: 'md' },
+  { type: 'text', size: 'md', variant: 'default' },
 );
 const emit = defineEmits<{
   'update:modelValue': [value: string];
@@ -39,6 +44,7 @@ const isEmpty = computed(() => props.modelValue === null || props.modelValue ===
 
 /*
  * 根元素 <label> 带 relative：hideLabel 的 sr-only 标签以它为包含块，不会跑出滚动容器把文档撑高。
+ * 外观（描边、聚焦环、错误态、禁用）来自全局 .control（main.css）；错误态由 aria-invalid 触发。
  * 手机上字号保持 16px：iOS Safari 对小于 16px 的输入框聚焦时会整页放大。
  * 日期框右侧要给 calendar 图标留位（.input-date），所以不用 px-*。
  */
@@ -46,14 +52,14 @@ const sizeClass = computed(() => {
   const pad = isDate.value ? 'pl-3' : 'px-3';
   return props.size === 'sm'
     ? `h-8 ${isDate.value ? 'pl-2.5' : 'px-2.5'} text-base sm:text-[13px]`
-    : `h-9 ${pad} text-base sm:text-sm`;
+    : `h-11 sm:h-9 ${pad} text-base sm:text-sm`;
 });
 </script>
 
 <template>
   <label class="relative block">
-    <span v-if="label" :class="hideLabel ? 'sr-only' : 'block mb-1.5 text-[13px] leading-5 font-medium text-text'">
-      {{ label }}<span v-if="required" class="text-red ml-0.5">*</span>
+    <span v-if="label" :class="hideLabel ? 'sr-only' : 'block mb-1.5 text-[12.5px] leading-[18px] font-medium text-text'">
+      {{ label }}<span v-if="required" class="text-accent ml-0.5">*</span>
     </span>
     <input
       :value="modelValue ?? ''"
@@ -69,14 +75,8 @@ const sizeClass = computed(() => {
       :aria-label="label"
       :aria-invalid="error ? 'true' : undefined"
       :data-empty="isDate && isEmpty ? '' : undefined"
-      class="w-full bg-surface text-text border rounded-(--radius-control) placeholder:text-faint transition-[color,background-color,border-color,box-shadow] duration-150 ease-out focus:outline-hidden focus:ring-2 disabled:bg-surface-2 disabled:text-muted disabled:cursor-not-allowed"
-      :class="[
-        sizeClass,
-        isDate ? 'input-date' : '',
-        error
-          ? 'border-red focus:border-red focus:ring-red/20'
-          : 'border-line-strong hover:border-faint focus:border-accent focus:ring-accent/20 disabled:hover:border-line-strong',
-      ]"
+      class="control w-full"
+      :class="[sizeClass, isDate ? 'input-date' : '', variant === 'cell' ? 'control-cell' : '']"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       @blur="emit('blur', $event)"
       @keyup.enter="emit('enter')"
@@ -85,7 +85,7 @@ const sizeClass = computed(() => {
       <option v-for="s in suggestions" :key="s" :value="s" />
     </datalist>
     <span v-if="error" class="field-error">
-      <Icon name="alert" :size="12" class="mt-0.5 shrink-0" />{{ error }}
+      <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
     </span>
     <span v-else-if="hint" class="block mt-1.5 text-xs text-faint">{{ hint }}</span>
   </label>
