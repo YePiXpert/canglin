@@ -65,10 +65,9 @@ const task = ctx.task as Ref<ImportTaskView>;
         </svg>
       </div>
     </div>
+    <!-- 预览不可用：与 EmptyState 同款的 44px surface-2 图标块 + 一句话 + 重试 -->
     <div v-else class="flex flex-col items-center gap-3 px-6 py-14 text-center">
-      <span
-        class="flex size-11 items-center justify-center rounded-xl border border-line bg-surface-2 text-faint"
-      >
+      <span class="flex size-11 items-center justify-center rounded-xl bg-surface-2 text-muted" aria-hidden="true">
         <Icon name="image" :size="20" />
       </span>
       <p class="max-w-xs text-[13px] text-muted">页面预览暂不可用，可打开原件核对。</p>

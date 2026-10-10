@@ -15,15 +15,15 @@ const task = ctx.task as Ref<ImportTaskView>;
 </script>
 
 <template>
-  <!-- 状态条：文件名 + 本地 / AI 状态 + 草稿保存状态，右侧是处理动作 -->
+  <!-- 状态条（一张 sheet）：文件名 + 本地 / AI 状态 + 草稿保存状态，右侧是处理动作；进行中转蓝圈，保存成功是绿色 -->
   <section class="card flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
     <div class="flex min-w-0 flex-1 basis-80 items-center gap-3.5">
       <span
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-muted"
+        class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-muted"
       >
         <span
           v-if="active"
-          class="size-4 animate-spin rounded-full border-2 border-blue/25 border-t-blue"
+          class="size-4 animate-spin rounded-full border-2 border-blue-soft border-t-blue"
           aria-hidden="true"
         />
         <Icon v-else name="file" :size="18" />
@@ -54,7 +54,7 @@ const task = ctx.task as Ref<ImportTaskView>;
             }}/{{ pageCount }} 页识别完成 · {{ task.aiResult.length }}/{{ pageCount }} 页 AI
             完成</span
           >
-          <span class="inline-flex items-center gap-1" :class="saved ? 'text-accent' : ''"
+          <span class="inline-flex items-center gap-1" :class="saved ? 'text-teal' : ''"
             ><Icon :name="saved ? 'check' : 'clock'" :size="12" class="shrink-0" />{{
               saved ? '草稿已保存' : '保存中…'
             }}</span

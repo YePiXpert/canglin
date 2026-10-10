@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
@@ -8,6 +8,7 @@ import Panel from '@/components/ui/Panel.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import { buttonClass } from '@/components/ui/button';
+import type { TabItem } from '@/components/ui/tabs';
 import { importsApi, type ImportTaskSummary, type ImportTaskView } from '@/api';
 import { apiError } from '@/api/client';
 import { formatDateTime } from '@/utils/datetime';
@@ -53,6 +54,48 @@ function statusLabel(task: ImportTaskSummary): string {
       : running(task.status) ? '识别中'
         : task.status === 'FAILED' ? '识别失败，待人工核对' : '待核对入账';
 }
+/** 与 statusLabel 同一套判断，只决定外观与动作：识别中、待核对、识别失败、已入账 */
+type Kind = 'running' | 'review' | 'failed' | 'confirmed';
+function kind(task: ImportTaskSummary): Kind {
+  const running = (s: string) => s === 'PENDING' || s === 'RUNNING';
+  return task.confirmed ? 'confirmed'
+    : running(task.aiStatus) || running(task.status) ? 'running'
+      : task.status === 'FAILED' ? 'failed' : 'review';
+}
+/** 行首图标与状态字的颜色：识别中 = 蓝色转圈（模板里单独画，不用图标）；待核对 = 蓝字（轮到你处理）；识别失败 = 琥珀；已入账 = 绿 */
+const KINDS: Record<Kind, { icon: string; iconClass: string; text: string }> = {
+  running: { icon: '', iconClass: '', text: '' },
+  review: { icon: 'file', iconClass: 'text-faint', text: 'text-blue' },
+  failed: { icon: 'alert', iconClass: 'text-amber', text: 'text-amber' },
+  confirmed: { icon: 'check-circle', iconClass: 'text-teal', text: 'text-teal' },
+};
+/** 待核对、识别失败要你接着处理（描边按钮「继续处理」）；识别中、已入账只是查看（ghost「查看」） */
+function needsYou(task: ImportTaskSummary): boolean {
+  const k = kind(task);
+  return k === 'review' || k === 'failed';
+}
+/** 列表里的时间尽量短：今天只写时刻，昨天写「昨天 HH:mm」，今年省略年份；完整时间放在 title 里 */
+function shortTime(input: string): string {
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return input;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const now = new Date();
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(now) - day(d)) / 86_400_000);
+  if (days === 0) return time;
+  if (days === 1) return `昨天 ${time}`;
+  if (d.getFullYear() === now.getFullYear()) return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${time}`;
+  return formatDateTime(d);
+}
+/**
+ * 分段筛选。「未完成」后的朱砂数字是等你处理的任务数：只有正在看「未完成」时才知道准确的总数，
+ * 切到「已入账」时不显示，免得留着旧数字。计数会并入按钮的可访问名称（「未完成 3」）；e2e 只按名称点「已入账」。
+ */
+const tabs = computed<TabItem<'pending' | 'confirmed'>[]>(() => [
+  { value: 'pending', label: '未完成', count: tab.value === 'pending' && total.value ? total.value : undefined },
+  { value: 'confirmed', label: '已入账' },
+]);
 watch(() => props.currentTask, (task, before) => {
   if (!task) return;
   const row = rows.value.find((r) => r.id === task.id);
@@ -65,12 +108,17 @@ defineExpose({ refresh });
 </script>
 
 <template>
-  <Panel title="未完成的导入" description="已上传但尚未确认入账的单据；未确认的原件保留 30 天" flush>
+  <!--
+    导入任务：一层面板 + 行式列表（导入页右栏；有任务时跟着上传区在页尾）。标题沿用「未完成的导入」——e2e 按这个标题找面板。
+    每行：状态图标（识别中是蓝色转圈）+ 文件名 +「时间 · 状态 · 原件缺失」，右侧「继续处理」或「查看」；
+    当前任务行 aria-current="true"、primary-soft 底并带「当前」Badge。每行只有文件名带 title、只有一个链接（e2e 按这两样计数）。
+  -->
+  <Panel title="未完成的导入" flush>
     <template #actions>
-      <Tabs :model-value="tab" variant="segmented" aria-label="导入任务筛选" :tabs="[{ value: 'pending', label: '未完成' }, { value: 'confirmed', label: '已入账' }]" @change="switchTab" />
+      <Tabs :model-value="tab" variant="segmented" aria-label="导入任务筛选" :tabs="tabs" @change="switchTab" />
     </template>
-    <div v-if="loading && !rows.length" class="space-y-2.5 px-5 py-4">
-      <Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-4/5" />
+    <div v-if="loading && !rows.length" class="space-y-3 px-5 py-4">
+      <Skeleton class="h-10 w-full" /><Skeleton class="h-10 w-4/5" />
     </div>
     <Notice v-else-if="error && !rows.length" tone="red" variant="inline" class="px-5 py-4">
       列表加载失败：{{ error }}
@@ -78,16 +126,20 @@ defineExpose({ refresh });
     </Notice>
     <p v-else-if="!rows.length" class="px-5 py-4 text-[13px] text-muted">{{ tab === 'pending' ? '没有未完成的导入' : '没有已入账的导入' }}</p>
     <ul v-else class="divide-y divide-line">
-      <li v-for="task in rows" :key="task.id" class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition-colors duration-150" :class="task.id === props.currentTaskId ? 'bg-accent-soft/40' : ''" :aria-current="task.id === props.currentTaskId ? 'true' : undefined">
-        <div class="min-w-0 flex-1 basis-40">
+      <li v-for="task in rows" :key="task.id" class="flex items-center gap-3.5 px-5 py-3 transition-colors duration-150" :class="task.id === props.currentTaskId ? 'bg-primary-soft' : ''" :aria-current="task.id === props.currentTaskId ? 'true' : undefined">
+        <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+          <span v-if="kind(task) === 'running'" class="size-3.5 animate-spin rounded-full border-2 border-blue-soft border-t-blue" />
+          <Icon v-else :name="KINDS[kind(task)].icon" :size="16" :class="KINDS[kind(task)].iconClass" />
+        </span>
+        <div class="min-w-0 flex-1">
           <p class="flex min-w-0 items-center gap-2">
-            <span class="truncate text-sm font-medium text-ink" :title="task.filename">{{ task.filename }}</span>
+            <span class="truncate text-[13px] font-medium text-ink" :title="task.filename">{{ task.filename }}</span>
             <Badge v-if="task.id === props.currentTaskId" tone="gray" class="shrink-0">当前</Badge>
           </p>
-          <p class="mt-0.5 text-meta"><span class="num whitespace-nowrap">{{ formatDateTime(task.createdAt) }}</span> · <span>{{ statusLabel(task) }}</span><template v-if="!task.originalAvailable"> · <span class="whitespace-nowrap">原件缺失</span></template></p>
+          <p class="mt-0.5 text-meta"><time class="num whitespace-nowrap" :datetime="task.createdAt" :title="formatDateTime(task.createdAt)">{{ shortTime(task.createdAt) }}</time> · <span :class="KINDS[kind(task)].text">{{ statusLabel(task) }}</span><template v-if="!task.originalAvailable"> · <span class="whitespace-nowrap text-amber">原件缺失</span></template></p>
         </div>
         <router-link v-slot="{ href, navigate }" :to="{ path: '/import', query: { task: task.id } }" custom>
-          <a :href="href" :class="buttonClass({ variant: 'secondary', size: 'sm' })" @click="navigate($event); task.id === props.currentTaskId && emit('current')">{{ task.confirmed ? '查看' : '继续处理' }}</a>
+          <a :href="href" :class="buttonClass({ variant: needsYou(task) ? 'secondary' : 'ghost', size: 'sm' })" @click="navigate($event); task.id === props.currentTaskId && emit('current')">{{ needsYou(task) ? '继续处理' : '查看' }}</a>
         </router-link>
       </li>
     </ul>
@@ -95,7 +147,8 @@ defineExpose({ refresh });
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p class="text-meta num">{{ total > rows.length ? `已显示 ${rows.length} 条` : `共 ${total} 条` }}</p>
         <Button v-if="total > rows.length" variant="ghost" size="sm" class="-mr-2" :loading="loading" @click="refresh(true)">显示更多（共 {{ total }} 条）</Button>
-        <Notice v-if="error" tone="red" variant="inline" size="sm" role="alert">{{ error }}</Notice>
+        <p v-else class="text-meta">已入账的任务只读，可回到对应申请</p>
+        <Notice v-if="error" tone="red" variant="inline" size="sm" role="alert" class="basis-full">{{ error }}</Notice>
       </div>
     </template>
   </Panel>

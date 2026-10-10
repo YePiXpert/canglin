@@ -161,14 +161,14 @@ export function useImportTask() {
   const stateDot: Partial<Record<string, string>> = {
     PENDING: 'bg-blue',
     RUNNING: 'bg-blue',
-    DONE: 'bg-accent',
+    DONE: 'bg-teal',
     FAILED: 'bg-amber',
   };
   /**
    * 明细的数量 / 单位：Input 用 hideLabel（可访问名称仍是 label），
    * 面板窄、明细堆叠时列头不在，另显示这行字（aria-hidden，与 Input 的 label 同款样式）；表格形态（@xl）隐藏。
    */
-  const stackedLabel = 'mb-1.5 block text-[13px] leading-5 font-medium text-text @xl:hidden';
+  const stackedLabel = 'mb-1.5 block text-[12.5px] leading-[18px] font-medium text-text @xl:hidden';
   function line(item?: ImportDraft['items'][number]): Line {
     return {
       lineId: item?.lineId ?? crypto.randomUUID(),

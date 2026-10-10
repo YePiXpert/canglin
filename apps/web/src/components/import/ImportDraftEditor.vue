@@ -80,7 +80,7 @@ const task = ctx.task as Ref<ImportTaskView>;
           class="transition-colors duration-150 @max-xl:block"
           :class="[
             i > 0 ? 'border-t border-line' : '',
-            selected === l.lineId ? 'bg-accent-soft/40' : '',
+            selected === l.lineId ? 'bg-primary-soft' : '',
           ]"
           @focusin="focusLine(l)"
         >
@@ -131,7 +131,7 @@ const task = ctx.task as Ref<ImportTaskView>;
                   >
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="danger-ghost"
                   size="sm"
                   :disabled="task.confirmed"
                   @click="lines.splice(i, 1)"
@@ -142,9 +142,9 @@ const task = ctx.task as Ref<ImportTaskView>;
                 AI 建议的品名、规格、单位或数量与首次识别结果不同，请展开建议核对。
               </Notice>
               <Disclosure
-                class="mt-2 rounded-lg bg-surface-2"
+                class="mt-2 rounded-(--radius-control) bg-surface-2"
                 summary="识别依据与 AI 建议"
-                summary-class="rounded-lg px-3 py-2 text-xs font-medium text-muted hover:text-ink"
+                summary-class="rounded-(--radius-control) px-3 py-2 text-xs font-medium text-muted hover:text-ink"
               >
                 <div class="space-y-3 px-3 pb-3 text-xs leading-5 text-muted">
                   <p class="break-all">原始文本：{{ l.source?.rawText || '无可信文本来源' }}</p>
@@ -169,7 +169,7 @@ const task = ctx.task as Ref<ImportTaskView>;
                     >
                       建议待确认：可采用建议，或核对后保留当前编辑值。
                     </p>
-                    <p v-else class="text-accent">本次建议已核对</p>
+                    <p v-else class="text-teal">本次建议已核对</p>
                     <div class="flex flex-wrap gap-2">
                       <Button size="sm" variant="secondary" @click="apply(l)"
                         >已核对，采用建议</Button

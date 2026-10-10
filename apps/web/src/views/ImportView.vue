@@ -8,6 +8,7 @@ import ImportHistoryPanel from '@/components/import/ImportHistoryPanel.vue';
 import ImportOriginalPreview from '@/components/import/ImportOriginalPreview.vue';
 import ImportRecognitionNotices from '@/components/import/ImportRecognitionNotices.vue';
 import ImportRecognitionSteps from '@/components/import/ImportRecognitionSteps.vue';
+import ImportServiceStatus from '@/components/import/ImportServiceStatus.vue';
 import ImportStatusBar from '@/components/import/ImportStatusBar.vue';
 import ImportTaskList from '@/components/import/ImportTaskList.vue';
 import ImportUploadSection from '@/components/import/ImportUploadSection.vue';
@@ -32,7 +33,12 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
 
 <template>
   <div ref="rootEl" class="space-y-6">
-    <PageHeader title="导入 OA 单据" description="保存原件 · AI 原件识别 / OCR 备用 · 人工确认" />
+    <PageHeader
+      title="导入 OA 单据"
+      description="保存原件 → AI 原件识别（本地 OCR 备用）→ 人工核对后入账。识别完成不等于入账，最终由你确认。"
+    >
+      <ImportServiceStatus />
+    </PageHeader>
 
     <ImportRecognitionSteps :task="task" :task-id="taskId" :missing="missing" :finished="!!finished" />
 
@@ -48,16 +54,18 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
       </Notice>
     </template>
 
-    <!-- 完成 -->
-    <section
-      v-if="finished"
-      class="flex flex-col items-start gap-4 rounded-(--radius-card) border border-accent/20 bg-accent-soft/60 p-6 sm:flex-row sm:items-center"
-    >
-      <Icon name="check-circle" :size="24" class="shrink-0 text-accent" />
-      <p class="min-w-0 flex-1 text-sm leading-6 text-ink">
-        已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过 {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。
-      </p>
-      <Button variant="primary" @click="router.push(`/requests/${finished.requestId}`)">
+    <!-- 完成：一张 sheet，绿色对勾 + 结果 + 主动作「继续办理申请」 -->
+    <section v-if="finished" class="card flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center">
+      <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-teal-soft text-teal" aria-hidden="true">
+        <Icon name="check" :size="20" />
+      </span>
+      <div class="min-w-0 flex-1">
+        <p class="text-[15px] leading-6 font-semibold text-ink">已确认导入</p>
+        <p class="text-[13px] leading-5 text-muted">
+          已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过 {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。
+        </p>
+      </div>
+      <Button variant="primary" class="max-sm:h-11 max-sm:w-full" @click="router.push(`/requests/${finished.requestId}`)">
         继续办理申请<Icon name="arrow-right" :size="16" />
       </Button>
     </section>
@@ -115,7 +123,7 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
           >保存草稿</Button
         >
         <Button
-          variant="accent"
+          variant="primary"
           class="max-sm:flex-1"
           :disabled="!!active || task.confirmed || !loaded"
           :loading="busy"
@@ -128,12 +136,7 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
     </template>
 
     <!-- 地址里的任务不存在：说明原因，不自动新建任务（下面的上传区与列表照常可用） -->
-    <div v-else-if="missing" role="alert" class="card flex items-start gap-3 px-5 py-4">
-      <Icon name="alert" :size="18" class="mt-0.5 shrink-0 text-amber" />
-      <p class="min-w-0 text-sm leading-6 text-ink">
-        任务不存在或已被清理（未确认的原件保留 30 天），请重新上传原件。
-      </p>
-    </div>
+    <Notice v-else-if="missing" role="alert">任务不存在或已被清理（未确认的原件保留 30 天），请重新上传原件。</Notice>
 
     <!-- 已有任务编号、任务还没取回：骨架占位 -->
     <div v-else-if="taskId" class="space-y-4" aria-hidden="true">
@@ -145,11 +148,13 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
     </div>
 
     <!--
-      上传区：未上传时紧跟在步骤条下面；有任务后留在页尾，核对完可以直接导入下一份。
-      只有一个实例，里面始终只有一个 input[type=file]。
+      上传区（左）与导入任务（右 400px）：上传态紧跟在步骤条下面；有任务后两栏一起留在页尾，核对完可以直接导入下一份。
+      上传区只有一个实例，里面始终只有一个 input[type=file]。外层用 div 而不是 section：
+      e2e 按「含标题『未完成的导入』的 section」找任务面板，外面再套 section 会把上传区也圈进去。
     -->
-    <ImportUploadSection />
-
-    <ImportTaskList ref="taskList" :current-task-id="taskId" :current-task="task" @current="scrollToTask" />
+    <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <ImportUploadSection />
+      <ImportTaskList ref="taskList" :current-task-id="taskId" :current-task="task" @current="scrollToTask" />
+    </div>
   </div>
 </template>

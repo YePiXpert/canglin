@@ -13,10 +13,13 @@ const task = ctx.task as Ref<ImportTaskView>;
 </script>
 
 <template>
-  <!-- 识别警告 -->
+  <!--
+    识别警告：与 Notice（琥珀柔底）同款外观，但每条带自己的图标（本地 = 提醒、AI = sparkles），
+    所以手写成一个列表；多条警告放在同一块里，不堆一串 Notice。
+  -->
   <ul
     v-if="task.result?.warnings.length || task.aiResult.some((p) => p.warnings.length)"
-    class="space-y-1 rounded-lg bg-amber-soft px-3 py-2 text-[13px] leading-5 text-amber"
+    class="space-y-1.5 rounded-(--radius-card) bg-amber-soft px-4 py-3 text-[13px] leading-5 text-amber"
   >
     <li v-for="w in task.result?.warnings ?? []" :key="w" class="flex items-start gap-2">
       <Icon name="alert" :size="14" class="mt-[3px] shrink-0" /><span class="min-w-0">{{
@@ -39,7 +42,7 @@ const task = ctx.task as Ref<ImportTaskView>;
   <!-- 页级核对：全部勾选后从琥珀提醒退成普通面板 -->
   <div
     v-if="issuePages.length"
-    class="flex flex-col gap-2.5 rounded-lg border px-4 py-3 transition-colors duration-150"
+    class="flex flex-col gap-2.5 rounded-(--radius-card) border px-4 py-3 transition-colors duration-150"
     :class="
       issuePages.every((p) => reviewedPages.some((r) => r.page === p.page))
         ? 'border-line bg-surface'
