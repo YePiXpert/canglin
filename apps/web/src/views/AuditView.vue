@@ -16,7 +16,7 @@ import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
 import { useUrlState } from '@/composables/useUrlState';
 import { createRequestGuard } from '@/utils/request';
-import { ITEM_FIELD_LABELS } from '@procure-lite/shared';
+import { ITEM_FIELD_LABELS } from '@canglin/shared';
 
 const toast = useToastStore();
 const guard = createRequestGuard();

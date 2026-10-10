@@ -1,4 +1,4 @@
-ARG OCR_IMAGE=procure-lite-ocr:runtime-test
+ARG OCR_IMAGE=canglin-ocr:runtime-test
 FROM ${OCR_IMAGE}
 RUN pip install --no-cache-dir pytest==8.4.2 pytest-anyio==0.0.0 httpx==0.28.1
 COPY apps/ocr/tests ./tests

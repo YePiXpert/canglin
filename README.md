@@ -1,8 +1,8 @@
-# Procure Lite
+# 仓廪
 
-供一位行政采购管理员使用的采购与领用系统：OA 已审批单导入或人工录入 → 分次采购 → 部分到货 → 按量直发或明确入库 → 库存领用。支持供应商退款/换货、员工归还、撤销纠错、付款与报销状态、原件/发票/签收附件。
+供一位行政采购管理员使用的采购与领用系统：OA 已审批单导入或人工录入 → 分次采购 → 部分到货 → 按量直发或明确入库 → 库存领用。支持供应商退款/换货、员工归还、撤销纠错、付款与报销状态、原件/发票/签收附件。原名 Procure Lite，2026-10-10 改名并发布 v2.0.0。
 
-确认的产品范围与验收示例见 [重构需求](docs/rebuild-requirements.md)。部署、导入与识别接口、备份及回退见 [升级说明](docs/upgrade-2026-09.md)；前端维护见 [设计规范](apps/web/DESIGN.md)。本轮（2026-10-10）本地验证为服务端 142 项、前端 109 项、浏览器 15 条、部署脚本 16 项与评测脚本 2 项通过，迁移在空库全链执行且与 Prisma 模型无差异，构建、类型检查与 lint 通过；OCR 轻量套件（上一轮 50 项）本轮未改动 OCR 代码、未重跑。真实模型和目标部署环境验收另行记录。历史试用与验收记录仍保留各自的版本标识。
+确认的产品范围与验收示例见 [重构需求](docs/rebuild-requirements.md)。部署、导入与识别接口、备份及回退见 [升级说明](docs/upgrade-2026-09.md)；前端维护见 [设计规范](apps/web/DESIGN.md)。本轮（2026-10-10，v2.0.0）本地验证为服务端 155 项、前端 114 项、浏览器 15 条、部署脚本 23 项与评测脚本 2 项通过，类型检查、lint、前后端构建通过；server 与 web 镜像在本机构建并以非 root 用户启动、健康检查通过；数据库迁移本轮未改动。OCR 本轮只改了服务标题，轻量套件未重跑。真实模型和目标部署环境验收另行记录。历史试用与验收记录仍保留各自的版本标识。
 
 ## 适用范围
 
@@ -54,7 +54,7 @@
 
 ```bash
 corepack enable && pnpm install
-pnpm --filter @procure-lite/shared build
+pnpm --filter @canglin/shared build
 
 # 终端 1：OCR 服务（首次需 pip install -e "apps/ocr[paddle]"，或跳过仅做轻依赖测试）
 cd apps/ocr && python -m venv .venv && . .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -73,11 +73,11 @@ pnpm dev                          # API :3000 + Vite :5173（自动代理 /api�
 ## 测试
 
 ```bash
-pnpm --filter @procure-lite/shared build            # 前后端测试都依赖 shared 的构建产物
+pnpm --filter @canglin/shared build            # 前后端测试都依赖 shared 的构建产物
 pnpm test                                           # 前端单测 + 服务端测试（vitest）
-pnpm --filter @procure-lite/server build            # 浏览器测试的 API（apps/server/test/browser-server.cjs）加载 dist
-pnpm --filter @procure-lite/web exec playwright install --with-deps chromium   # 首次运行浏览器测试前
-pnpm --filter @procure-lite/web test:e2e            # 浏览器流程：临时 SQLite + 真实 API，OCR/GPT 为合成替身
+pnpm --filter @canglin/server build            # 浏览器测试的 API（apps/server/test/browser-server.cjs）加载 dist
+pnpm --filter @canglin/web exec playwright install --with-deps chromium   # 首次运行浏览器测试前
+pnpm --filter @canglin/web test:e2e            # 浏览器流程：临时 SQLite + 真实 API，OCR/GPT 为合成替身
 python3 -m unittest discover -s deploy/tests -v     # 部署脚本（伪 git/docker，不接触真实服务）
 python3 -m unittest discover -s scripts/tests -v    # 导入评测脚本
 (cd apps/ocr && pytest)                             # 解析器单测 + API 集成（无需 paddle）
@@ -85,32 +85,34 @@ python3 -m unittest discover -s scripts/tests -v    # 导入评测脚本
 
 ## Docker 部署（VPS）
 
-每次 push 到 `main`，GitHub Actions 会自动跑完全部测试后把三个镜像构建并推送到 GHCR（`ghcr.io/yepixpert/procure-lite-{web,server,ocr}`），**VPS 上不需要编译**，直接拉镜像。
+每次 push 到 `main`，GitHub Actions 会自动跑完全部测试后把三个镜像构建并推送到 GHCR（`ghcr.io/yepixpert/canglin-{web,server,ocr}`），**VPS 上不需要编译**，直接拉镜像。
 
 > GHCR 包默认私有。首次发布后到 GitHub → 你的 Packages → 各镜像 → Settings → Change visibility 改为 **Public**（公开仓库无敏感信息）；或保持私有并在 VPS 上 `docker login ghcr.io`（PAT 勾选 `read:packages`）。
 
 **首次部署**（服务器上装好 git 与 docker，并以 root 或具有目标目录写权限的用户运行）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/deploy.sh | bash
 # 自定义端口：同一命令末尾改为 bash -s -- 9000
-# 自定义目录：同一命令末尾改为 bash -s -- 8080 /srv/procure-lite
+# 自定义目录：同一命令末尾改为 bash -s -- 8080 /srv/canglin
 ```
 
-默认部署目录为 `/opt/procure-lite`，不存在时自动克隆；已有仓库和 `.env` 会复用。源码开发副本可放在 `/workspace/procure-lite`，不会被脚本自动选为部署目标。目录优先级为显式参数 → `PROCURE_REPO` → `/opt/procure-lite`。
+默认部署目录为 `/opt/canglin`，不存在时自动克隆；已有仓库和 `.env` 会复用。源码开发副本可放在 `/workspace/canglin`，不会被脚本自动选为部署目标。目录优先级为显式参数 → `CANGLIN_REPO` → `/opt/canglin`。
 
 脚本自动完成：生成 `.env`（随机 OCR_API_KEY）→ 从 GHCR 拉镜像并启动（拉取失败自动回退本地构建）→ API 与 OCR 就绪检查。首次访问 `http://<服务器IP>:8080` 设置管理员密码。
 
-**版本升级**（一行命令，任意目录执行；默认操作 `/opt/procure-lite`）：
+**版本升级**（一行命令，任意目录执行；默认操作 `/opt/canglin`）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/upgrade.sh | bash
+curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/upgrade.sh | bash
 ```
 
-旧部署或自定义部署在其他位置时，必须显式指定目录（`PROCURE_REPO` 环境变量也行）。即使从开发仓库运行脚本，默认目标仍是 `/opt/procure-lite`：
+改名前部署在 `/opt/procure-lite` 的旧实例也用这条命令：脚本会自动迁移目录、Compose 项目名和数据卷（旧卷保留），可重复执行，见 [改名迁移](docs/upgrade-2026-09.md#2026-10-10-改名为仓廪并发布-v200)。
+
+自定义部署在其他位置时，必须显式指定目录（`CANGLIN_REPO` 环境变量也行）。即使从开发仓库运行脚本，默认目标仍是 `/opt/canglin`：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YePiXpert/procure-lite/main/deploy/upgrade.sh | bash -s -- /path/to/procure-lite
+curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/upgrade.sh | bash -s -- /path/to/canglin
 bash deploy/upgrade.sh --build     # 不等 CI，直接本地构建全部三个镜像
 bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像，不拉取代码
 ```
@@ -119,12 +121,12 @@ bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像�
 
 ## 数据与安全提醒
 
-- **数据在哪**：Docker 部署的全部状态在 `procure-state` 卷里（本地开发默认是 API 运行目录下的 `state/`，即 `apps/server/state/`，可用 `DATA_DIR` 指定）：`procure.db`（SQLite）、`uploads/`（单据原件与附件）、`backups/`（系统设置里生成的备份）、`session-secret`（会话签名密钥）。
+- **数据在哪**：Docker 部署的全部状态在 `canglin_state` 卷里（本地开发默认是 API 运行目录下的 `state/`，即 `apps/server/state/`，可用 `DATA_DIR` 指定）：`procure.db`（SQLite）、`uploads/`（单据原件与附件）、`backups/`（系统设置里生成的备份）、`session-secret`（会话签名密钥）。
 - **什么会离开本机**：启用 AI 后，问答的问题、近几轮对话与只读查询结果，智能搜索的搜索词和库内品名词表，以及开启自动识别的单据每页原件图像与本页解析结果，会发送给所配置的服务商（服务商侧的留存说明见 [升级说明](docs/upgrade-2026-09.md#配置第三方-responses)）。不启用 AI 时不发送。
 - **备份**：系统设置里的备份包含数据库与 `uploads/`（附清单和逐文件哈希），不含 `.env`、`session-secret` 和外部 secret；备份就放在同一个数据卷里，请下载后异地保存。自动备份默认关闭。
 - **恢复**会覆盖当前数据库与附件，恢复前先创建一份备份；恢复后现有登录会话失效。升级回退点见上文「版本升级」。
 - 未确认入账的导入原件保留 30 天后自动清理；已确认的原件作为申请附件长期保留。
-- `.env`、`secrets/`、`docker-compose.override.yml`、`state/`、`pre-upgrade-backups/` 已在 `.gitignore` 中；密钥文件放在仓库之外（如 `/etc/procure-lite/`），不要提交到仓库，也不要放进 `uploads/`。
+- `.env`、`secrets/`、`docker-compose.override.yml`、`state/`、`pre-upgrade-backups/` 已在 `.gitignore` 中；密钥文件放在仓库之外（如 `/etc/canglin/`），不要提交到仓库，也不要放进 `uploads/`。
 
 ## 安全模型
 
@@ -138,9 +140,9 @@ bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像�
 - 改动前先对照上面的「适用范围与不做什么」；超出范围的需求先讨论，不顺手加。
 - 如无必要勿增实体：优先复用现有页面、数据表、接口和 `apps/web/src/components/ui` 组件；没有真实需要不加表、字段、页面或依赖。
 - 这些规则不能削弱：已记账业务通过带原因的撤销回冲纠正，不能删除或覆盖数量与金额；新业务写操作必须带 `Idempotency-Key`；草稿按版本号保存，过期版本返回 409；有未完成页面时须逐页人工核对才能确认；确认时关联原件，原件缺失不能确认；接口和日志不输出明文密钥。
-- 提交前至少运行 `pnpm --filter @procure-lite/shared build && pnpm typecheck && pnpm lint && pnpm test`；改到导入、工作台、库存流程时再跑浏览器测试（见「测试」）。
+- 提交前至少运行 `pnpm --filter @canglin/shared build && pnpm typecheck && pnpm lint && pnpm test`；改到导入、工作台、库存流程时再跑浏览器测试（见「测试」）。
 - 前端遵循 [apps/web/DESIGN.md](apps/web/DESIGN.md)；导入、OCR、AI、备份与回退的行为和接口以 [升级说明](docs/upgrade-2026-09.md) 为准，行为变了同步更新这两份文档。
 
-## 隔离试用（历史记录）
+## 隔离试用
 
-2026-09-27 为候选版本 `b10744b` 准备过一套隔离试用环境（独立数据卷、本机端口、固定镜像摘要）。当前主分支已超过该版本，之后的改动（如导入草稿找回）不在试用镜像里；启动、检查与清理方式见 [隔离试用说明](docs/trial-b10744b.md)。
+当前隔离试用固定为候选版本 `aa981bc`，三个镜像使用 CI 发布的不可变摘要，项目、配置目录及数据卷独立于正式环境和旧试用版本。启动、检查与清理方式见 [隔离试用说明](docs/trial-aa981bc.md)；2026-09-27 的 `b10744b` 验证证据保留在 [历史试用记录](docs/trial-b10744b.md)。

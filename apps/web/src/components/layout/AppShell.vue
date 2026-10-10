@@ -101,7 +101,7 @@ function navItemClass(active = false): string {
           <Icon name="inventory" :size="14" />
         </span>
         <div class="min-w-0 leading-tight">
-          <p class="text-sm font-semibold tracking-tight text-ink">Procure Lite</p>
+          <p class="text-sm font-semibold tracking-tight text-ink">仓廪</p>
           <p class="text-meta">OA 申请 · 采购与领用</p>
         </div>
       </div>
@@ -165,7 +165,7 @@ function navItemClass(active = false): string {
         <span class="flex items-center justify-center size-7 shrink-0 rounded-md bg-ink text-surface">
           <Icon name="inventory" :size="15" />
         </span>
-        <p class="min-w-0 truncate text-[15px] font-semibold tracking-tight text-ink">Procure Lite</p>
+        <p class="min-w-0 truncate text-[15px] font-semibold tracking-tight text-ink">仓廪</p>
         <div class="ml-auto flex items-center gap-1.5">
           <button
             type="button"

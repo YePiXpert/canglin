@@ -12,7 +12,7 @@ import type {
   ParseResult,
   ImportDraft,
   SupplierUpsertInput,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 /* ------------------------------- 通用分页结构 ------------------------------ */
 export interface Paged {
@@ -206,7 +206,7 @@ export const aiApi = {
   capabilities: () =>
     http
       .post<
-        NonNullable<import('@procure-lite/shared').AiConfigView['capabilities']>
+        NonNullable<import('@canglin/shared').AiConfigView['capabilities']>
       >('/ai/capabilities')
       .then((r) => r.data),
   config: () => http.get<AiConfigView>('/ai/config').then((r) => r.data),

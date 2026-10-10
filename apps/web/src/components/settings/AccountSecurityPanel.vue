@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
 import Dialog from '@/components/ui/Dialog.vue';
@@ -59,6 +59,11 @@ async function changePassword(): Promise<void> {
     changing.value = false;
   }
 }
+
+/** 「重置恢复码」弹窗一关（取消、×、遮罩、Esc 或生成成功）就清掉输入的密码 */
+watch(recoveryDialogOpen, (open) => {
+  if (!open) recoveryPassword.value = '';
+});
 
 async function regenerateRecovery(): Promise<void> {
   if (!recoveryPassword.value) {
@@ -165,6 +170,7 @@ async function logout(): Promise<void> {
     title="重置恢复码"
     width="420px"
     :mobile-fullscreen="false"
+    :dirty="recoveryPassword.length > 0 && !changing"
     @update:open="recoveryDialogOpen = $event"
   >
     <p class="text-sm text-muted mb-4">输入当前密码以生成新的恢复码，旧恢复码将失效。</p>
@@ -176,15 +182,8 @@ async function logout(): Promise<void> {
       required
       @enter="regenerateRecovery"
     />
-    <template #footer>
-      <Button
-        variant="ghost"
-        @click="
-          recoveryDialogOpen = false;
-          recoveryPassword = '';
-        "
-        >取消</Button
-      >
+    <template #footer="{ close }">
+      <Button variant="ghost" @click="close">取消</Button>
       <Button variant="primary" :loading="changing" @click="regenerateRecovery">生成</Button>
     </template>
   </Dialog>

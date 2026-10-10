@@ -3,7 +3,7 @@ import { NavigationFailureType, isNavigationFailure, onBeforeRouteLeave, onBefor
 import { isAxiosError } from 'axios';
 import { importsApi, type ImportTaskView, type AiImportPage } from '@/api';
 import { apiError } from '@/api/client';
-import { aiSuggestionKey, workflowImportConfirmSchema, type ImportDraft, type ParseResult } from '@procure-lite/shared';
+import { aiSuggestionKey, workflowImportConfirmSchema, type ImportDraft, type ParseResult } from '@canglin/shared';
 import type ImportTaskList from './ImportTaskList.vue';
 
 /** 导入只核对原件上的品名、规格、数量和单位；成交单价与采购链接在登记采购时填写 */

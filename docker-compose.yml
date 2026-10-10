@@ -1,21 +1,23 @@
-name: procure-lite
+name: canglin
 
 # 镜像优先从 GHCR 拉取（CI 自动构建推送）；
 # 若无法访问 GHCR 或需要本地改动，docker compose up --build 走本地构建
 services:
   web:
-    image: ghcr.io/yepixpert/procure-lite-web:${RELEASE_TAG:-latest}
+    image: ghcr.io/yepixpert/canglin-web:${RELEASE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/Dockerfile.web
     ports:
       - "${WEB_PORT:-8080}:80"
+    # server 镜像自带健康检查（/api/auth/status）；就绪后再启动 web
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     restart: unless-stopped
 
   server:
-    image: ghcr.io/yepixpert/procure-lite-server:${RELEASE_TAG:-latest}
+    image: ghcr.io/yepixpert/canglin-server:${RELEASE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/Dockerfile.server
@@ -31,13 +33,13 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
     volumes:
-      - procure-state:/app/state
+      - state:/app/state
     depends_on:
       - ocr
     restart: unless-stopped
 
   ocr:
-    image: ghcr.io/yepixpert/procure-lite-ocr:${RELEASE_TAG:-latest}
+    image: ghcr.io/yepixpert/canglin-ocr:${RELEASE_TAG:-latest}
     build:
       context: .
       dockerfile: deploy/Dockerfile.ocr
@@ -58,4 +60,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  procure-state:
+  # 完整卷名 canglin_state；旧实例的 procure-lite_procure-state 由 upgrade.sh 复制迁移
+  state:

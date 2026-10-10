@@ -8,7 +8,7 @@ import {
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput,
   type WorkflowProductCreateInput,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { operation } from '../common/operation';
 import { WorkflowQueryService } from './workflow-query.service';

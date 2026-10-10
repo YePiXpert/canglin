@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import type { WorkflowDocumentRow, WorkflowRequestRow } from '@procure-lite/shared';
+import type { WorkflowDocumentRow, WorkflowRequestRow } from '@canglin/shared';
 import { createApp, closeApp, type TestApp } from './utils';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HousekeepingService, RECEIPT_RETENTION_DAYS } from '../src/system/housekeeping.service';

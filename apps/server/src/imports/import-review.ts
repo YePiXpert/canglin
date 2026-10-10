@@ -1,4 +1,4 @@
-import type { ImportDraft, ParseResult } from '@procure-lite/shared';
+import type { ImportDraft, ParseResult } from '@canglin/shared';
 
 export interface ReviewPage {
   page: number;

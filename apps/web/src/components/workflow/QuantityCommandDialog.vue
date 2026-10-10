@@ -4,7 +4,7 @@ import {
   quantityUnits, workflowStockInSchema, workflowDistributionSchema, workflowSupplierReturnSchema,
   workflowEmployeeReturnSchema, workflowPurchaseCancelSchema, workflowRequestCancelSchema,
   type WorkflowLocation,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';

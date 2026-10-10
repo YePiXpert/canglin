@@ -5,7 +5,7 @@ import { LlmClient, type ChatCallOptions, type ChatCompletionResult } from '../s
 import { AiToolsService } from '../src/ai/ai-tools';
 import { WorkflowService } from '../src/workflow/workflow.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import type { WorkflowDocumentRow, WorkflowPage, WorkflowReport, WorkflowRequestRow, WorkflowStockRow } from '@procure-lite/shared';
+import type { WorkflowDocumentRow, WorkflowPage, WorkflowReport, WorkflowRequestRow, WorkflowStockRow } from '@canglin/shared';
 
 let ctx: TestApp, tools: AiToolsService, workflow: WorkflowService, prisma: PrismaService;
 let request: WorkflowRequestRow, purchase: WorkflowDocumentRow, receipt: WorkflowDocumentRow;

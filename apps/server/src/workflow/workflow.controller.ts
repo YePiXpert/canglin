@@ -10,7 +10,7 @@ import {
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput, type WorkflowProductCreateInput,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp, operationId } from '../common/request.util';
 import { WorkflowService } from './workflow.service';

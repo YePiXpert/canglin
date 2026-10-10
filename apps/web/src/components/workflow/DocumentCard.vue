@@ -6,7 +6,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import { buttonClass } from '@/components/ui/button';
 import { quantityLabel, moneyLabel, documentKindLabels, webLink } from './presentation';
-import { PAYMENT_STATUS_LABELS, moneyText, parseFixed } from '@procure-lite/shared';
+import { PAYMENT_STATUS_LABELS, moneyText, parseFixed } from '@canglin/shared';
 
 const props = defineProps<{ document: WorkflowDocumentRow; readonly?: boolean }>();
 const emit = defineEmits<{ receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number] }>();

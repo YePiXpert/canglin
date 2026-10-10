@@ -1,6 +1,6 @@
 # b10744b 隔离试用
 
-> 适用范围：本文只适用于候选版本 `b10744b`（三个镜像摘要固定在 `deploy/compose.trial.yml`），是那次隔离试用的操作记录，不是对当前 `main` 的验收。之后的改动（如导入草稿找回、库存页合计移除）不在该试用镜像里。
+> 适用范围：本文只适用于候选版本 `b10744b`，是那次隔离试用的操作记录，不是对当前 `main` 的验收。之后的改动（如导入草稿找回、库存页合计移除）不在该试用镜像里。当前 `deploy/compose.trial.yml` 和 `deploy/trial.sh` 已切换到 `aa981bc`，操作说明见 [当前试用说明](trial-aa981bc.md)。本文中的命令和摘要只适用于历史配置；如需复现，先通过 `git worktree add --detach ../procure-lite-trial-b10744b aa981bc8ff1f4228000fa92d1a3b8472da18ade9` 创建历史工作区，并在该目录中执行下文命令。
 
 候选业务版本固定为 `b10744b109e8904ef4d443b39741b47051db8600`，对应 [已成功完成的 CI](https://github.com/YePiXpert/procure-lite/actions/runs/36306254569)。本轮只提供隔离试用的运维文件，不改应用、导航、模型参数或正式部署脚本。
 

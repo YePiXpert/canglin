@@ -7,12 +7,12 @@ import type {
   WorkflowEmployeeReturnInput, WorkflowPurchaseCancelInput, WorkflowRequestCancelInput,
   WorkflowAdjustmentInput, WorkflowVoidInput, WorkflowMetadataInput, WorkflowProductCreateInput,
   WorkflowPriceRow,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 export type {
   WorkflowDocumentKind, WorkflowDocumentLineRow, WorkflowDocumentRow, WorkflowOverview,
   WorkflowPage, WorkflowRequestLineRow, WorkflowRequestRow, WorkflowStockRow,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 /** Preserve an uncertain submission's key through retries and browser reloads. */
 async function post<T>(path: string, body: unknown): Promise<T> {

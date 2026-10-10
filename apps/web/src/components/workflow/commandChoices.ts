@@ -1,5 +1,5 @@
 import type { WorkflowRequestRow, WorkflowStockRow } from '@/api/workflow';
-import type { WorkflowLocation } from '@procure-lite/shared';
+import type { WorkflowLocation } from '@canglin/shared';
 import type { QuantityChoice } from './QuantityCommandDialog.vue';
 
 export function requestCancelChoices(request: WorkflowRequestRow): QuantityChoice[] {

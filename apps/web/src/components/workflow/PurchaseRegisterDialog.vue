@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { lineAmountUnits, moneyText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@procure-lite/shared';
+import { lineAmountUnits, moneyText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestRow } from '@/api/workflow';
 import { suppliersApi, type SupplierRow } from '@/api';
 import { apiError } from '@/api/client';

@@ -4,7 +4,7 @@ import {
   parseResultSchema,
   type ImportDraft,
   type ParseResult,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 /**
  * 导入识别结果（ParseResult）的纯函数与常量，不依赖 Nest / Prisma：

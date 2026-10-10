@@ -45,15 +45,6 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    // fastify 生态抛出的原生错误（如 multipart 超限 413）：带 statusCode 就按它返回
-    if (exception && typeof (exception as { statusCode?: unknown }).statusCode === 'number') {
-      const status = (exception as { statusCode: number }).statusCode;
-      const message = (exception as { message?: unknown }).message ?? '请求处理失败';
-      this.logger.warn(`Fastify error ${status}: ${String(message).slice(0, 200)}`);
-      response.status(status).send({ statusCode: status, message: String(message) });
-      return;
-    }
-
     this.logger.error(
       exception instanceof Error ? exception.stack ?? exception.message : String(exception),
     );

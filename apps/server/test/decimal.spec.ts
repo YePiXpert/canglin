@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   divideHalfUp, lineAmountUnits, MAX_FIXED_UNITS, moneyText,
   parseFixed, priceText, priceUnits, quantityText, quantityUnits,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 describe('业务数量和金额的精确计算', () => {
   it('支持分批小数数量，汇总不产生二进制浮点误差', () => {

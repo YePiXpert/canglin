@@ -14,7 +14,7 @@ from .pipeline import parse_dispatch, document_info, render_page
 _parse_lock = asyncio.Semaphore(1)
 _render_lock = asyncio.Semaphore(1)
 
-app = FastAPI(title="Procure Lite OCR", version="2.0.0")
+app = FastAPI(title="仓廪 OCR", version="2.0.0")
 
 API_KEY = os.environ.get("OCR_API_KEY", "dev-ocr-key")
 MAX_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "30")) * 1024 * 1024

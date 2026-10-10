@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import type { SupplierUpsertInput } from '@procure-lite/shared';
+import type { SupplierUpsertInput } from '@canglin/shared';
 
 @Injectable()
 export class SuppliersService {

@@ -8,7 +8,7 @@ import { OcrClient } from './ocr.client';
 import { config } from '../config';
 import { AiConfigService } from '../ai/ai-config.service';
 import { AiResponseError, LlmClient } from '../ai/llm.client';
-import { parsedItemSchema, type ParseResult } from '@procure-lite/shared';
+import { parsedItemSchema, type ParseResult } from '@canglin/shared';
 import {
   MIME,
   aiPageSchema,

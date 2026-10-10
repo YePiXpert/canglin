@@ -24,7 +24,7 @@ import {
   importDraftSchema,
   type ImportDraft,
   type ParseResult,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 // ImportTaskView 引用的 AI 逐页结果类型一并从这里导出
 export type { AiPage } from './import-result';

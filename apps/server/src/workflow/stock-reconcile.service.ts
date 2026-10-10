@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { quantityText } from '@procure-lite/shared';
+import { quantityText } from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 const SETTING_KEY = 'stockCheck';

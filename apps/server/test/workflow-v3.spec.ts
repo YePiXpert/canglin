@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { createApp, closeApp, type TestApp } from './utils';
 import { PrismaService } from '../src/prisma/prisma.service';
-import type { WorkflowDocumentRow, WorkflowRequestRow, WorkflowReport, WorkflowStockRow } from '@procure-lite/shared';
+import type { WorkflowDocumentRow, WorkflowRequestRow, WorkflowReport, WorkflowStockRow } from '@canglin/shared';
 
 let ctx: TestApp, prisma: PrismaService, supplierA: number, supplierB: number;
 beforeAll(async () => {

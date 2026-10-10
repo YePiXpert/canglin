@@ -14,7 +14,7 @@ import { systemApi, aiApi, type BackupInfo, type SystemStatus } from '@/api';
 import { useToastStore } from '@/stores/toast';
 import { useThemeStore, type ThemeMode } from '@/stores/theme';
 import { apiError } from '@/api/client';
-import type { AiConfigView } from '@procure-lite/shared';
+import type { AiConfigView } from '@canglin/shared';
 
 const toast = useToastStore();
 const theme = useThemeStore();

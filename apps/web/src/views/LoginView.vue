@@ -130,7 +130,7 @@ const subheading = computed(() =>
           <Icon name="inventory" :size="20" />
         </span>
         <div class="min-w-0">
-          <p class="text-lg leading-6 font-semibold tracking-tight text-ink">Procure Lite</p>
+          <p class="text-lg leading-6 font-semibold tracking-tight text-ink">仓廪</p>
           <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
         </div>
       </div>

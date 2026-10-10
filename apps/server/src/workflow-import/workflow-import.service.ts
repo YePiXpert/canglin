@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {
   workflowRequestCreateSchema,
   type WorkflowImportConfirmInput,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { operation } from '../common/operation';
 import { ImportsService } from '../imports/imports.service';
 import { PrismaService } from '../prisma/prisma.service';

@@ -6,7 +6,7 @@ import {
   type WorkflowDocumentRow, type WorkflowDocumentLineRow, type WorkflowStockRow, type WorkflowStockEntryRow,
   type WorkflowOverview, type WorkflowStage, type WorkflowLocation, type WorkflowDocumentKind,
   type WorkflowReport, type WorkflowPriceRow,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiSearchService } from '../ai/ai-search.service';
 import { documentInclude, requestInclude, snapshot, sum, type DocumentRecord, type RequestRecord, type Tx } from './workflow-records';
@@ -191,9 +191,10 @@ export class WorkflowQueryService {
   }
 
   async entries(query: WorkflowQuery) {
+    const names = await this.nameTerms(query.search);
     return this.prisma.$transaction(async (tx) => {
       const where: Prisma.StockEntryWhereInput = { productId: query.productId,
-        ...(query.kind || query.search ? { businessLine: { document: { kind: query.kind }, ...(query.search ? { OR: [{ itemName: { contains: query.search } }, { specification: { contains: query.search } }] } : {}) } } : {}),
+        ...(query.kind || query.search ? { businessLine: { document: { kind: query.kind }, ...(query.search ? { OR: [...names.map((name) => ({ itemName: { contains: name } })), { specification: { contains: query.search } }] } : {}) } } : {}),
         ...(query.dateFrom || query.dateTo ? { date: { gte: query.dateFrom, lte: query.dateTo } } : {}),
         ...(query.requestId ? { originLine: { requestLine: { requestId: query.requestId } } } : {}) };
       const [entries, total] = await Promise.all([
@@ -231,8 +232,9 @@ export class WorkflowQueryService {
   }
 
   async prices(query: Partial<WorkflowQuery>): Promise<WorkflowPriceRow[]> {
+    const names = await this.nameTerms(query.search);
     const lines = await this.prisma.businessLine.findMany({
-      where: { productId: query.productId, document: { kind: 'PURCHASE', status: 'POSTED', supplierId: query.supplierId }, ...(query.search ? { OR: [{ itemName: { contains: query.search } }, { specification: { contains: query.search } }] } : {}) },
+      where: { productId: query.productId, document: { kind: 'PURCHASE', status: 'POSTED', supplierId: query.supplierId }, ...(query.search ? { OR: [...names.map((name) => ({ itemName: { contains: name } })), { specification: { contains: query.search } }] } : {}) },
       include: { document: true }, orderBy: [{ document: { date: 'desc' } }, { id: 'desc' }],
     });
     const latest = new Map<string, WorkflowPriceRow>();

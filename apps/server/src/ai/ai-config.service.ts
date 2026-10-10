@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
-import type { AiConfigInput, AiConfigView } from '@procure-lite/shared';
+import type { AiConfigInput, AiConfigView } from '@canglin/shared';
 
 export interface StoredAiConfig {
   enabled: boolean;

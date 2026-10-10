@@ -1,5 +1,5 @@
 {
-  "name": "@procure-lite/shared",
+  "name": "@canglin/shared",
   "version": "2.0.0",
   "private": true,
   "type": "module",
@@ -22,10 +22,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.1.5"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "tsup": "^8.5.0",
-    "typescript": "^5.9.2"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }

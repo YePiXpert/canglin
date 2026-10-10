@@ -17,7 +17,7 @@ import {
   type AiAskInput,
   type AiConfigInput,
   type AiOcrReviewInput,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { AiService } from './ai.service';

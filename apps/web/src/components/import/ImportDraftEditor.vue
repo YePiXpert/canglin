@@ -8,7 +8,7 @@ import Input from '@/components/ui/Input.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import type { ImportTaskView } from '@/api';
-import { aiSuggestionKey } from '@procure-lite/shared';
+import { aiSuggestionKey } from '@canglin/shared';
 import { importTaskKey } from './useImportTask';
 
 /**

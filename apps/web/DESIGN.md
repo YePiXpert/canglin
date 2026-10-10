@@ -1,4 +1,4 @@
-# Procure Lite 前端设计与维护规范 —「墨与纸」
+# 仓廪 前端设计与维护规范 —「墨与纸」
 
 ## 2026-09-30 业务工作区
 
@@ -380,13 +380,13 @@
 验证：
 
 ```bash
-pnpm --filter @procure-lite/shared build     # 改了 packages/shared 时先构建
-pnpm --filter @procure-lite/web typecheck
-pnpm --filter @procure-lite/web lint
-pnpm --filter @procure-lite/web test
-pnpm --filter @procure-lite/web build
-pnpm --filter @procure-lite/server build     # e2e 前先构建 API（原因见 README「测试」）
-pnpm --filter @procure-lite/web test:e2e
+pnpm --filter @canglin/shared build     # 改了 packages/shared 时先构建
+pnpm --filter @canglin/web typecheck
+pnpm --filter @canglin/web lint
+pnpm --filter @canglin/web test
+pnpm --filter @canglin/web build
+pnpm --filter @canglin/server build     # e2e 前先构建 API（原因见 README「测试」）
+pnpm --filter @canglin/web test:e2e
 ```
 
 截图检查（浅 / 深色 × 1440 / 390 宽）：

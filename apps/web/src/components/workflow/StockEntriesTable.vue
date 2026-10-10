@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkflowPage, WorkflowStockEntryRow } from '@procure-lite/shared';
+import type { WorkflowPage, WorkflowStockEntryRow } from '@canglin/shared';
 import Button from '@/components/ui/Button.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
-import { quantityUnits, quantityText, workflowAdjustmentSchema } from '@procure-lite/shared';
+import { quantityUnits, quantityText, workflowAdjustmentSchema } from '@canglin/shared';
 import { workflowApi, type WorkflowStockRow, type WorkflowDocumentRow } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';

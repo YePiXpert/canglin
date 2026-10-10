@@ -1,5 +1,5 @@
 {
-  "name": "procure-lite",
+  "name": "canglin",
   "version": "2.0.0",
   "private": true,
   "description": "办公用品采购台账：OA 单据导入、采购执行、库存与领用发放管理",
@@ -8,12 +8,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @procure-lite/server --filter @procure-lite/web dev",
+    "dev": "pnpm --parallel --filter @canglin/server --filter @canglin/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "db:migrate": "pnpm --filter @procure-lite/server db:migrate",
-    "db:studio": "pnpm --filter @procure-lite/server db:studio"
+    "db:migrate": "pnpm --filter @canglin/server db:migrate",
+    "db:studio": "pnpm --filter @canglin/server db:studio"
   }
 }

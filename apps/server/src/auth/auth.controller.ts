@@ -7,7 +7,7 @@ import { Public } from '../common/public.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { config } from '../config';
-import { changePasswordSchema, loginSchema, setupSchema } from '@procure-lite/shared';
+import { changePasswordSchema, loginSchema, setupSchema } from '@canglin/shared';
 
 /**
  * @Public 只标注在真正公开的路由上（类级标注会让 change-password 等

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { reactive } from 'vue';
-import { workflowVoidSchema } from '@procure-lite/shared';
+import { workflowVoidSchema } from '@canglin/shared';
 import { useDialogForm } from './useDialogForm';
 
 function setup(initial = { reason: '' }) {

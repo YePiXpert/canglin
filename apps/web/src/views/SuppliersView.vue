@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import type { WorkflowPriceRow } from '@procure-lite/shared';
+import { supplierUpsertSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi } from '@/api/workflow';
 import { suppliersApi, type SupplierRow } from '@/api';
 import { useCatalogStore } from '@/stores/catalog';
 import { useToastStore } from '@/stores/toast';
 import { apiError } from '@/api/client';
 import { createRequestGuard } from '@/utils/request';
+import { issueText } from '@/utils/form';
 import { useUrlState } from '@/composables/useUrlState';
+import { useDialogForm } from '@/composables/useDialogForm';
 import Button from '@/components/ui/Button.vue';
 import { buttonClass } from '@/components/ui/button';
 import Icon from '@/components/ui/Icon.vue';
@@ -21,6 +23,7 @@ import Tabs from '@/components/ui/Tabs.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Dialog from '@/components/ui/Dialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import Notice from '@/components/ui/Notice.vue';
 import { webLink } from '@/components/workflow/presentation';
 
 const router = useRouter(), catalog = useCatalogStore(), toast = useToastStore();
@@ -28,11 +31,11 @@ const defaults = { tab: 'suppliers', priceSearch: '' };
 const state = reactive({ ...defaults });
 useUrlState(state, defaults);
 const suppliers = ref<SupplierRow[]>([]), prices = ref<WorkflowPriceRow[]>([]);
-const loading = ref(true), loadingPrices = ref(false), saving = ref(false);
+const loading = ref(true), loadingPrices = ref(false);
 const loadError = ref(''), priceError = ref('');
 const supplierDialogOpen = ref(false), supplierDialogTarget = ref<SupplierRow | null>(null);
 const supplierForm = reactive({ name: '', contact: '', phone: '', note: '' });
-const supplierErrors = reactive<Record<string, string>>({});
+const { saving, failure, errors, dirty, reset, submit } = useDialogForm(() => JSON.stringify(supplierForm));
 const deleteTarget = ref<SupplierRow | null>(null), removingSupplierId = ref<number | null>(null);
 const openingPrice = ref<number | null>(null);
 const priceGuard = createRequestGuard();
@@ -52,20 +55,20 @@ async function loadPrices() {
 function switchTab(value: string) { state.tab = value; if (value === 'prices') void loadPrices(); }
 function openSupplierDialog(target: SupplierRow | null) {
   supplierDialogTarget.value = target;
-  Object.keys(supplierErrors).forEach((key) => delete supplierErrors[key]);
   Object.assign(supplierForm, { name: target?.name ?? '', contact: target?.contact ?? '', phone: target?.phone ?? '', note: target?.note ?? '' });
+  reset();
   supplierDialogOpen.value = true;
 }
 async function saveSupplier() {
-  if (saving.value) return;
-  Object.keys(supplierErrors).forEach((key) => delete supplierErrors[key]);
-  if (!supplierForm.name.trim()) { supplierErrors.name = '请填写供应商名称'; return; }
-  saving.value = true;
-  try {
-    await suppliersApi.upsert({ ...(supplierDialogTarget.value ? { id: supplierDialogTarget.value.id } : {}), name: supplierForm.name.trim(), contact: supplierForm.contact.trim() || undefined, phone: supplierForm.phone.trim() || undefined, note: supplierForm.note.trim() || undefined });
-    supplierDialogOpen.value = false; catalog.invalidateSuppliers(); toast.success('供应商已保存'); await loadSuppliers();
-  } catch (cause) { toast.error(apiError(cause)); }
-  finally { saving.value = false; }
+  errors.value = {};
+  if (!supplierForm.name.trim()) { errors.value.name = '请填写供应商名称'; return; }
+  const target = supplierDialogTarget.value;
+  const parsed = supplierUpsertSchema.safeParse({ ...(target ? { id: target.id } : {}), name: supplierForm.name.trim(), contact: supplierForm.contact.trim() || undefined, phone: supplierForm.phone.trim() || undefined, note: supplierForm.note.trim() || undefined });
+  if (!parsed.success) { failure.value = issueText(parsed.error); return; }
+  // 失败时 submit 把原因写进 failure（页脚显示）并返回 undefined，弹窗保持打开
+  const saved = await submit(() => suppliersApi.upsert(parsed.data));
+  if (saved === undefined) return;
+  supplierDialogOpen.value = false; catalog.invalidateSuppliers(); toast.success('供应商已保存'); await loadSuppliers();
 }
 async function removeSupplier() {
   if (!deleteTarget.value || removingSupplierId.value) return;
@@ -159,15 +162,16 @@ onUnmounted(() => priceGuard.abandon());
       </template>
     </Panel>
     <!-- 供应商对话框 -->
-    <Dialog :open="supplierDialogOpen" :title="supplierDialogTarget ? '编辑供应商' : '新增供应商'" width="440px" @update:open="supplierDialogOpen = $event">
+    <Dialog :open="supplierDialogOpen" :title="supplierDialogTarget ? '编辑供应商' : '新增供应商'" width="440px" :dirty="dirty && !saving" :persistent="saving" @update:open="supplierDialogOpen = $event">
       <div class="grid gap-4 sm:grid-cols-2">
-        <Input v-model="supplierForm.name" class="sm:col-span-2" label="名称" required placeholder="如：得力官方旗舰店" :error="supplierErrors.name" />
-        <Input v-model="supplierForm.contact" label="联系人" />
-        <Input v-model="supplierForm.phone" label="电话" type="tel" />
-        <Input v-model="supplierForm.note" class="sm:col-span-2" label="备注" />
+        <Input v-model="supplierForm.name" class="sm:col-span-2" label="名称" required placeholder="如：得力官方旗舰店" :error="errors.name" :disabled="saving" />
+        <Input v-model="supplierForm.contact" label="联系人" :disabled="saving" />
+        <Input v-model="supplierForm.phone" label="电话" type="tel" :disabled="saving" />
+        <Input v-model="supplierForm.note" class="sm:col-span-2" label="备注" :disabled="saving" />
       </div>
-      <template #footer>
-        <Button variant="ghost" @click="supplierDialogOpen = false">取消</Button>
+      <template #footer="{ close }">
+        <Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice>
+        <Button variant="ghost" :disabled="saving" @click="close">取消</Button>
         <Button variant="primary" :loading="saving" @click="saveSupplier">保存</Button>
       </template>
     </Dialog>

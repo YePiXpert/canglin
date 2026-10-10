@@ -14,9 +14,9 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Procure Lite 采购台账',
-        short_name: 'Procure Lite',
-        description: '办公用品采购台账：OA 导入、采购执行、库存与领用发放',
+        name: '仓廪 · 采购与领用',
+        short_name: '仓廪',
+        description: '办公用品采购与领用：OA 单导入、分次采购、到货入库、库存领用',
         theme_color: '#F5F4F0',
         background_color: '#F5F4F0',
         display: 'standalone',

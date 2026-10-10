@@ -21,7 +21,7 @@ import { readUpload } from '../common/multipart.util';
 import {
   saveImportDraftSchema,
   type ImportDraft,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 
 @Controller('imports')
 export class ImportsController {

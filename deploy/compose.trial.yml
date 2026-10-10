@@ -1,9 +1,9 @@
-# Fixed candidate b10744b109e8904ef4d443b39741b47051db8600.
+# Fixed candidate aa981bc8ff1f4228000fa92d1a3b8472da18ade9.
 # Standalone file: never merge with the production Compose configuration.
-name: procure-lite-trial-b10744b
+name: canglin-trial-aa981bc
 services:
   web:
-    image: ghcr.io/yepixpert/procure-lite-web@sha256:b19d1ae1fce05e1486305518150ea0b531b4858034d3d114aecca69b08e3d4c2
+    image: ghcr.io/yepixpert/procure-lite-web@sha256:9efac7be6a9bf5342942fb94d98eabd11079aca80a38035c387f2f8e20379903
     ports:
       - "127.0.0.1:18080:80"
     depends_on:
@@ -14,7 +14,7 @@ services:
       com.centurylinklabs.watchtower.enable: "false"
     restart: "no"
   server:
-    image: ghcr.io/yepixpert/procure-lite-server@sha256:3b89915e58ef56bb9c0501c8f8273c3bf7cae05cfdb9c03bca58e933110a147d
+    image: ghcr.io/yepixpert/procure-lite-server@sha256:b675ab44ba0c0905bf128a7bd4e36ddf8b0486a9af8cf7e5bb3718639af7508b
     environment:
       TZ: Asia/Shanghai
       DATA_DIR: /app/state
@@ -35,7 +35,7 @@ services:
       com.centurylinklabs.watchtower.enable: "false"
     restart: "no"
   ocr:
-    image: ghcr.io/yepixpert/procure-lite-ocr@sha256:6bd11b130f02a6bc90ca875cecfdbd80ab5662f3ec52b40bad789008f2753c3f
+    image: ghcr.io/yepixpert/procure-lite-ocr@sha256:05cbebb3e5f1a9f493b705c4e6f2f1b76b3439feeaa21938b18969ec4e7a7d53
     environment:
       TZ: Asia/Shanghai
       OCR_API_KEY: ${TRIAL_OCR_API_KEY:?Run deploy/trial.sh up first}

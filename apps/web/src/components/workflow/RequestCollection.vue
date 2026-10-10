@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive } from 'vue';
-import type { WorkflowStage } from '@procure-lite/shared';
+import type { WorkflowStage } from '@canglin/shared';
 import { workflowApi } from '@/api/workflow';
 import { useUrlState } from '@/composables/useUrlState';
 import { useWorkflowResource } from './useWorkflowResource';

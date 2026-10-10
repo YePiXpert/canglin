@@ -1,7 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import axios from 'axios';
 import { config } from '../config';
-import { parseResultSchema } from '@procure-lite/shared';
+import { parseResultSchema } from '@canglin/shared';
 @Injectable()
 export class OcrClient {
   private form(file: Buffer, filename: string) {

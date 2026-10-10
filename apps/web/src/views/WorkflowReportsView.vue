@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
-import type { WorkflowReport } from '@procure-lite/shared';
-import { workflowDateSchema } from '@procure-lite/shared';
+import type { WorkflowReport } from '@canglin/shared';
+import { workflowDateSchema } from '@canglin/shared';
 import { apiError, http } from '@/api';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import Panel from '@/components/ui/Panel.vue';

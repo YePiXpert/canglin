@@ -5,7 +5,7 @@ import { config } from '../src/config';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AiSearchService } from '../src/ai/ai-search.service';
 import { AiConfigService } from '../src/ai/ai-config.service';
-import type { WorkflowDocumentRow, WorkflowPage, WorkflowRequestRow, WorkflowStockRow } from '@procure-lite/shared';
+import type { WorkflowDocumentRow, WorkflowPage, WorkflowPriceRow, WorkflowRequestRow, WorkflowStockEntryRow, WorkflowStockRow } from '@canglin/shared';
 
 /**
  * 假 LLM：jsonMode 调用（同义词扩展 / OCR 校对）统一回 json 字段；
@@ -300,6 +300,17 @@ describe('AI 语义搜索', () => {
   const requestNames = (page: WorkflowPage<WorkflowRequestRow>) =>
     new Set(page.items.flatMap((request) => request.lines.map((line) => line.itemName)));
   const stockNames = (rows: WorkflowStockRow[]) => rows.map((row) => row.itemName);
+  const entryNames = (page: WorkflowPage<WorkflowStockEntryRow>) =>
+    new Set(page.items.map((entry) => entry.itemName));
+  const priceNames = (rows: WorkflowPriceRow[]) => new Set(rows.map((row) => row.itemName));
+  const semanticSearch = (enabled: boolean) =>
+    ctx.inject({
+      method: 'PUT',
+      url: '/api/ai/config',
+      ...auth({
+        payload: { enabled: true, baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', semanticSearch: enabled },
+      }),
+    });
 
   beforeAll(async () => {
     // 品名字面包含「打印纸」：区分原词命中与同义词命中
@@ -353,14 +364,6 @@ describe('AI 语义搜索', () => {
   });
 
   it('关闭语义搜索后不调用模型，只按原词包含匹配', async () => {
-    const semanticSearch = (enabled: boolean) =>
-      ctx.inject({
-        method: 'PUT',
-        url: '/api/ai/config',
-        ...auth({
-          payload: { enabled: true, baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', semanticSearch: enabled },
-        }),
-      });
     expect((await semanticSearch(false)).statusCode).toBe(200);
     fake.json = '{"terms":["A4复印纸"]}';
     const before = fake.calls.length;
@@ -369,6 +372,73 @@ describe('AI 语义搜索', () => {
     expect(requestNames(requests)).toEqual(new Set(['激光打印纸（A3）']));
     expect(stockNames(await get<WorkflowStockRow[]>('/api/workflow/stock', { search: '打印纸' }))).toEqual(['激光打印纸（A3）']);
     expect((await get<WorkflowPage<WorkflowDocumentRow>>('/api/workflow/documents', { search: '打印纸' })).total).toBe(0);
+    expect(fake.calls.length).toBe(before);
+    expect((await semanticSearch(true)).statusCode).toBe(200);
+  });
+
+  it('库存流水与比价搜索：品名按同义词扩展，规格只按原词；关闭后只按原词匹配', async () => {
+    const prisma = ctx.app.get(PrismaService);
+    // 「签字笔」在品名词表内，作为「中性笔」的同义词；其余三行：品名含原词、规格含原词、规格只含同义词（规格不扩展，不应命中）
+    const created = await ctx.inject({
+      method: 'POST',
+      url: '/api/workflow/requests',
+      ...auth({
+        payload: {
+          serialNumber: `OA-AI-${crypto.randomUUID().slice(0, 8)}`,
+          department: '行政部',
+          handler: '刘洋',
+          requestDate: '2026-08-20',
+          lines: [
+            { itemName: '签字笔', specification: '', unit: '件', quantity: '2' },
+            { itemName: '黑色中性笔', specification: '', unit: '件', quantity: '2' },
+            { itemName: '替换笔芯', specification: '中性笔 0.5mm', unit: '件', quantity: '2' },
+            { itemName: '笔袋', specification: '可装签字笔', unit: '件', quantity: '2' },
+          ],
+        },
+      }),
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const supplier = await prisma.supplier.create({ data: { name: '同义词比价测试供应商' } });
+    const purchase = await ctx.inject({
+      method: 'POST',
+      url: '/api/workflow/purchases',
+      ...auth({
+        payload: {
+          date: '2026-08-21',
+          supplierId: supplier.id,
+          lines: created.json<WorkflowRequestRow>().lines.map((line) => ({ requestLineId: line.id, quantity: '2', unitPrice: '3' })),
+        },
+      }),
+    });
+    expect(purchase.statusCode, purchase.body).toBe(201);
+    const receipt = await ctx.inject({
+      method: 'POST',
+      url: '/api/workflow/receipts',
+      ...auth({
+        payload: {
+          date: '2026-08-22',
+          lines: purchase.json<WorkflowDocumentRow>().lines.map((line) => ({ purchaseLineId: line.id, quantity: '2' })),
+        },
+      }),
+    });
+    expect(receipt.statusCode, receipt.body).toBe(201);
+    const search = async () => ({
+      entries: await get<WorkflowPage<WorkflowStockEntryRow>>('/api/workflow/entries', { search: '中性笔' }),
+      prices: await get<WorkflowPriceRow[]>('/api/workflow/prices', { search: '中性笔' }),
+    });
+
+    fake.json = '{"terms":["签字笔"]}';
+    const expanded = await search();
+    expect(entryNames(expanded.entries)).toEqual(new Set(['签字笔', '黑色中性笔', '替换笔芯']));
+    expect(expanded.entries.total).toBe(3);
+    expect(priceNames(expanded.prices)).toEqual(new Set(['签字笔', '黑色中性笔', '替换笔芯']));
+
+    expect((await semanticSearch(false)).statusCode).toBe(200);
+    const before = fake.calls.length;
+    const literal = await search();
+    expect(entryNames(literal.entries)).toEqual(new Set(['黑色中性笔', '替换笔芯']));
+    expect(literal.entries.total).toBe(2);
+    expect(priceNames(literal.prices)).toEqual(new Set(['黑色中性笔', '替换笔芯']));
     expect(fake.calls.length).toBe(before);
     expect((await semanticSearch(true)).statusCode).toBe(200);
   });

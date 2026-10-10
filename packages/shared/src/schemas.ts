@@ -13,10 +13,10 @@ const positiveNumber = z.coerce.number().positive('必须大于 0');
 
 export const supplierUpsertSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
-  name: z.string().trim().min(1, '供应商名称不能为空').max(120),
-  contact: z.string().trim().max(64).optional(),
-  phone: z.string().trim().max(32).optional(),
-  note: z.string().trim().max(500).optional(),
+  name: z.string().trim().min(1, '供应商名称不能为空').max(120, '供应商名称不超过 120 字'),
+  contact: z.string().trim().max(64, '联系人不超过 64 字').optional(),
+  phone: z.string().trim().max(32, '电话不超过 32 字').optional(),
+  note: z.string().trim().max(500, '备注不超过 500 字').optional(),
 });
 export type SupplierUpsertInput = z.infer<typeof supplierUpsertSchema>;
 

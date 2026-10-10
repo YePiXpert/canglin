@@ -20,7 +20,7 @@ import { StockReconcileService } from '../workflow/stock-reconcile.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { config } from '../config';
-import { autoBackupConfigSchema, type AutoBackupConfig } from '@procure-lite/shared';
+import { autoBackupConfigSchema, type AutoBackupConfig } from '@canglin/shared';
 
 const APP_VERSION = '2.0.0';
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { quantityText, quantityUnits } from '@procure-lite/shared';
+import { quantityText, quantityUnits } from '@canglin/shared';
 import { workflowApi, type WorkflowStockRow } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
 import PageHeader from '@/components/ui/PageHeader.vue';

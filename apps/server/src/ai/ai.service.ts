@@ -17,7 +17,7 @@ import {
   type AiOcrReviewInput,
   type AiOcrReviewResult,
   type AiToolStep,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ImportsService } from '../imports/imports.service';

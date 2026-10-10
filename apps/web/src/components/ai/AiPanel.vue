@@ -5,7 +5,7 @@ import { buttonClass } from '@/components/ui/button';
 import { aiApi, apiError } from '@/api';
 import { useToastStore } from '@/stores/toast';
 import { renderMarkdown } from '@/utils/markdown';
-import type { AiConfigView } from '@procure-lite/shared';
+import type { AiConfigView } from '@canglin/shared';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();

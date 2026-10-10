@@ -2,7 +2,7 @@ import { restoreEvents } from '../common/maintenance';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BackupService } from './backup.service';
-import type { AutoBackupConfig } from '@procure-lite/shared';
+import type { AutoBackupConfig } from '@canglin/shared';
 
 const SETTING_KEY = 'autoBackup';
 const DEFAULT_CONFIG: AutoBackupConfig = { enabled: false, intervalHours: 24, keepCount: 7 };

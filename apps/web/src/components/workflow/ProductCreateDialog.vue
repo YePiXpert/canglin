@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue';
-import { workflowProductCreateSchema } from '@procure-lite/shared';
+import { workflowProductCreateSchema } from '@canglin/shared';
 import { workflowApi } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';

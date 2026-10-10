@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
-import { workflowReceiptSchema } from '@procure-lite/shared';
+import { workflowReceiptSchema } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';

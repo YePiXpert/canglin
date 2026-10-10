@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { WorkflowAttachment } from '@procure-lite/shared';
+import type { WorkflowAttachment } from '@canglin/shared';
 import { attachmentsApi, apiError } from '@/api';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';

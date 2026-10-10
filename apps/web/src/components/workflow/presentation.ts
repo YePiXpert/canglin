@@ -1,5 +1,5 @@
-import { lineAmountUnits, moneyText, priceUnits, quantityUnits } from '@procure-lite/shared';
-import type { WorkflowDocumentKind } from '@procure-lite/shared';
+import { lineAmountUnits, moneyText, priceUnits, quantityUnits } from '@canglin/shared';
+import type { WorkflowDocumentKind } from '@canglin/shared';
 
 export const documentKindLabels: Record<WorkflowDocumentKind, string> = { PURCHASE: '采购成交', RECEIPT: '到货登记', STOCK_IN: '入库', DISTRIBUTION: '领用发放', SUPPLIER_RETURN: '供应商退货', EMPLOYEE_RETURN: '员工归还', PURCHASE_CANCEL: '采购取消', REQUEST_CANCEL: '申请余量取消', ADJUSTMENT: '库存盘点' };
 

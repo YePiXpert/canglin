@@ -6,12 +6,12 @@ COPY pnpm-workspace.yaml package.json ./
 COPY pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/server/package.json apps/server/
-RUN pnpm install --frozen-lockfile --filter @procure-lite/server... --filter @procure-lite/shared
+RUN pnpm install --frozen-lockfile --filter @canglin/server... --filter @canglin/shared
 COPY packages/shared packages/shared
 COPY apps/server apps/server
-RUN pnpm --filter @procure-lite/shared build \
+RUN pnpm --filter @canglin/shared build \
   && cd apps/server && npx prisma generate \
-  && pnpm --filter @procure-lite/server build
+  && pnpm --filter @canglin/server build
 
 FROM node:22-alpine
 # 时区数据：让 TZ（如 Asia/Shanghai）对 libc 和 Node 都生效；放在 ARG 之前，不随版本号失效缓存
@@ -20,16 +20,23 @@ ARG SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /repo/node_modules ./node_modules
-COPY --from=build /repo/packages/shared/package.json ./packages/shared/
-COPY --from=build /repo/packages/shared/dist ./packages/shared/dist
-COPY --from=build /repo/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=build /repo/apps/server/package.json ./apps/server/
-COPY --from=build /repo/apps/server/dist ./apps/server/dist
-COPY --from=build /repo/apps/server/prisma ./apps/server/prisma
-COPY --from=build /repo/apps/server/node_modules ./apps/server/node_modules
+# 以 node 用户（uid 1000）运行。复制时直接 --chown：事后 chown -R /app 会把整个 node_modules 再复制成一层
+COPY --from=build --chown=node:node /repo/node_modules ./node_modules
+COPY --from=build --chown=node:node /repo/packages/shared/package.json ./packages/shared/
+COPY --from=build --chown=node:node /repo/packages/shared/dist ./packages/shared/dist
+COPY --from=build --chown=node:node /repo/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=build --chown=node:node /repo/apps/server/package.json ./apps/server/
+COPY --from=build --chown=node:node /repo/apps/server/dist ./apps/server/dist
+COPY --from=build --chown=node:node /repo/apps/server/prisma ./apps/server/prisma
+COPY --from=build --chown=node:node /repo/apps/server/node_modules ./apps/server/node_modules
 COPY deploy/entrypoint-server.sh /entrypoint.sh
+# 数据卷挂载点归 node；新建的命名卷首次挂载时继承这里的属主
+RUN mkdir -p /app/state && chown node:node /app /app/state
+USER node
 WORKDIR /app/apps/server
 EXPOSE 3000
+# 公开路由 GET /api/auth/status（全局前缀 api），会查询数据库
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/api/auth/status >/dev/null || exit 1
 # 入口逻辑在 entrypoint-server.sh（CMD 内联 shell 的 JSON 转义易踩坑，已弃用）
 ENTRYPOINT ["sh", "/entrypoint.sh"]

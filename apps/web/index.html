@@ -13,9 +13,9 @@
         }
       } catch (e) { /* localStorage 不可用时退回浅色 */ }
     </script>
-    <meta name="description" content="办公用品采购台账：OA 导入、采购执行、库存与领用发放" />
+    <meta name="description" content="办公用品采购与领用：OA 单导入、分次采购、到货入库、库存领用" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Procure Lite 采购台账</title>
+    <title>仓廪 · 采购与领用</title>
     <style>
       /* 首屏占位：路由守卫要等 /auth/status 回来才渲染，没有这段就是一片白。颜色与 main.css 令牌一致 */
       #boot {
@@ -84,9 +84,9 @@
   <body>
     <div id="app"></div>
     <div id="boot">
-      <div class="mark">PL</div>
+      <div class="mark">仓</div>
       <div class="spin"></div>
-      <p>正在启动 Procure Lite…</p>
+      <p>正在启动仓廪…</p>
     </div>
     <noscript>
       <p style="padding: 24px; font-family: system-ui, sans-serif; color: #1b1a17">

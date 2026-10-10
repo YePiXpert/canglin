@@ -3,7 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import { SuppliersService } from './suppliers.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
-import { supplierUpsertSchema, type SupplierUpsertInput } from '@procure-lite/shared';
+import { supplierUpsertSchema, type SupplierUpsertInput } from '@canglin/shared';
 
 @Controller('suppliers')
 export class SuppliersController {

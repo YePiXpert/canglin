@@ -11,7 +11,7 @@ import Switch from '@/components/ui/Switch.vue';
 import { aiApi } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
-import type { AiConfigView } from '@procure-lite/shared';
+import type { AiConfigView } from '@canglin/shared';
 
 const props = defineProps<{
   /** 设置页 load() 读到的配置（读取失败为 null）；每次 load 都是新对象，非空时覆盖表单 */

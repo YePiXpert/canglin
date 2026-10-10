@@ -5,7 +5,7 @@ import {
   WORKFLOW_STAGES,
   workflowDateSchema,
   type WorkflowQuery,
-} from '@procure-lite/shared';
+} from '@canglin/shared';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { WorkflowQueryService } from '../workflow/workflow-query.service';
 import { todayString } from '../common/date.util';
@@ -162,7 +162,7 @@ export class AiToolsService {
   /** 问答的 system 提示词：领域说明 + 回答规则 */
   systemPrompt(): string {
     return [
-      '你是「Procure Lite」办公用品业务的只读查询助手。今天日期 ' + todayString() + '。',
+      '你是「仓廪」办公用品业务的只读查询助手。今天日期 ' + todayString() + '。',
       '业务模型：OA 已审批申请保留物理明细，以品名+规格+单位区分物品；每条可分次、多供应商、不同成交价采购，部分收货后直发或入库，库存再领用。另有供应商退货、员工归还及撤销/取消。',
       '回答规则：',
       '1. 申请与待办查询用 query_requests，供应商/价格/付款报销/发票/领用/退回明细用 query_documents，当前待处理量和库存用 query_stock，统计优先用 query_workflow_reports。',

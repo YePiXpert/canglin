@@ -1,6 +1,6 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { workflowImportConfirmSchema, type WorkflowImportConfirmInput } from '@procure-lite/shared';
+import { workflowImportConfirmSchema, type WorkflowImportConfirmInput } from '@canglin/shared';
 import { clientIp, operationId } from '../common/request.util';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { WorkflowImportService } from './workflow-import.service';

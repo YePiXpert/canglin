@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { workflowVoidSchema } from '@procure-lite/shared';
+import { workflowVoidSchema } from '@canglin/shared';
 import { failureText, issueText } from './form';
 
 /** shared 契约产生的真实 zod 错误：日期不存在 + 原因为空 */

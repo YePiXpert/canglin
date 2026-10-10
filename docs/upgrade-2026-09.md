@@ -34,13 +34,13 @@
 secret 文件示例（文件路径由管理员在 VPS 上准备，权限应仅允许服务读取）：
 
 ```yaml
-# /opt/procure-lite/docker-compose.override.yml
+# /opt/canglin/docker-compose.override.yml
 services:
   server:
     environment:
       LLM_API_KEY_FILE: /run/secrets/llm_api_key
     volumes:
-      - /etc/procure-lite/llm_api_key:/run/secrets/llm_api_key:ro
+      - /etc/canglin/llm_api_key:/run/secrets/llm_api_key:ro
 ```
 
 `store:false` 只是请求参数，不代表第三方零留存。模型名称不代表能力。设置页不再提供计价和预算项；未配置时只记录用量，预算默认关闭。历史单价与预算记录保留兼容，币种由服务商决定。月预算按已记录的导入估算费用停止后续请求，单页请求可能跨过阈值；它不是第三方账单硬限额。问答和搜索不计入导入预算。
@@ -94,23 +94,66 @@ services:
 - **语义搜索**：开启后 `/api/workflow/requests`、`documents`、`stock` 的 `search` 用词表内的同义词扩展品名匹配，词表来自申请明细品名与物品目录。
 - **验证口径**：`deploy/tests/smoke-api.cjs` 改走新接口（导入确认建申请 → 备份 → 取消一行 → 恢复 → 校验申请与原件）；CI 增加前后端 lint；本地验证数字见 README。
 
+## 2026-10-10 改名为仓廪并发布 v2.0.0
+
+项目改名为「仓廪」（技术名 `canglin`），版本从 v2.0.0 重新开始。只有一位使用者，旧实例由升级脚本一次迁移，不保留旧名兼容期。业务数据不变，数据库文件名仍为 `procure.db`（procure 是业务词，改名会多一次数据迁移）。
+
+| 项目 | 旧名 | 新名 |
+| --- | --- | --- |
+| 显示名 | Procure Lite | 仓廪 |
+| 仓库地址 | `https://github.com/YePiXpert/procure-lite` | `https://github.com/YePiXpert/canglin` |
+| 镜像 | `ghcr.io/yepixpert/procure-lite-{web,server,ocr}` | `ghcr.io/yepixpert/canglin-{web,server,ocr}` |
+| Compose 项目 | `procure-lite` | `canglin` |
+| 数据卷 | `procure-lite_procure-state`（卷键 `procure-state`） | `canglin_state`（卷键 `state`） |
+| 安装目录 | `/opt/procure-lite` | `/opt/canglin` |
+| 包作用域 | `@procure-lite/*` | `@canglin/*` |
+| 目录环境变量 | `PROCURE_REPO`、`PROCURE_TRIAL_DIR` | `CANGLIN_REPO`、`CANGLIN_TRIAL_DIR` |
+| 回退镜像标签 | `procure-lite-rollback-*` | `canglin-rollback-*` |
+
+**自动迁移**：先在 GitHub 完成改名，等 CI 推送 `canglin-*` 镜像（新包默认私有，按 README 设为 Public 或 `docker login`；拉取失败时脚本回退本地构建），再在 VPS 上执行新的一行升级命令（不要改跑首次部署脚本，它发现 `/opt/procure-lite` 时会拒绝在 `/opt/canglin` 另起一套空系统）。升级脚本先完成全部前置检查（docker、`.env`、数据卷、已跟踪文件改动），任一项失败都不做改动；之后依次：
+
+1. **目录**：使用默认目录且 `/opt/canglin` 不存在、`/opt/procure-lite` 存在时，执行 `mv /opt/procure-lite /opt/canglin`（`.env`、override 与 `pre-upgrade-backups/` 随之移动）；显式指定的其他目录不做猜测。Git 远端仍指向 `YePiXpert/procure-lite` 时改为 `YePiXpert/canglin`。
+2. **记录旧镜像**：旧项目 `procure-lite` 还有容器时，从它记录三个旧镜像并打 `canglin-rollback-*` 标签。
+3. **拉代码后**：确认 `docker-compose.yml` 已是 `name: canglin`（否则在停机前退出，例如误用 `--no-pull`）；把 `.env` 的 `COMPOSE_PROJECT_NAME=procure-lite` 改为 `canglin`，因为它优先于 compose 文件的 `name:`，不改会以旧项目名新建一个空卷；再核对 `docker compose config` 解析出的项目和数据卷确为 `canglin` / `canglin_state`。
+4. **获取新镜像**（不停机）。
+5. **停机**：`docker compose down` 后，停止带 `com.docker.compose.project=procure-lite` 标签的旧容器（先不删除）。
+6. **复制数据卷**：`canglin_state` 不存在而旧卷存在时，创建 `canglin_state`，用一次性 alpine 容器只读挂载旧卷，执行 `cp -a` 并 `chown -R 1000:1000`。复制失败会删除不完整的新卷后退出：旧卷和已停止的旧容器都还在，可 `docker start` 恢复旧服务，或排除原因后重跑。
+7. **备份**：照常把 `canglin_state` 打包为 `release-*/state.tar.gz`，然后对数据卷执行 `chown -R 1000:1000`（每次升级都做，回退到 root 运行的旧版期间写入的文件也会交还给 node）。
+8. **启动**：删除旧项目的容器（释放端口），`docker compose up` 启动新版本。
+
+各步骤都按当前状态判断：目录已迁移、`.env` 已改名、`canglin_state` 已存在、没有旧项目容器时对应步骤跳过，所以停机前任何一步失败都可以直接重跑，迁移完成后的升级与普通升级相同。复制若被强制中断（如断电），`canglin_state` 可能不完整，重跑前先 `docker volume rm canglin_state`，脚本会从旧卷重新复制。旧卷 `procure-lite_procure-state` 始终保留，确认新版本数据完整后可自行 `docker volume rm procure-lite_procure-state`；遗留网络 `procure-lite_default` 和旧的 `procure-lite-rollback-*` 标签也可在不再需要回退时清理。cron、反向代理等引用 `/opt/procure-lite` 的外部配置需自行更新；override 中挂载的宿主机文件（如 `/etc/procure-lite/llm_api_key`）未被移动，原路径仍然有效。
+
+**回退**：`rollback.sh` 固定使用项目 `canglin` 和数据卷 `canglin_state`。回退到改名前的版本时，旧配置的卷键是 `procure-state`，脚本会在该 release 的 `old-images.yml` 末尾追加一次 `volumes: procure-state: name: canglin_state`，旧版继续使用当前数据卷；回退后的手工管理命令见下文（`-p canglin`）。
+
+**容器加固**：
+
+- **server 以 node 用户运行**（uid 1000）：运行阶段用 `COPY --chown=node:node` 复制产物，不在事后 `chown -R /app`（那样会把整个 node_modules 再复制成一层，每个版本都要重新下载）；`/app/state` 归 node，新建的数据卷首次挂载时继承该属主，已有数据卷由升级脚本修正。入口脚本在数据目录或 `procure.db` 不可写时直接报错并给出 chown 命令；`npx prisma migrate deploy` 与 `node dist/main.js` 均无需 root。
+- **server 健康检查**：`GET http://127.0.0.1:3000/api/auth/status`（全局前缀 `api` 下的公开路由，会查询数据库），间隔 30 秒、超时 5 秒、启动宽限 40 秒、重试 3 次。web 用 `depends_on: server: {condition: service_healthy}` 等 server 健康后再启动，因此 `docker compose up` 要等首次检查通过（约 30 秒）才返回；server 起不来时 `up` 直接失败，部署脚本打印日志，升级脚本打印回退命令。
+- **web 健康检查**：`wget -qO- http://127.0.0.1/`（nginx:alpine 自带 busybox wget），只检查静态页。
+- server 对 ocr 仍是普通 `depends_on`：OCR 加载模型慢，不让 server 等 OCR 健康；OCR 就绪仍由部署和升级脚本单独检查。
+- **OCR 仍以 root 运行**：PaddleOCR/PaddleX 在构建期把模型下载到 `/root/.paddlex/official_models` 并按 `models.sha256` 校验，运行时也使用主目录下的缓存和配置。改用户需要同时迁移这些路径、权限和校验步骤并重新做真实模型验收，本次不改。
+
+**版本与标签**：旧的 v1.2.x 标签属于重写前的旧代码库，已从仓库删除，版本从 v2.0.0 重新开始，变更见 [CHANGELOG](../CHANGELOG.md)。早先拉取到本机的旧标签不会被 `git fetch --tags` 自动删除，不影响升级。
+
+**试用环境**：`deploy/trial.sh` 的项目名改为 `canglin-trial-aa981bc`，数据卷随之变为 `canglin-trial-aa981bc_trial-state`（旧项目名下的试用数据不再被使用）。`deploy/compose.trial.yml` 的三个 image 行仍钉在候选版本 `aa981bc` 的旧名镜像摘要（`procure-lite-*`，仍在 GHCR 上）；CI 推送 `canglin-*` 新镜像后再重新钉住候选版本和摘要。若曾用旧项目名启动过试用，先停掉 `procure-lite-trial-aa981bc` 项目的容器，以免占用 18080 端口。
+
 ## 验证命令
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @procure-lite/shared build
-pnpm --filter @procure-lite/server build
-pnpm --filter @procure-lite/server test
-pnpm --filter @procure-lite/web typecheck
-pnpm --filter @procure-lite/web test
-pnpm --filter @procure-lite/web exec playwright install --with-deps chromium
-pnpm --filter @procure-lite/web test:e2e
+pnpm --filter @canglin/shared build
+pnpm --filter @canglin/server build
+pnpm --filter @canglin/server test
+pnpm --filter @canglin/web typecheck
+pnpm --filter @canglin/web test
+pnpm --filter @canglin/web exec playwright install --with-deps chromium
+pnpm --filter @canglin/web test:e2e
 python3 -m unittest discover -s deploy/tests -v
 python3 -m unittest discover -s scripts/tests -v
-docker build -f deploy/Dockerfile.ocr -t procure-lite-ocr:runtime-test .
-docker build -f deploy/Dockerfile.ocr-test -t procure-lite-ocr:test .
-docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test
-docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test python -m tests.smoke_engine
+docker build -f deploy/Dockerfile.ocr -t canglin-ocr:runtime-test .
+docker build -f deploy/Dockerfile.ocr-test -t canglin-ocr:test .
+docker run --rm --network none --cpus 2 --memory 4g canglin-ocr:test
+docker run --rm --network none --cpus 2 --memory 4g canglin-ocr:test python -m tests.smoke_engine
 ```
 
 浏览器测试启动独立临时 SQLite 和真实 API，OCR/AI 使用明确的合成替身；不访问生产数据。协议错误测试另外覆盖 Responses 请求与异常。真实 OCR 容器验收命令在断网和资源限制下运行模型；实际执行状态须查对应验收记录，合成测试通过不代表本次已完成真实模型验收。
@@ -125,12 +168,12 @@ docker run --rm --network none --cpus 2 --memory 4g procure-lite-ocr:test python
 
 ```sh
 # 构建或拉取同一源码标签的全部三个镜像；OCR 失败必须失败退出
-bash deploy/upgrade.sh /opt/procure-lite --build
+bash deploy/upgrade.sh /opt/canglin --build
 # 回退必须同时恢复旧数据和固定的旧镜像
-bash deploy/rollback.sh /opt/procure-lite /opt/procure-lite/pre-upgrade-backups/release-TIMESTAMP
+bash deploy/rollback.sh /opt/canglin /opt/canglin/pre-upgrade-backups/release-TIMESTAMP
 ```
 
-升级脚本先检查旧数据卷、旧镜像和备份工具，拉取或构建三个新镜像后才停机。仓库更新使用 `git merge --ff-only origin/main`，已跟踪文件有改动时退出，不再清理本机未跟踪的配置。成功获取镜像后将源码标签持久化为 `.env` 中的 `RELEASE_TAG`；首次部署同样如此。日常 `docker compose up` 沿用该版本，不会自行切换到 latest。默认项目名和数据卷为 `procure-lite` / `procure-lite_procure-state`，自定义项目名需单独调整部署流程。
+升级脚本先检查旧数据卷、旧镜像和备份工具，拉取或构建三个新镜像后才停机。仓库更新使用 `git merge --ff-only origin/main`，已跟踪文件有改动时退出，不再清理本机未跟踪的配置。成功获取镜像后将源码标签持久化为 `.env` 中的 `RELEASE_TAG`；首次部署同样如此。日常 `docker compose up` 沿用该版本，不会自行切换到 latest。默认项目名和数据卷为 `canglin` / `canglin_state`（改名前的旧实例由升级脚本迁移，见[改名为仓廪](#2026-10-10-改名为仓廪并发布-v200)），自定义项目名需单独调整部署流程。
 
 发布记录包含旧/新源码、迁移校验、三个镜像 ID、OCR 版本及模型就绪结果。自动回退点不会清理，稳定后由管理员归档。不要仅回退代码而继续使用迁移后的数据库。旧版服务器凭据仍由部署环境管理，应用不会自动替换服务商或密钥。
 
@@ -139,11 +182,11 @@ bash deploy/rollback.sh /opt/procure-lite /opt/procure-lite/pre-upgrade-backups/
 回退后源码仍为新版本，**管理旧版容器必须显式使用旧配置与旧镜像文件**。不要直接运行普通的 `docker compose up` 或 `--build`，以免重新启动新版：
 
 ```bash
-cd /opt/procure-lite
+cd /opt/canglin
 release_dir="$PWD/pre-upgrade-backups/release-TIMESTAMP"
 # 有本机 override 时，在 old-compose.yml 和 old-images.yml 之间追加
 # -f "$PWD/docker-compose.override.yml"
-docker compose --env-file .env -p procure-lite --project-directory "$PWD" \
+docker compose --env-file .env -p canglin --project-directory "$PWD" \
   -f "$release_dir/old-compose.yml" -f "$release_dir/old-images.yml" ps
 # 把最后的 ps 换成 logs、restart 或 up -d --no-build --pull never 管理旧版。
 ```

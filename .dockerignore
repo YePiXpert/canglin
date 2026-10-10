@@ -12,7 +12,7 @@ pre-upgrade-backups
 .github
 .env
 *.log
-apps/ocr/procure_lite_ocr.egg-info
+apps/ocr/canglin_ocr.egg-info
 __pycache__
 **/test-results
 **/playwright-report
