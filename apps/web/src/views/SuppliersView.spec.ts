@@ -3,6 +3,7 @@ import { defineComponent, h } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import SuppliersView from './SuppliersView.vue';
 import { suppliersApi, type SupplierRow } from '@/api';
+import { workflowApi } from '@/api/workflow';
 
 const { catalog, toast } = vi.hoisted(() => ({
   catalog: { invalidateSuppliers: vi.fn() },
@@ -19,6 +20,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const mockedList = vi.mocked(suppliersApi.list);
 const mockedUpsert = vi.mocked(suppliersApi.upsert);
+const mockedPrices = vi.mocked(workflowApi.prices);
 
 /**
  * reka 的 Dialog 会传送到 body 并接管焦点；这里换成直接渲染插槽的桩。
@@ -53,6 +55,32 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockedList.mockResolvedValue([DELI]);
   mockedUpsert.mockResolvedValue(DELI);
+  mockedPrices.mockResolvedValue([]);
+});
+
+describe('SuppliersView：列表', () => {
+  it('行内只有「编辑」，删除收在「…」菜单里（危险动作不出现在行内）', async () => {
+    const wrapper = await mountView();
+    expect(button(wrapper, '编辑')).toBeDefined();
+    expect(wrapper.findAll('button').some((b) => b.text() === '删除')).toBe(false);
+    expect(wrapper.find('button[aria-label="得力文具 的更多操作"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('共 1 家');
+  });
+
+  it('成交价格：搜索无结果时复述关键词并可一键清除；没有关键词时是「还没有成交价格」', async () => {
+    const wrapper = await mountView();
+    await click(wrapper, '成交价格');
+    expect(wrapper.text()).toContain('还没有成交价格');
+    const search = wrapper.find('input[aria-label="搜索成交价格"]');
+    await search.setValue('复印纸');
+    await search.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(mockedPrices).toHaveBeenLastCalledWith({ search: '复印纸' });
+    expect(wrapper.text()).toContain('没有找到「复印纸」的成交价格');
+    await click(wrapper, '清除关键词');
+    expect(mockedPrices).toHaveBeenLastCalledWith({ search: undefined });
+    expect(wrapper.text()).toContain('还没有成交价格');
+  });
 });
 
 describe('SuppliersView：供应商弹窗', () => {
@@ -82,14 +110,14 @@ describe('SuppliersView：供应商弹窗', () => {
 
   it('编辑：带上 id；没改动时「取消」直接关闭，有改动时交给 Dialog 先确认放弃', async () => {
     const wrapper = await mountView();
-    await wrapper.find('button[title="编辑"]').trigger('click');
+    await click(wrapper, '编辑');
     expect(dialog(wrapper).props('title')).toBe('编辑供应商');
     expect((field(wrapper, '名称').element as HTMLInputElement).value).toBe('得力文具');
     expect(dialog(wrapper).props('dirty')).toBe(false);
     await click(wrapper, '取消');
     expect(dialog(wrapper).props('open')).toBe(false);
 
-    await wrapper.find('button[title="编辑"]').trigger('click');
+    await click(wrapper, '编辑');
     await field(wrapper, '联系人').setValue('李四');
     expect(dialog(wrapper).props('dirty')).toBe(true);
     await click(wrapper, '取消');

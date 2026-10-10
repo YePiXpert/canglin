@@ -2,13 +2,19 @@
 import { computed, ref } from 'vue';
 import Button from '@/components/ui/Button.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Menu from '@/components/ui/Menu.vue';
 import Panel from '@/components/ui/Panel.vue';
+import type { MenuItem } from '@/components/ui/types';
 import { systemApi, downloadFile, type BackupInfo } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
 import { formatBytes } from '@/utils/format';
+
+/* 多个根节点（面板、恢复中遮罩、确认框）：设置页传来的 id（子导航锚点）落在面板上 */
+defineOptions({ inheritAttrs: false });
 
 /** 首屏由设置页 load() 拉取（骨架屏消失前就绪）；创建、删除备份后由本面板重新拉取并回写 */
 const backups = defineModel<BackupInfo[]>('backups', { required: true });
@@ -74,17 +80,25 @@ async function download(backup: BackupInfo): Promise<void> {
 }
 
 const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.sizeBytes, 0));
+
+/** 行内只放「下载」；恢复与删除都会覆盖或丢弃数据，收进「…」并各走确认框 */
+function moreActions(backup: BackupInfo): MenuItem[] {
+  return [
+    { label: '恢复到这份备份', icon: 'restore', onSelect: () => (restoreTarget.value = backup) },
+    { label: '删除', icon: 'trash', danger: true, onSelect: () => (deleteBackupTarget.value = backup) },
+  ];
+}
 </script>
 
 <template>
   <!-- 备份管理：表格贴边；手机（< 640px）每份备份一张卡片，操作在卡片底部 -->
-  <Panel title="备份管理" description="恢复会覆盖当前数据库与附件，操作前请先创建备份" flush>
+  <Panel v-bind="$attrs" title="备份管理" description="恢复会覆盖当前数据库与附件，操作前请先创建备份" flush>
     <template #actions>
       <Button variant="secondary" size="sm" :loading="creating" @click="createBackup">
         <Icon name="plus" :size="14" /> 立即备份
       </Button>
     </template>
-    <p v-if="backups.length === 0" class="px-5 py-10 text-center text-[13px] text-faint">还没有备份</p>
+    <EmptyState v-if="backups.length === 0" icon="history" title="还没有备份" description="点「立即备份」留一份当前数据；开启自动备份后会按间隔生成。" />
     <!-- 桌面：最高 384px 内部滚动、表头钉在滚动框顶边；手机卡片不设高度上限，随页面滚动 -->
     <div v-else class="overflow-auto sm:max-h-96">
       <table class="table-base table-sticky table-cards">
@@ -100,37 +114,17 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
           <tr v-for="b in backups" :key="b.name">
             <!-- 主字段：表格里占满剩余宽度、单行截断；卡片里整行显示，长文件名折行 -->
             <td class="sm:w-full sm:max-w-0 sm:pl-5">
-              <p class="break-words text-ink sm:truncate" :title="b.name">{{ b.name }}</p>
+              <p class="break-all font-mono text-[12.5px] text-ink sm:truncate" :title="b.name">{{ b.name }}</p>
             </td>
             <td data-label="创建时间" class="num text-muted">{{ formatDateTime(b.createdAt) }}</td>
             <td data-label="大小" class="num text-right text-muted">{{ formatBytes(b.sizeBytes) }}</td>
-            <!-- 表格：32px 按钮 + 上下 6px = 44px 行高；卡片：留白由 .card-actions 给，按钮 40px 触控高度，最后一个 -mr-2 与上方数值右对齐 -->
-            <td class="card-actions text-right whitespace-nowrap sm:py-1.5 sm:pr-3">
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 h-8 max-sm:h-10 px-2 rounded-md text-[13px] text-muted hover:text-ink hover:bg-primary-soft transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-default"
-                :disabled="downloadingBackup === b.name"
-                @click="download(b)"
-              >
-                <Icon name="download" :size="14" />
-                {{ downloadingBackup === b.name ? '下载中…' : '下载' }}
-              </button>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 h-8 max-sm:h-10 px-2 rounded-md text-[13px] text-muted hover:text-amber hover:bg-amber-soft transition-colors duration-150 cursor-pointer"
-                @click="restoreTarget = b"
-              >
-                <Icon name="restore" :size="14" />
-                恢复
-              </button>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 h-8 max-sm:h-10 max-sm:-mr-2 px-2 rounded-md text-[13px] text-muted hover:text-red hover:bg-red-soft transition-colors duration-150 cursor-pointer"
-                @click="deleteBackupTarget = b"
-              >
-                <Icon name="trash" :size="14" />
-                删除
-              </button>
+            <td class="card-actions sm:whitespace-nowrap sm:py-2 sm:pr-4">
+              <div class="flex items-center justify-end gap-1">
+                <Button size="sm" :loading="downloadingBackup === b.name" @click="download(b)">
+                  <Icon v-if="downloadingBackup !== b.name" name="download" :size="14" />下载
+                </Button>
+                <Menu :items="moreActions(b)" :trigger-label="`${b.name} 的更多操作`" />
+              </div>
             </td>
           </tr>
         </tbody>
@@ -146,7 +140,7 @@ const totalBackupSize = computed(() => backups.value.reduce((sum, b) => sum + b.
     v-if="restoring"
     class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px]"
   >
-    <div class="flex flex-col items-center gap-3 w-full max-w-xs px-6 py-6 text-center bg-surface border border-line rounded-[14px] shadow-(--shadow-pop)">
+    <div class="flex flex-col items-center gap-3 w-full max-w-xs px-6 py-6 text-center bg-surface border border-line rounded-xl shadow-(--shadow-pop)">
       <span class="size-8 border-[3px] border-line-strong border-t-ink rounded-full animate-spin" />
       <p class="text-[15px] font-semibold text-ink">正在恢复备份…</p>
       <p class="text-[13px] text-muted">服务短暂不可用，请不要关闭页面</p>

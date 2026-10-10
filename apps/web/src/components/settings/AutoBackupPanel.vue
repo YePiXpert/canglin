@@ -65,35 +65,45 @@ async function saveBackupConfig(): Promise<void> {
 </script>
 
 <template>
-  <!-- 自动备份 -->
-  <Panel title="自动备份" description="定期打包数据库与附件，保留最近 N 份">
-    <Switch v-model="backupForm.enabled" label="启用" label-position="left" class="w-full justify-between" />
-    <div class="mt-5 pt-5 border-t border-line grid grid-cols-2 gap-4 sm:flex sm:flex-wrap sm:items-start">
-      <Input
-        v-model="backupForm.intervalHours"
-        label="间隔（小时）"
-        type="number"
-        min="1"
-        max="720"
-        class="sm:w-32"
-        :error="backupErrors.intervalHours"
-      />
-      <Input
-        v-model="backupForm.keepCount"
-        label="保留份数"
-        type="number"
-        min="1"
-        max="100"
-        class="sm:w-32"
-        :error="backupErrors.keepCount"
-      />
-      <Button
-        variant="primary"
-        class="col-span-2 justify-self-end sm:ml-auto sm:mt-6.5"
-        :loading="backupSaving"
-        @click="saveBackupConfig"
-        >保存</Button
+  <!-- 自动备份：开关一行；间隔、保留份数与保存一行 -->
+  <Panel title="自动备份" description="定期打包数据库与附件，保留最近 N 份" flush>
+    <div class="divide-y divide-line">
+      <!-- 说明走 Switch 的 description（aria-describedby），这里把它调成设置行的 12.5px muted -->
+      <Switch
+        v-model="backupForm.enabled"
+        label-position="left"
+        description="保留份数包含手动创建的备份；每次自动备份后，超出份数的最早备份会被删除"
+        class="w-full justify-between px-5 py-3.5 [&_.text-meta]:text-[12.5px] [&_.text-meta]:text-muted"
       >
+        <span class="text-[13.5px] font-medium text-ink">启用自动备份</span>
+      </Switch>
+      <div class="grid grid-cols-2 gap-4 px-5 py-4 sm:flex sm:flex-wrap sm:items-start">
+        <Input
+          v-model="backupForm.intervalHours"
+          label="间隔（小时）"
+          type="number"
+          min="1"
+          max="720"
+          class="sm:w-32"
+          :error="backupErrors.intervalHours"
+        />
+        <Input
+          v-model="backupForm.keepCount"
+          label="保留份数"
+          type="number"
+          min="1"
+          max="100"
+          class="sm:w-32"
+          :error="backupErrors.keepCount"
+        />
+        <Button
+          variant="primary"
+          class="col-span-2 justify-self-end sm:ml-auto sm:mt-6.5"
+          :loading="backupSaving"
+          @click="saveBackupConfig"
+          >保存</Button
+        >
+      </div>
     </div>
   </Panel>
 </template>

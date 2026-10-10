@@ -102,8 +102,8 @@
 - 页面根元素不加外边距；表格随内容自然增高，不用 `h-full flex-1 min-h-0` 撑满屏。
 - `<main>` 带 `relative`：没有定位祖先的 `absolute` / `sr-only` 元素以它为包含块并跟着滚动，不会把文档撑出第二个滚动条。
 - 滚动的是 `<main>` 而不是 window，路由的 `scrollBehavior` 不起作用；只改 query 的页内切换不会自动回顶，需要时由页面自己滚动 `<main>`（导入页切换任务就是这样）。
-- 内容宽度：正文最宽 1280px（由 `--main-px` 实现）；设置类三个子页由 `SettingsLayout` 限制在 960px。
-- **PageHeader 每页一个**：系统设置 / 供应商与比价 / 审计日志三个子页的页头与分区标签由 `SettingsLayout` 统一给出，子页里不再放 PageHeader。
+- 内容宽度：正文最宽 1280px（由 `--main-px` 实现）；设置（`/settings` 与供应商、审计两个子页）由 `SettingsLayout` 排成「左 200px 子导航 + 右侧内容最宽 760px」。
+- **PageHeader 每页一个**：设置的页头「设置」与子导航（`<nav aria-label="设置分区">`）由 `SettingsLayout` 统一给出，`/settings`、`/settings/suppliers`、`/settings/audit` 里不再放 PageHeader。
 - **StickyActionBar** 钉在 `<main>` 底边：桌面贴视口底边，手机贴在底部标签栏之上；内容不满一屏时跟在内容后面。
 - **钉表头**：`.table-sticky` 默认相对 `<main>` 钉住（桌面贴顶栏下沿、手机贴顶栏下沿）；表格放在自己的 `overflow-auto` 纵向滚动容器里时钉在容器顶边。表格和 `<main>` 之间只要夹着别的滚动容器（`overflow-x-auto` 外层、`overflow-hidden` 面板），表头就钉不住——横向滚动与钉表头不能兼得，这是 CSS 的限制。需要钉时让外层在放得下时 `overflow-visible`（可用容器查询，如 `@min-[1080px]:overflow-visible`），面板用 `Panel`（`overflow-clip` 不是滚动容器）。
 
@@ -192,13 +192,12 @@
 <Checkbox v-model="selected" :value="row.id" :aria-label="`选择 ${row.itemName}`" />
 ```
 
-### 5.4 Tabs / RouteTabs
+### 5.4 Tabs
 
 - `Tabs`（按值切换）：`tabs: TabItem[]`（`value`、`label`、`count?`、`icon?`、`disabled?`）；`block`（撑满一行、各项等宽）；`ariaLabel`（整组 `role="group"`）。每项是普通 `<button>`，当前项 `aria-pressed="true"`；事件 `update:modelValue`、`change`（点当前项不触发）。
   - `variant="segmented"`：surface-2 轨道（2px 内边距、6px 圆角）+ 当前项白底轻阴影；用于列表筛选（「全部 · 有待采购 · 有待到货 …」）、面板顶部的视图切换和分段控件。`count` 是跟在标签后的小号数字，当前项的计数朱砂。
   - `variant="underline"`（默认）：只配合页级分区；当前项墨色 600 + 底部 2px 朱砂下划线（左右各收 12px）；`count` 是小药丸（surface-2 底），当前项变朱砂柔底。
   - `count` 会并入按钮的可访问名称（「有待采购 2」）：e2e 按精确名称点的页签（「库存物品」「领用与归还」「已入账」…）加 `count` 前先改测试。
-- `RouteTabs`（路由版 underline，`SettingsLayout` 在用）：`tabs: RouteTabItem[]`（`to`、`label`、`icon?`、`count?`、`exact?`），渲染为 `<nav aria-label>`，当前项 `aria-current="page"`。
 - 按 query 区分的列表行（如 `/import?task=…`）不要直接用 `<router-link>`：它判断「当前」时不看 query，会给每一行都加 `aria-current="page"`。用 `custom` 插槽自己渲染 `<a>`，「当前」由页面标注。
 
 ```vue
@@ -365,7 +364,7 @@
 ## 7. 可访问性与操作
 
 - 焦点：全局 `:focus-visible` 是 2px 朱砂外框（外扩 2px）；文本类输入控件（`.control`）是墨色描边 + 3px 淡环；不要去掉焦点样式。
-- 原生语义优先：复选、单选、开关都是原生 input；Tabs 项是 `<button>`（当前项 `aria-pressed`）；RouteTabs 是 `<nav>` 里的链接（`aria-current="page"`）。
+- 原生语义优先：复选、单选、开关都是原生 input；Tabs 项是 `<button>`（当前项 `aria-pressed`）；按路由切换的导航（顶栏、设置子导航）是 `<nav>` 里的链接（当前页 `aria-current="page"`）。
 - `aria-pressed` 只给开关按钮；展开器用 `aria-expanded`，两者不同时出现。
 - 补充说明走 `description`（`aria-describedby`），不进可访问名称。
 - 纯图标按钮必须有 `aria-label`（`.row-action` 可以用 `title`）；`Icon` 本身 `aria-hidden`。
@@ -399,8 +398,16 @@
   - 当前任务只由地址里的 `task` 决定：切换前先保存草稿（保存失败就拦下并说明原因），切换时清空上一个任务的状态、丢弃迟到的响应，并把 `<main>` 滚回顶部。已确认的任务只读。
   - 重复上传相同内容的原件时，上传框下面出现一条 sheet：琥珀 chip「同一原件」+ 说明 +「打开已有任务」（primary sm）「这是新的业务，继续处理」「取消本次上传」。
   - 地址里的任务不存在时显示 `role="alert"` 的琥珀 `Notice`，不轮询、不自动新建任务。
-- **系统设置 `/settings`**：`SettingsLayout` 给出页头与分区标签（系统设置 / 供应商与比价 / 审计日志），内容最宽 960px；每个区块一个 `Panel`（外观、账号安全、系统状态、AI 助手、自动备份、备份管理），除「外观」外各是 `components/settings/` 下的一个组件（`AccountSecurityPanel`、`SystemStatusPanel`、`AiSettingsPanel`、`AutoBackupPanel`、`BackupManagerPanel`）；`SettingsView` 只加载系统状态、备份列表、OCR 健康与 AI 配置并按顺序编排，初始值经 props 交给面板，备份列表用 `v-model:backups`。系统状态显示申请单 / 物品 / 有效单据（已过账）数量；接口返回库存核对结果时追加「库存核对」项（正常 = teal、N 处不一致 = red、尚未核对 = gray Badge，后跟核对时间）。供应商页查询实际成交价格，明确展示规格、单位和来源申请；不以旧的品名报价表为新采购提供建议。AI 区的文案被 e2e 依赖（「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」）。
-- **统计报表 `/insights`**：日期范围与分组筛选，成交/取消/退款/净成交指标，金额分组表、到货指标与分物品单位的员工领用表，分别导出 CSV。两张表都是 `table-base table-cards`：≥ 640px 在自己的容器横向滚动，不能撑宽整个页面；< 640px 按 §4 变成卡片。查询失败的原因是页面上唯一的 `role="alert"`（e2e 按它断言）。旧地址 `/reports` 重定向到这里。
+- **设置 `/settings`**：
+  - `SettingsLayout` 给出页头「设置」与子导航 `<nav aria-label="设置分区">`：桌面左侧 200px、滚动时钉在 `<main>` 顶部，当前项 surface 底 + 左侧 2px 朱砂 + 墨色 600；< lg 变成横向滚动的药丸行。右侧内容最宽 760px。「系统」一组是 `/settings` 各区块的锚点（外观、账号安全、系统状态、AI 助手、自动备份、备份管理，id 即地址里的 `#hash`，见 `components/settings/sections.ts`），当前项跟着 `<main>` 的滚动位置走（`aria-current="true"`），带 `#hash` 打开时载入后定位到区块；「主数据与记录」是供应商与比价 `/settings/suppliers`、审计日志 `/settings/audit` 两个子页（`aria-current="page"`）。
+  - 每个区块一个 `Panel flush`：标题行 + 设置行（`components/settings/SettingRow.vue`：左 13.5px / 500 label + 12.5px muted 说明，右边控件，行间 `divide-y divide-line`）；开关行直接用 `Switch`（`label-position="left"`，说明走 `description`，用 `[&_.text-meta]:` 调成 12.5px muted）。除「外观」外各区块是 `components/settings/` 下的一个组件（`AccountSecurityPanel`、`SystemStatusPanel`、`AiSettingsPanel`、`AutoBackupPanel`、`BackupManagerPanel`）；`SettingsView` 只加载系统状态、备份列表、OCR 健康与 AI 配置并按顺序编排，初始值经 props 交给面板，备份列表用 `v-model:backups`。
+  - 账号安全：修改密码、重置恢复码各在弹窗里；退出登录只在顶栏账号菜单与手机「更多」里。系统状态：标题说明是版本与运行时长；四格数字（申请单 / 物品 / 有效单据（已过账）/ 数据库）；两行状态：库存核对（接口返回时才显示：正常 = teal、N 处不一致 = red、尚未核对 = gray Badge，后跟核对时间）与本地 OCR 服务（不可用时下方琥珀提示）。备份管理行内只有「下载」，恢复与删除收在「…」里并各走确认框。AI 区的文案被 e2e 依赖（「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」）。
+  - 供应商与比价：查询实际成交价格，明确展示规格、单位和来源申请；不以旧的品名报价表为新采购提供建议。行内「编辑」+「…」（删除）；成交价格搜索无结果时复述关键词并给「清除关键词」。审计日志：操作类型 chip 只用 gray / amber（覆盖或回退数据：恢复备份、改密、撤销登记…）/ red（失败、删除、库存核对不一致），业务登记（`WORKFLOW_*`）显示中文名；整行可点展开详情，键盘与读屏用详情格里的展开按钮（`aria-expanded`）。
+- **统计报表 `/insights`**：
+  - 筛选一行：期间分段（全部 / 本月 / 上月 / 本季度 / 自定义：快捷期间按本地日历写入整月 / 整季的起止日期并立即查询；按当前填的日期认出对应的快捷期间；「自定义」把焦点交给起始日期）+「起始日期」「结束日期」+ 金额分组 +「查询报表」。
+  - 核心指标是一张面板：左边净成交金额（34px / 700）与公式行（成交原额 − 采购取消 − 退款退货，换货保留成交金额），右边四个小指标：采购单数（各分组 `purchaseCount` 之和，按部门分组时跨部门的单据各计一次）、到货原额、净到货金额、实物退货金额。
+  - 「采购金额」面板（标题保持这四个字：e2e 按标题精确找这个区块；分组方式与区间写在说明里）：第一列名跟着分组方式走；净成交列是单色 `bg-blue` 细条（8px、右端圆角，按本表最大净成交取比例，0 与负数不画）+ 靠右的加粗数字；`tfoot` 合计。「员工领用」同样式。两张表右上各有「导出 CSV」（secondary sm），都是 `table-base table-cards`：≥ 640px 在自己的容器横向滚动，不能撑宽整个页面；< 640px 按 §4 变成卡片（条形与合计行在卡片里不显示，合计见核心指标）。
+  - 金额 ¥ 前缀 + 千分位（负号在 ¥ 之后：¥-0.34）。没有数据时用无结果样式的 EmptyState（有区间时给「查看全部时间」）。查询失败的原因是页面上唯一的 `role="alert"`（e2e 按它断言）。旧地址 `/reports` 重定向到这里。
 - **库存与领用 `/stock`**：
   - 页头：「刷新库存」图标按钮 +「新增库存物品」（secondary）。underline 页签：库存物品 N / 到货待处理 N / 领用与归还 / 库存流水；计数跟着当前搜索，并入按钮的可访问名称（e2e 用 `/^库存物品( \d+)?$/` 点页签）。
   - 库存物品、到货待处理是同一个 `Panel flush`：工具栏 = 搜索「搜索品名或规格」+ 开关按钮「有库存 N」「已空 N」（互斥，再点一次取消；地址里 `stock=in|empty`）+ 右侧「按品名排序 · 共 N 种」（刷新时「刷新中…」）。空态：首次使用（新增库存物品 / 查看申请单）、到货待处理已清空（一行提示）、搜索或筛选无结果（复述条件 + 清除）。

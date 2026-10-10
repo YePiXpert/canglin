@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
+import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Disclosure from '@/components/ui/Disclosure.vue';
 import Icon from '@/components/ui/Icon.vue';
@@ -8,9 +9,11 @@ import Input from '@/components/ui/Input.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Switch from '@/components/ui/Switch.vue';
+import SettingRow from './SettingRow.vue';
 import { aiApi } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
+import { formatDateTime } from '@/utils/datetime';
 import type { AiConfigView } from '@canglin/shared';
 
 const props = defineProps<{
@@ -31,6 +34,13 @@ const aiForm = reactive({
 const aiCapabilities = ref<AiConfigView['capabilities']>();
 /** 识别检测通过 = 图片输入与结构化输出都可用 */
 const aiCapabilitiesOk = computed(() => !!aiCapabilities.value?.image && !!aiCapabilities.value?.structured);
+/** 识别检测那一行的说明：最近一次检测的时间与结论 */
+const aiCapabilitiesText = computed(() => {
+  const caps = aiCapabilities.value;
+  if (!caps) return '首次开启自动识别前，请先检测连接';
+  const when = formatDateTime(caps.checkedAt);
+  return aiCapabilitiesOk.value ? `${when} 检测通过：支持图片输入与结构化输出` : `${when} 检测未通过，请检查连接或模型`;
+});
 const aiErrors = reactive<Record<string, string>>({});
 const aiSaving = ref(false);
 const aiTesting = ref(false);
@@ -152,100 +162,122 @@ async function testAi(): Promise<void> {
 </script>
 
 <template>
-  <!-- AI 助手 -->
-  <Panel title="AI 助手" description="连接一次服务，选好模型即可使用。" body-class="space-y-5 p-5">
-    <Disclosure
-      :open="!aiKeySet"
-      class="rounded-lg bg-surface-2 p-4"
-      :summary="aiKeySet ? '服务已配置 · 修改连接' : '连接 AI 服务'"
-      :chevron-size="16"
-      summary-class="-mx-1 px-1 py-0.5 rounded-md text-sm font-medium text-ink"
-    >
-      <div class="grid gap-4 mt-4 sm:grid-cols-2">
-        <Input
-          v-model="aiForm.baseUrl"
-          label="接口地址"
-          placeholder="https://服务商地址/v1"
-          :error="aiErrors.baseUrl"
-        />
-        <div
-          v-if="aiKeySet && !aiChangeKey"
-          class="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-9 text-sm text-muted sm:mt-6.5 sm:self-start"
-        >
-          <p class="flex items-center gap-1.5">
-            <Icon name="check-circle" :size="15" class="shrink-0 text-accent" />
-            {{
-              aiKeySource === 'server'
-                ? '服务器已配置 Key，无需填写'
-                : 'Key 已保存，无需重复填写'
-            }}
-          </p>
-          <Button v-if="aiKeySource !== 'server'" variant="link" class="text-[13px]" @click="aiChangeKey = true">
-            更换密钥
-          </Button>
+  <!--
+    AI 助手：标题行 + 设置行。连接是一行可展开的折叠区（已配置时默认收起），
+    其后是模型、两个开关、识别检测，最后一行「保存」。
+    e2e 依赖的文案：「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」。
+  -->
+  <Panel title="AI 助手" description="原件识别与 AI 问答共用这里的连接和模型；密钥只保存在服务端，页面不显示明文。" flush>
+    <div class="divide-y divide-line">
+      <Disclosure
+        :open="!aiKeySet"
+        chevron="end"
+        :chevron-size="16"
+        summary-class="px-5 py-3.5 hover:bg-surface-2/40"
+      >
+        <template #summary>
+          <span class="min-w-0">
+            <span class="block text-[13.5px] leading-5 font-medium text-ink">{{ aiKeySet ? '服务已配置 · 修改连接' : '连接 AI 服务' }}</span>
+            <span v-if="aiKeySet && aiSavedBaseUrl" class="mt-0.5 block truncate font-mono text-xs leading-[18px] text-muted">{{ aiSavedBaseUrl }}</span>
+            <span v-else-if="!aiKeySet" class="mt-0.5 block text-[12.5px] leading-[18px] text-muted">填写服务商的接口地址与 API Key，只需填写一次</span>
+          </span>
+        </template>
+        <div class="grid gap-4 px-5 pb-4 sm:grid-cols-2">
+          <Input
+            v-model="aiForm.baseUrl"
+            label="接口地址"
+            placeholder="https://服务商地址/v1"
+            :error="aiErrors.baseUrl"
+          />
+          <div
+            v-if="aiKeySet && !aiChangeKey"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-9 text-sm text-muted sm:mt-6.5 sm:self-start"
+          >
+            <p class="flex items-center gap-1.5">
+              <Icon name="check-circle" :size="15" class="shrink-0 text-teal" />
+              {{
+                aiKeySource === 'server'
+                  ? '服务器已配置 Key，无需填写'
+                  : 'Key 已保存，无需重复填写'
+              }}
+            </p>
+            <Button v-if="aiKeySource !== 'server'" variant="link" class="text-[13px]" @click="aiChangeKey = true">
+              更换密钥
+            </Button>
+          </div>
+          <Input
+            v-else
+            v-model="aiForm.apiKey"
+            type="password"
+            label="API Key"
+            :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
+            autocomplete="new-password"
+            :error="aiErrors.apiKey"
+          />
         </div>
-        <Input
-          v-else
-          v-model="aiForm.apiKey"
-          type="password"
-          label="API Key"
-          :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
-          autocomplete="new-password"
-          :error="aiErrors.apiKey"
-        />
-      </div>
-    </Disclosure>
+      </Disclosure>
 
-    <div class="space-y-2">
-      <div class="flex items-start gap-3">
-        <ModelSelect
-          class="flex-1 min-w-0"
-          v-model="aiForm.model"
-          label="模型"
-          :models="availableModels"
-          :error="aiErrors.model"
-        />
-        <Button
-          class="mt-6.5"
-          variant="secondary"
-          :loading="aiModelsLoading"
-          :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
-          @click="loadAiModels"
-          >获取模型列表</Button
-        >
+      <div class="space-y-2 px-5 py-4">
+        <div class="flex items-start gap-3">
+          <ModelSelect
+            class="flex-1 min-w-0"
+            v-model="aiForm.model"
+            label="模型"
+            :models="availableModels"
+            :error="aiErrors.model"
+          />
+          <Button
+            class="mt-6.5"
+            variant="secondary"
+            :loading="aiModelsLoading"
+            :disabled="aiConnectionDirty || !aiKeySet || aiSaving || aiTesting"
+            @click="loadAiModels"
+            >获取模型列表</Button
+          >
+        </div>
+        <p v-if="aiConnectionDirty" class="text-xs text-muted">
+          连接信息已修改，保存后即可获取模型。
+        </p>
+        <Notice v-if="aiModelsError" variant="inline" size="sm" role="status">{{ aiModelsError }}</Notice>
       </div>
-      <p v-if="aiConnectionDirty" class="text-xs text-muted">
-        连接信息已修改，保存后即可获取模型。
-      </p>
-      <Notice v-if="aiModelsError" variant="inline" size="sm" role="status">{{ aiModelsError }}</Notice>
-    </div>
 
-    <div class="flex flex-col divide-y divide-line border-y border-line">
-      <Switch v-model="aiForm.enabled" label="启用 AI 助手" label-position="left" class="w-full justify-between py-3.5" />
+      <!-- 开关行：label 与设置行同字号；说明走 Switch 的 description（aria-describedby），这里把它调成设置行的 12.5px muted -->
+      <Switch
+        v-model="aiForm.enabled"
+        label-position="left"
+        description="关闭后 AI 问答与原件自动识别都停用"
+        class="w-full justify-between px-5 py-3.5 [&_.text-meta]:text-[12.5px] [&_.text-meta]:text-muted"
+      >
+        <span class="text-[13.5px] font-medium text-ink">启用 AI 助手</span>
+      </Switch>
       <Switch
         v-model="aiForm.autoImport"
-        label="上传后自动识别单据"
-        description="自动识别会将原件发送给所选服务商，入账仍需你确认。"
         label-position="left"
-        class="w-full justify-between py-3.5"
-      />
-    </div>
+        description="自动识别会将原件发送给所选服务商，入账仍需你确认。"
+        class="w-full justify-between px-5 py-3.5 [&_.text-meta]:text-[12.5px] [&_.text-meta]:text-muted"
+      >
+        <span class="text-[13.5px] font-medium text-ink">上传后自动识别单据</span>
+      </Switch>
 
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <Notice v-if="aiCapabilities" variant="inline" size="sm" :tone="aiCapabilitiesOk ? 'teal' : 'amber'">
-        {{ aiCapabilitiesOk ? '已通过识别检测' : '检测未通过，请检查连接或模型' }}
-      </Notice>
-      <p v-else class="text-xs text-muted">首次开启自动识别前，请先检测连接。</p>
-      <div class="ml-auto flex flex-wrap gap-2">
+      <SettingRow label="识别检测" :description="aiCapabilitiesText">
+        <Badge v-if="aiCapabilities" :tone="aiCapabilitiesOk ? 'teal' : 'amber'" dot>
+          {{ aiCapabilitiesOk ? '已通过' : '未通过' }}
+        </Badge>
+        <Badge v-else>未检测</Badge>
         <Button
-          variant="secondary"
+          size="sm"
           :loading="aiTesting"
           :disabled="aiSaving"
           @click="testAi"
           >检测连接</Button
         >
+      </SettingRow>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+        <p class="text-meta">修改连接、模型或开关后，保存才会生效。</p>
         <Button
           variant="primary"
+          class="ml-auto"
           :loading="aiSaving"
           :disabled="aiTesting"
           @click="saveAiConfig"

@@ -33,11 +33,11 @@ const loadError = ref('');
 const expanded = ref<Set<number>>(new Set());
 
 /**
- * 操作类型按动作分色，颜色只说明「这是哪类动作」：
- * 登录 / 初始化 / 备份 gray · 新增与修改 blue · 删除 / 作废 / 失败 red ·
- * 导入 / 发放 / 入库 teal（品牌绿）· 恢复 / 回滚 / 改密这类覆盖性操作 amber 提醒。
+ * 操作类型 chip 的颜色只标出需要留意的动作（「墨线」：颜色是信息，不按类别上色）：
+ * 失败、删除、作废与库存核对不一致 red · 覆盖或回退数据的动作（恢复备份、改密、重置恢复码、回滚、撤销登记）amber · 其余 gray。
+ * group 是筛选下拉里的分组前缀。
  */
-const ACTION_LABELS: Record<string, { label: string; tone: 'blue' | 'teal' | 'amber' | 'red' | 'gray'; group: string }> = {
+const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gray'; group: string }> = {
   AUTH_SETUP: { label: '初始化', tone: 'gray', group: '账号' },
   AUTH_LOGIN: { label: '登录', tone: 'gray', group: '账号' },
   AUTH_LOGIN_FAILED: { label: '登录失败', tone: 'red', group: '账号' },
@@ -45,35 +45,51 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'blue' | 'teal' | 'am
   AUTH_RECOVER_FAILED: { label: '恢复码错误', tone: 'red', group: '账号' },
   AUTH_CHANGE_PASSWORD: { label: '修改密码', tone: 'amber', group: '账号' },
   AUTH_REGENERATE_RECOVERY: { label: '重置恢复码', tone: 'amber', group: '账号' },
+  // 申请、采购、到货、库存与领用的业务登记（服务端按 WORKFLOW_<操作> 记录）
+  WORKFLOW_REQUEST: { label: '人工录入申请', tone: 'gray', group: '申请' },
+  REQUEST_IMPORT_CONFIRM: { label: '导入生成申请', tone: 'gray', group: '申请' },
+  WORKFLOW_REQUEST_CANCEL: { label: '申请余量取消', tone: 'gray', group: '申请' },
+  WORKFLOW_PURCHASE: { label: '登记采购', tone: 'gray', group: '采购' },
+  WORKFLOW_PURCHASE_CANCEL: { label: '采购取消', tone: 'gray', group: '采购' },
+  WORKFLOW_RECEIPT: { label: '登记到货', tone: 'gray', group: '采购' },
+  WORKFLOW_SUPPLIER_RETURN: { label: '供应商退货', tone: 'gray', group: '采购' },
+  WORKFLOW_STOCK_IN: { label: '登记入库', tone: 'gray', group: '库存' },
+  WORKFLOW_ADJUSTMENT: { label: '库存盘点', tone: 'gray', group: '库存' },
+  WORKFLOW_PRODUCT: { label: '新增库存物品', tone: 'gray', group: '库存' },
+  STOCK_RECONCILE_MISMATCH: { label: '库存核对不一致', tone: 'red', group: '库存' },
+  WORKFLOW_DISTRIBUTION: { label: '领用发放', tone: 'gray', group: '领用' },
+  WORKFLOW_EMPLOYEE_RETURN: { label: '员工归还', tone: 'gray', group: '领用' },
+  WORKFLOW_METADATA: { label: '修改单据信息', tone: 'gray', group: '单据' },
+  WORKFLOW_VOID: { label: '撤销登记', tone: 'amber', group: '单据' },
   // 旧版台账已删除，保留这些动作名只为显示历史审计记录
-  ITEM_CREATE: { label: '新增台账', tone: 'blue', group: '旧台账' },
-  ITEM_UPDATE: { label: '修改台账', tone: 'blue', group: '旧台账' },
-  ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'blue', group: '旧台账' },
-  ITEM_PURCHASE: { label: '下单登记', tone: 'blue', group: '旧台账' },
+  ITEM_CREATE: { label: '新增台账', tone: 'gray', group: '旧台账' },
+  ITEM_UPDATE: { label: '修改台账', tone: 'gray', group: '旧台账' },
+  ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'gray', group: '旧台账' },
+  ITEM_PURCHASE: { label: '下单登记', tone: 'gray', group: '旧台账' },
   ITEM_DELETE: { label: '删除台账', tone: 'red', group: '旧台账' },
-  ITEM_RESTORE: { label: '恢复台账', tone: 'blue', group: '旧台账' },
+  ITEM_RESTORE: { label: '恢复台账', tone: 'gray', group: '旧台账' },
   ITEM_PURGE: { label: '彻底删除', tone: 'red', group: '旧台账' },
   ITEM_ROLLBACK: { label: '回滚', tone: 'amber', group: '旧台账' },
-  ITEM_STOCK_IN: { label: '采购入库', tone: 'teal', group: '库存' },
-  ITEM_STOCK_IN_BATCH: { label: '整单入库', tone: 'teal', group: '库存' },
-  AI_CONFIG_UPDATE: { label: '修改 AI 设置', tone: 'blue', group: 'AI' },
+  ITEM_STOCK_IN: { label: '采购入库', tone: 'gray', group: '库存' },
+  ITEM_STOCK_IN_BATCH: { label: '整单入库', tone: 'gray', group: '库存' },
+  AI_CONFIG_UPDATE: { label: '修改 AI 设置', tone: 'gray', group: 'AI' },
   AI_QUERY: { label: 'AI 问答', tone: 'gray', group: 'AI' },
   AI_OCR_REVIEW: { label: 'AI 复核单据', tone: 'gray', group: 'AI' },
-  DISTRIBUTION_CREATE: { label: '发放登记', tone: 'teal', group: '发放' },
+  DISTRIBUTION_CREATE: { label: '发放登记', tone: 'gray', group: '发放' },
   DISTRIBUTION_REVOKE: { label: '作废发放', tone: 'red', group: '发放' },
-  IMPORT_UPLOAD: { label: '上传单据', tone: 'teal', group: '导入' },
-  IMPORT_CONFIRM: { label: '确认导入', tone: 'teal', group: '导入' },
-  PRODUCT_CREATE: { label: '新增物品', tone: 'blue', group: '库存' },
-  PRODUCT_UPDATE: { label: '修改物品', tone: 'blue', group: '库存' },
+  IMPORT_UPLOAD: { label: '上传单据', tone: 'gray', group: '导入' },
+  IMPORT_CONFIRM: { label: '确认导入', tone: 'gray', group: '导入' },
+  PRODUCT_CREATE: { label: '新增物品', tone: 'gray', group: '库存' },
+  PRODUCT_UPDATE: { label: '修改物品', tone: 'gray', group: '库存' },
   PRODUCT_DELETE: { label: '删除物品', tone: 'red', group: '库存' },
-  INVENTORY_MOVEMENT: { label: '库存流水', tone: 'teal', group: '库存' },
+  INVENTORY_MOVEMENT: { label: '库存流水', tone: 'gray', group: '库存' },
   INVENTORY_MOVEMENT_DELETE: { label: '删流水', tone: 'red', group: '库存' },
-  SUPPLIER_CREATE: { label: '新增供应商', tone: 'blue', group: '供应商' },
-  SUPPLIER_UPDATE: { label: '修改供应商', tone: 'blue', group: '供应商' },
+  SUPPLIER_CREATE: { label: '新增供应商', tone: 'gray', group: '供应商' },
+  SUPPLIER_UPDATE: { label: '修改供应商', tone: 'gray', group: '供应商' },
   SUPPLIER_DELETE: { label: '删除供应商', tone: 'red', group: '供应商' },
-  PRICE_RECORD_CREATE: { label: '记价', tone: 'blue', group: '供应商' },
+  PRICE_RECORD_CREATE: { label: '记价', tone: 'gray', group: '供应商' },
   PRICE_RECORD_DELETE: { label: '删价', tone: 'red', group: '供应商' },
-  ATTACHMENT_UPLOAD: { label: '传附件', tone: 'blue', group: '附件' },
+  ATTACHMENT_UPLOAD: { label: '传附件', tone: 'gray', group: '附件' },
   ATTACHMENT_DELETE: { label: '删附件', tone: 'red', group: '附件' },
   BACKUP_CREATE: { label: '创建备份', tone: 'gray', group: '系统' },
   BACKUP_RESTORE: { label: '恢复备份', tone: 'amber', group: '系统' },
@@ -149,7 +165,12 @@ function detailEntries(log: AuditRow): DetailEntry[] {
     }
     out.push({
       key: DETAIL_KEY_LABELS[key] ?? ITEM_FIELD_LABELS[key] ?? key,
-      value: Array.isArray(value) ? value.join('、') : typeof value === 'object' ? JSON.stringify(value) : String(value),
+      // 数组里是对象时（库存核对的不一致明细）逐个转 JSON，不显示成 [object Object]
+      value: Array.isArray(value)
+        ? value.map((v) => (v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v))).join('、')
+        : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value),
     });
   }
   return out;
@@ -171,6 +192,12 @@ const DETAIL_KEY_LABELS: Record<string, string> = {
   kind: '类型',
   historyId: '历史版本',
   id: 'ID',
+  operationId: '操作编号',
+  input: '提交内容',
+  taskId: '导入任务',
+  lines: '明细行数',
+  name: '文件名',
+  mismatches: '不一致处数',
 };
 
 /** 列表里给一行摘要，展开看全部 */
@@ -188,11 +215,28 @@ function toggle(id: number): void {
 }
 
 const hasFilters = computed(() => !!(filters.search || filters.action));
+const actionLabel = computed(() => (filters.action ? (ACTION_LABELS[filters.action]?.label ?? filters.action) : ''));
+/** 筛选无结果：标题复述条件 */
+const noMatchTitle = computed(() =>
+  filters.search ? `没有找到「${filters.search}」相关的记录` : `没有「${actionLabel.value}」的记录`,
+);
+const noMatchHint = computed(() =>
+  filters.search && filters.action ? `当前筛选：${actionLabel.value}。试试放宽条件。` : '试试换个操作类型或关键词。',
+);
+
+function clearAll(): void {
+  Object.assign(filters, DEFAULTS);
+  void load();
+}
+function clearSearch(): void {
+  filters.search = '';
+  applyFilters();
+}
 </script>
 
 <template>
-  <!-- 工具栏 + 表格 + 分页在同一个贴边面板里，面板随内容增高（<main> 才是滚动容器） -->
-  <Panel flush>
+  <!-- 工具栏 + 表格 + 分页在同一个贴边面板里，面板随内容增高（<main> 才是滚动容器）；宽度由 SettingsLayout 限制在 760px -->
+  <Panel title="审计日志" description="登录、导入、业务登记、备份与设置变更都会留痕；点一行查看完整详情" flush>
     <template #toolbar>
       <SearchInput v-model="filters.search" class="w-full sm:w-72" placeholder="搜索详情内容" @search="applyFilters" />
       <NativeSelect
@@ -203,7 +247,7 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
         aria-label="按操作类型筛选"
         @update:model-value="applyFilters"
       />
-      <Button v-if="hasFilters" variant="ghost" size="sm" @click="Object.assign(filters, DEFAULTS); load()">
+      <Button v-if="hasFilters" variant="ghost" size="sm" @click="clearAll">
         <Icon name="close" :size="14" /> 清除
       </Button>
       <p class="ml-auto text-meta num">共 {{ total }} 条</p>
@@ -213,19 +257,19 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
       <Skeleton v-for="i in 8" :key="i" class="h-10" />
     </div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
-    <EmptyState
-      v-else-if="logs.length === 0"
-      :illustration="hasFilters ? 'search' : 'empty'"
-      :title="hasFilters ? '没有符合条件的记录' : '暂无审计记录'"
-      :description="hasFilters ? '试试换个操作类型或关键词' : ''"
-    />
+    <!-- 有筛选 = 无结果：复述条件并给出清除；没有筛选 = 还没有记录 -->
+    <EmptyState v-else-if="logs.length === 0 && hasFilters" :icon="false" :title="noMatchTitle" :description="noMatchHint">
+      <Button size="sm" @click="clearAll">清除全部条件</Button>
+      <Button v-if="filters.search && filters.action" size="sm" variant="ghost" @click="clearSearch">只清除关键词</Button>
+    </EmptyState>
+    <EmptyState v-else-if="logs.length === 0" icon="audit" title="还没有审计记录" description="登录、导入、业务登记、备份与设置变更都会记在这里。" />
 
     <div v-else class="overflow-x-auto">
-      <table class="table-base table-cards min-w-[760px]">
+      <table class="table-base table-cards min-w-[700px]">
         <thead>
           <tr>
-            <th class="w-40">时间</th>
-            <th class="w-28">操作</th>
+            <th class="w-36">时间</th>
+            <th class="w-32">操作</th>
             <th class="w-28">对象</th>
             <th>详情</th>
             <th class="w-32">来源 IP</th>
@@ -237,6 +281,7 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
             药丸与各列首行文字同一条中线，行高仍是 44px。
             手机卡片（< 640px）：tr 改成两列网格，时间 + 操作 Badge 并排作卡片头，对象 / 详情 / 来源 IP 各占一整行；
             整张卡片可点，展开后「详情」的键值对换到列名下方、占满卡片宽度（has-[dl]：展开且有内容时才换行）。
+            整行可点是鼠标的捷径；键盘与读屏用详情格里的展开按钮（aria-expanded）。
           -->
           <tr
             v-for="log in logs"
@@ -254,7 +299,8 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
             <td data-label="对象" class="align-top text-[13px] text-muted whitespace-nowrap num max-sm:col-span-2">
               {{ log.entity ?? '—' }}<template v-if="log.entityId"> #{{ log.entityId }}</template>
             </td>
-            <td data-label="详情" class="align-top text-[13px] text-muted max-sm:col-span-2 max-sm:has-[dl]:flex-wrap max-sm:has-[dl]:gap-y-1.5">
+            <!-- sm:w-full sm:max-w-0：详情列吃掉剩余宽度、摘要按列宽截断（760px 的面板里其余列不被挤出视野） -->
+            <td data-label="详情" class="align-top text-[13px] text-muted sm:w-full sm:max-w-0 max-sm:col-span-2 max-sm:has-[dl]:flex-wrap max-sm:has-[dl]:gap-y-1.5">
               <div class="flex min-w-0 items-start gap-2 max-sm:has-[dl]:basis-full max-sm:has-[dl]:text-left">
                 <div class="min-w-0 flex-1">
                   <dl
@@ -266,16 +312,23 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
                       <dd class="text-text break-all">{{ e.value }}</dd>
                     </template>
                   </dl>
-                  <p v-else class="truncate max-w-96">{{ detailSummary(log) }}</p>
+                  <p v-else class="truncate">{{ detailSummary(log) }}</p>
                 </div>
-                <!-- 可展开的行给一个小箭头提示（整行可点，箭头只是视觉提示） -->
-                <Icon
+                <button
                   v-if="detailEntries(log).length > 0"
-                  name="chevron-down"
-                  :size="14"
-                  class="mt-0.5 shrink-0 text-faint transition-transform duration-150"
-                  :class="expanded.has(log.id) ? 'rotate-180' : ''"
-                />
+                  type="button"
+                  class="-my-px flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-faint transition-colors duration-150 hover:text-ink"
+                  :aria-expanded="expanded.has(log.id)"
+                  :aria-label="expanded.has(log.id) ? '收起详情' : '展开详情'"
+                  @click.stop="toggle(log.id)"
+                >
+                  <Icon
+                    name="chevron-down"
+                    :size="14"
+                    class="transition-transform duration-150"
+                    :class="expanded.has(log.id) ? 'rotate-180' : ''"
+                  />
+                </button>
               </div>
             </td>
             <!-- 等宽字体写在值上：卡片里的列名（td::before）会继承 td 的 font-family；卡片里长的 IPv6 可以折行 -->

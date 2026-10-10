@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { supplierUpsertSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi } from '@/api/workflow';
@@ -21,6 +21,8 @@ import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import Panel from '@/components/ui/Panel.vue';
+import Menu from '@/components/ui/Menu.vue';
+import type { MenuItem } from '@/components/ui/types';
 import Dialog from '@/components/ui/Dialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import Notice from '@/components/ui/Notice.vue';
@@ -33,6 +35,8 @@ useUrlState(state, defaults);
 const suppliers = ref<SupplierRow[]>([]), prices = ref<WorkflowPriceRow[]>([]);
 const loading = ref(true), loadingPrices = ref(false);
 const loadError = ref(''), priceError = ref('');
+/** 「成交价格」最近一次查询用的搜索词：查询返回后才更新，空结果的标题复述的是这次查的条件 */
+const searchedFor = ref('');
 const supplierDialogOpen = ref(false), supplierDialogTarget = ref<SupplierRow | null>(null);
 const supplierForm = reactive({ name: '', contact: '', phone: '', note: '' });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(() => JSON.stringify(supplierForm));
@@ -48,7 +52,8 @@ async function loadSuppliers() {
 async function loadPrices() {
   const current = priceGuard.begin();
   loadingPrices.value = true; priceError.value = '';
-  try { const rows = await workflowApi.prices({ search: state.priceSearch || undefined }); if (current()) prices.value = rows; }
+  const search = state.priceSearch.trim();
+  try { const rows = await workflowApi.prices({ search: state.priceSearch || undefined }); if (current()) { prices.value = rows; searchedFor.value = search; } }
   catch (cause) { if (current()) priceError.value = apiError(cause); }
   finally { if (current()) loadingPrices.value = false; }
 }
@@ -87,17 +92,28 @@ async function openPurchase(lineId: number) {
   } catch (cause) { toast.error(apiError(cause)); }
   finally { openingPrice.value = null; }
 }
+const priceCount = computed(() => (loadingPrices.value || priceError.value ? null : prices.value.length));
+function clearPriceSearch() { state.priceSearch = ''; void loadPrices(); }
+/** 行内只放「编辑」；删除收进「…」并走确认框 */
+function moreActions(supplier: SupplierRow): MenuItem[] {
+  return [{ label: '删除', icon: 'trash', danger: true, disabled: removingSupplierId.value === supplier.id, onSelect: () => (deleteTarget.value = supplier) }];
+}
 onMounted(() => { void loadSuppliers(); if (state.tab === 'prices') void loadPrices(); });
 onUnmounted(() => priceGuard.abandon());
 </script>
 
 <template>
-  <div class="space-y-6">
+  <!-- 一层面板：标题行 + 工具栏（视图切换 · 搜索 · 右侧计数与新增）+ 贴边表格；宽度由 SettingsLayout 限制在 760px -->
+  <div>
     <Panel title="供应商与成交价格" description="同一物品、规格、单位下，各供应商最近一次实际成交价；采购时可直接参考" flush>
       <template #toolbar>
-        <Tabs :model-value="state.tab" variant="segmented" :tabs="[{ value: 'suppliers', label: '供应商' }, { value: 'prices', label: '成交价格' }]" @change="switchTab" />
-        <SearchInput v-if="state.tab === 'prices'" v-model="state.priceSearch" class="w-full sm:w-64" placeholder="搜索品名或规格" aria-label="搜索成交价格" @search="loadPrices" />
-        <Button variant="primary" size="sm" class="ml-auto" @click="openSupplierDialog(null)"><Icon name="plus" :size="14" />新增供应商</Button>
+        <Tabs :model-value="state.tab" variant="segmented" :tabs="[{ value: 'suppliers', label: '供应商' }, { value: 'prices', label: '成交价格' }]" aria-label="供应商与成交价格" @change="switchTab" />
+        <SearchInput v-if="state.tab === 'prices'" v-model="state.priceSearch" class="w-full sm:w-72" placeholder="搜索品名或规格" aria-label="搜索成交价格" @search="loadPrices" />
+        <div class="ml-auto flex items-center gap-3">
+          <p v-if="state.tab !== 'prices' && !loading && !loadError" class="text-meta num">共 {{ suppliers.length }} 家</p>
+          <p v-else-if="state.tab === 'prices' && priceCount !== null" class="text-meta num">共 {{ priceCount }} 条</p>
+          <Button variant="primary" size="sm" @click="openSupplierDialog(null)"><Icon name="plus" :size="14" />新增供应商</Button>
+        </div>
       </template>
       <!-- 供应商列表 -->
       <template v-if="state.tab !== 'prices'">
@@ -105,44 +121,38 @@ onUnmounted(() => priceGuard.abandon());
           <Skeleton v-for="i in 6" :key="i" class="h-10" />
         </div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="loadSuppliers" />
-        <EmptyState v-else-if="suppliers.length === 0" illustration="truck" title="还没有供应商" description="把常用的几家加进来，采购时快速选择" />
-        <!-- 手机（< 640px）是卡片：名称整行作标题，其余各列一行，编辑 / 删除在卡片底部；操作格的上下留白由 td:has(.row-action) 统一 -->
+        <EmptyState v-else-if="suppliers.length === 0" icon="supplier" title="还没有供应商" description="把常用的几家加进来，登记采购时可以直接选择。" />
+        <!-- 手机（< 640px）是卡片：名称整行作标题，其余各列一行，编辑与「…」在卡片底部 -->
         <div v-else class="overflow-x-auto">
           <table class="table-base table-cards min-w-[640px]">
             <thead>
               <tr>
                 <th>名称</th>
-                <th>联系人</th>
-                <th>电话</th>
-                <th class="text-right">关联单据</th>
-                <th class="w-24">操作</th>
+                <th class="w-32">联系人</th>
+                <th class="w-36">电话</th>
+                <th class="w-24 text-right">关联单据</th>
+                <th class="w-28 text-right"><span class="sr-only">操作</span></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in suppliers" :key="s.id">
-                <td class="font-medium text-ink">{{ s.name }}</td>
+                <td>
+                  <p class="font-medium text-ink">{{ s.name }}</p>
+                  <p v-if="s.note" class="text-meta sm:truncate sm:max-w-64" :title="s.note">{{ s.note }}</p>
+                </td>
                 <td data-label="联系人">
                   <template v-if="s.contact">{{ s.contact }}</template>
                   <span v-else class="text-faint">—</span>
                 </td>
                 <td data-label="电话" class="num">
-                  <a v-if="s.phone" :href="`tel:${s.phone}`" class="hover:text-accent hover:underline underline-offset-2">{{ s.phone }}</a>
+                  <a v-if="s.phone" :href="`tel:${s.phone}`" :class="buttonClass({ variant: 'link' })">{{ s.phone }}</a>
                   <span v-else class="text-faint">—</span>
                 </td>
                 <td data-label="关联单据" class="text-right num">{{ s._count?.businessDocuments ?? 0 }}</td>
-                <td class="card-actions">
-                  <div class="flex items-center gap-1">
-                    <button class="row-action" title="编辑" @click="openSupplierDialog(s)"><Icon name="edit" :size="16" /></button>
-                    <button
-                      class="row-action row-action-danger"
-                      :class="removingSupplierId === s.id ? 'w-auto px-2 text-xs' : ''"
-                      title="删除"
-                      :disabled="removingSupplierId === s.id"
-                      @click="deleteTarget = s"
-                    >
-                      <template v-if="removingSupplierId === s.id">删除中…</template>
-                      <Icon v-else name="trash" :size="16" />
-                    </button>
+                <td class="card-actions sm:whitespace-nowrap sm:py-2">
+                  <div class="flex items-center justify-end gap-1">
+                    <Button size="sm" @click="openSupplierDialog(s)">编辑</Button>
+                    <Menu :items="moreActions(s)" :trigger-label="`${s.name} 的更多操作`" />
                   </div>
                 </td>
               </tr>
@@ -154,10 +164,14 @@ onUnmounted(() => priceGuard.abandon());
       <template v-else>
         <div v-if="loadingPrices" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
         <ErrorState v-else-if="priceError" :message="priceError" @retry="loadPrices" />
-        <EmptyState v-else-if="!prices.length" illustration="search" title="暂无匹配的成交价格" description="登记采购后会自动保留成交价；同名不同规格或单位分别展示。" />
+        <!-- 有搜索词 = 无结果：复述条件并给出清除；没有搜索词 = 还没有成交记录 -->
+        <EmptyState v-else-if="!prices.length && searchedFor" :icon="false" :title="`没有找到「${searchedFor}」的成交价格`" description="按品名或规格搜索；同名不同规格或单位分别展示。">
+          <Button size="sm" @click="clearPriceSearch">清除关键词</Button>
+        </EmptyState>
+        <EmptyState v-else-if="!prices.length" icon="receipt" title="还没有成交价格" description="登记采购后会自动保留成交价；同名不同规格或单位分别展示。" />
         <div v-else class="overflow-x-auto"><table class="table-base table-cards min-w-[640px]">
-          <thead><tr><th>品名 / 规格</th><th>供应商</th><th class="text-right">成交单价</th><th>日期</th><th>来源</th></tr></thead>
-          <tbody><tr v-for="price in prices" :key="price.purchaseLineId"><td class="font-medium text-ink">{{ price.itemName }}<p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">¥{{ price.unitPrice }} / {{ price.unit }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源"><Button size="sm" variant="ghost" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="ml-2 text-xs">商家链接</a></td></tr></tbody>
+          <thead><tr><th>品名 / 规格</th><th class="w-36">供应商</th><th class="w-32 text-right">成交单价</th><th class="w-28">日期</th><th class="w-44 text-right">来源</th></tr></thead>
+          <tbody><tr v-for="price in prices" :key="price.purchaseLineId"><td><p class="font-medium text-ink">{{ price.itemName }}</p><p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">¥{{ price.unitPrice }} / {{ price.unit }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源" class="sm:whitespace-nowrap sm:py-2 sm:text-right"><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="mr-3 text-xs">商家链接</a><Button size="sm" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button></td></tr></tbody>
         </table></div>
       </template>
     </Panel>
