@@ -1,25 +1,23 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { workflowReceiptSchema } from '@procure-lite/shared';
 import { workflowApi, type WorkflowDocumentRow } from '@/api/workflow';
-import { apiError } from '@/api/client';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import Button from '@/components/ui/Button.vue';
+import Notice from '@/components/ui/Notice.vue';
+import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
+import { issueText } from '@/utils/form';
 import { quantityError, quantityLabel } from './presentation';
 
 const props = defineProps<{ open: boolean; purchase: WorkflowDocumentRow }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
 const form = reactive({ date: todayString(), note: '' });
 const lines = ref<{ id: number; itemName: string; specification: string; unit: string; purchased: string; received: string; maximum: string; selected: boolean; quantity: string }[]>([]);
-const errors = ref<Record<string, string>>({});
-const failure = ref('');
-const saving = ref(false);
-const initial = ref('');
 const snapshot = () => JSON.stringify({ form, lines: lines.value });
-const dirty = computed(() => snapshot() !== initial.value);
+const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 watch(() => props.open, (open) => {
   if (!open) return;
   Object.assign(form, { date: todayString(), note: '' });
@@ -28,12 +26,9 @@ watch(() => props.open, (open) => {
     purchased: line.quantity, received: line.receivedQuantity, maximum: line.remainingQuantity,
     selected: true, quantity: line.remainingQuantity,
   }));
-  errors.value = {};
-  failure.value = '';
-  initial.value = snapshot();
+  reset();
 }, { immediate: true });
-async function submit() {
-  if (saving.value) return;
+async function save() {
   const selected = lines.value.filter((line) => line.selected);
   const invalid: Record<string, string> = {};
   if (!selected.length) invalid.lines = '请至少选择一条到货明细';
@@ -44,16 +39,11 @@ async function submit() {
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
   const parsed = workflowReceiptSchema.safeParse({ ...form, lines: selected.map((line) => ({ purchaseLineId: line.id, quantity: line.quantity })) });
-  if (!parsed.success) { failure.value = parsed.error.issues.map((issue) => issue.message).join('；'); return; }
-  saving.value = true;
-  failure.value = '';
-  try {
-    const result = await workflowApi.receipt(parsed.data);
-    initial.value = snapshot();
-    emit('update:open', false);
-    emit('recorded', result);
-  } catch (cause) { failure.value = apiError(cause); }
-  finally { saving.value = false; }
+  if (!parsed.success) { failure.value = issueText(parsed.error); return; }
+  const result = await submit(() => workflowApi.receipt(parsed.data));
+  if (result === undefined) return;
+  emit('update:open', false);
+  emit('recorded', result);
 }
 </script>
 
@@ -65,9 +55,9 @@ async function submit() {
         <Checkbox v-model="line.selected" :label="line.itemName" :description="`${line.specification ? line.specification + ' · ' : ''}本批采购 ${quantityLabel(line.purchased, line.unit)} · 已到 ${quantityLabel(line.received, line.unit)} · 尚欠 ${quantityLabel(line.maximum, line.unit)}`" :disabled="saving" />
         <Input v-if="line.selected" v-model="line.quantity" :label="`${line.itemName} 本次到货数量（${line.unit}）`" type="number" min="0" :max="line.maximum" step="0.000001" required :error="errors[String(line.id)]" :disabled="saving" class="mt-3 sm:max-w-64" />
       </div>
-      <p v-if="errors.lines" role="alert" class="text-[13px] text-red">{{ errors.lines }}</p>
+      <Notice v-if="errors.lines" tone="red" variant="inline" role="alert">{{ errors.lines }}</Notice>
     </div>
     <Input v-model="form.note" label="到货备注" placeholder="如快递单号、验收说明（可空）" :disabled="saving" class="mt-5" />
-    <template #footer><p v-if="failure" role="alert" class="mr-auto self-center text-[13px] text-red">{{ failure }}</p><Button variant="accent" :loading="saving" @click="submit">确认本次到货</Button></template>
+    <template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving" @click="close">取消</Button><Button variant="accent" :loading="saving" @click="save">确认本次到货</Button></template>
   </Dialog>
 </template>

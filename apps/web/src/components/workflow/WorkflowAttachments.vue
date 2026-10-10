@@ -4,6 +4,7 @@ import type { WorkflowAttachment } from '@procure-lite/shared';
 import { attachmentsApi, apiError } from '@/api';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Notice from '@/components/ui/Notice.vue';
 
 const props = defineProps<{
   documentId?: number;
@@ -58,6 +59,6 @@ async function remove(id: number) {
         <Button v-if="attachment.kind !== 'OA_DOC'" size="sm" variant="ghost" :loading="removing === attachment.id" :aria-label="`删除附件 ${attachment.filename}`" @click="remove(attachment.id)"><Icon name="trash" :size="14" /></Button>
       </li>
     </ul>
-    <p v-if="failure" role="alert" class="mt-3 text-xs text-red">{{ failure }}</p>
+    <Notice v-if="failure" tone="red" variant="inline" size="sm" role="alert" class="mt-3">{{ failure }}</Notice>
   </section>
 </template>

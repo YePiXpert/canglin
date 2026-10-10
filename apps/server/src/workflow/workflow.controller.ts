@@ -14,23 +14,24 @@ import {
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp, operationId } from '../common/request.util';
 import { WorkflowService } from './workflow.service';
+import { WorkflowQueryService } from './workflow-query.service';
 
 const reportSchema = workflowQuerySchema.and(z.object({ groupBy: z.enum(['month', 'department', 'supplier']).default('month') }));
 
 @Controller('workflow')
 export class WorkflowController {
-  constructor(private readonly workflow: WorkflowService) {}
+  constructor(private readonly workflow: WorkflowService, private readonly queries: WorkflowQueryService) {}
 
-  @Get('requests') requests(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.workflow.requests(query); }
-  @Get('requests/:id') request(@Param('id', ParseIntPipe) id: number) { return this.workflow.request(id); }
-  @Get('documents') documents(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.workflow.documents(query); }
-  @Get('documents/:id') document(@Param('id', ParseIntPipe) id: number) { return this.workflow.document(id); }
-  @Get('lines/:id/document') lineDocument(@Param('id', ParseIntPipe) id: number) { return this.workflow.lineDocument(id); }
-  @Get('stock') stock(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.workflow.stock(query); }
-  @Get('entries') entries(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.workflow.entries(query); }
-  @Get('overview') overview() { return this.workflow.overview(); }
-  @Get('prices') prices(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.workflow.prices(query); }
-  @Get('reports') reports(@Query(new ZodValidationPipe(reportSchema)) query: WorkflowQuery & { groupBy: 'month' | 'department' | 'supplier' }) { return this.workflow.reports(query); }
+  @Get('requests') requests(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.requests(query); }
+  @Get('requests/:id') request(@Param('id', ParseIntPipe) id: number) { return this.queries.request(id); }
+  @Get('documents') documents(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.documents(query); }
+  @Get('documents/:id') document(@Param('id', ParseIntPipe) id: number) { return this.queries.document(id); }
+  @Get('lines/:id/document') lineDocument(@Param('id', ParseIntPipe) id: number) { return this.queries.lineDocument(id); }
+  @Get('stock') stock(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.stock(query); }
+  @Get('entries') entries(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.entries(query); }
+  @Get('overview') overview() { return this.queries.overview(); }
+  @Get('prices') prices(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.prices(query); }
+  @Get('reports') reports(@Query(new ZodValidationPipe(reportSchema)) query: WorkflowQuery & { groupBy: 'month' | 'department' | 'supplier' }) { return this.queries.reports(query); }
 
   @Post('requests') createRequest(@Body(new ZodValidationPipe(workflowRequestCreateSchema)) body: WorkflowRequestCreateInput, @Req() req: FastifyRequest) { return this.workflow.createRequest(body, operationId(req), clientIp(req)); }
   @Post('products') createProduct(@Body(new ZodValidationPipe(workflowProductCreateSchema)) body: WorkflowProductCreateInput, @Req() req: FastifyRequest) { return this.workflow.createProduct(body, operationId(req), clientIp(req)); }

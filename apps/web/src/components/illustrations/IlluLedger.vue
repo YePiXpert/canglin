@@ -2,7 +2,7 @@
 import IlluBase from './IlluBase.vue';
 import type { IlluTone } from './tone';
 
-/** 单据夹：台账空态 */
+/** 单据夹：申请单等单据列表的空态 */
 withDefaults(defineProps<{ tone?: IlluTone; size?: number }>(), { tone: 'blue', size: 132 });
 </script>
 

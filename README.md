@@ -2,7 +2,7 @@
 
 供一位行政采购管理员使用的采购与领用系统：OA 已审批单导入或人工录入 → 分次采购 → 部分到货 → 按量直发或明确入库 → 库存领用。支持供应商退款/换货、员工归还、撤销纠错、付款与报销状态、原件/发票/签收附件。
 
-确认的产品范围与验收示例见 [重构需求](docs/rebuild-requirements.md)。部署、导入与识别接口、备份及回退见 [升级说明](docs/upgrade-2026-09.md)；前端维护见 [设计规范](apps/web/DESIGN.md)。本轮本地验证为服务端 172 项、前端 58 项、浏览器 14 条、OCR 轻量套件 50 项通过，构建、类型检查与 lint 通过；真实模型和目标部署环境验收另行记录。历史试用与验收记录仍保留各自的版本标识。
+确认的产品范围与验收示例见 [重构需求](docs/rebuild-requirements.md)。部署、导入与识别接口、备份及回退见 [升级说明](docs/upgrade-2026-09.md)；前端维护见 [设计规范](apps/web/DESIGN.md)。本轮（2026-10-10）本地验证为服务端 142 项、前端 109 项、浏览器 15 条、部署脚本 16 项与评测脚本 2 项通过，迁移在空库全链执行且与 Prisma 模型无差异，构建、类型检查与 lint 通过；OCR 轻量套件（上一轮 50 项）本轮未改动 OCR 代码、未重跑。真实模型和目标部署环境验收另行记录。历史试用与验收记录仍保留各自的版本标识。
 
 ## 适用范围
 
@@ -23,7 +23,7 @@
                                                                 (GPT / Responses)
 ```
 
-- **apps/web** — Vue 3.5 + Vite + TypeScript + Tailwind v4 + Reka UI（自建组件）+ ECharts + PWA；设计令牌、组件用法与页面约束见 [apps/web/DESIGN.md](apps/web/DESIGN.md)
+- **apps/web** — Vue 3.5 + Vite + TypeScript + Tailwind v4 + Reka UI（自建组件）+ PWA；设计令牌、组件用法与页面约束见 [apps/web/DESIGN.md](apps/web/DESIGN.md)
 - **apps/server** — NestJS 11 + Fastify + Prisma(SQLite) + argon2 认证 + 审计日志 + 备份恢复
 - **apps/ocr** — FastAPI + PaddleOCR：PDF 文本层优先、栅格化 OCR 兜底、OA 界面噪音过滤、表格重建
 - **packages/shared** — zod API 契约与状态枚举（前后端共享）
@@ -38,7 +38,7 @@
 
 主导航为工作台、申请单、库存与领用、报表、系统设置。工作台和导入页都能找回未完成草稿；草稿保存带版本号，过期版本拒绝覆盖。已确认任务只读且关联原件，重复提交不会重复入账。
 
-数量最多六位小数、单价最多四位小数、人民币金额两位小数；新业务以整数定点数计算，行金额四舍五入后汇总。旧测试台账保留在兼容页面和接口，不自动转成新的采购事实，新主流程从新申请开始。
+数量最多六位小数、单价最多四位小数、人民币金额两位小数；新业务以整数定点数计算，行金额四舍五入后汇总。旧测试台账及其兼容页面、接口已在 2026-10-08 的迁移中删除（旧数据按需求视为测试数据，不转换为采购事实），主流程从新申请开始。
 
 ## AI 能力（可选）
 
@@ -79,7 +79,7 @@ pnpm --filter @procure-lite/server build            # 浏览器测试的 API（a
 pnpm --filter @procure-lite/web exec playwright install --with-deps chromium   # 首次运行浏览器测试前
 pnpm --filter @procure-lite/web test:e2e            # 浏览器流程：临时 SQLite + 真实 API，OCR/GPT 为合成替身
 python3 -m unittest discover -s deploy/tests -v     # 部署脚本（伪 git/docker，不接触真实服务）
-python3 -m unittest discover -s scripts/tests -v    # 精度审计与导入评测脚本
+python3 -m unittest discover -s scripts/tests -v    # 导入评测脚本
 (cd apps/ocr && pytest)                             # 解析器单测 + API 集成（无需 paddle）
 ```
 

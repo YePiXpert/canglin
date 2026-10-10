@@ -36,8 +36,6 @@ export class AttachmentsService implements OnModuleDestroy {
   async save(params: {
     file: { buffer: Buffer; filename: string; size: number; mimetype: string };
     kind: string;
-    itemId?: number;
-    distributionId?: number;
     procurementRequestId?: number;
     businessDocumentId?: number;
     ip?: string;
@@ -50,20 +48,8 @@ export class AttachmentsService implements OnModuleDestroy {
     if (params.file.size > config.maxUploadBytes) {
       throw new BadRequestException('附件超过大小限制');
     }
-    if ([params.itemId, params.distributionId, params.procurementRequestId, params.businessDocumentId].filter((id) => id !== undefined).length !== 1) {
+    if ([params.procurementRequestId, params.businessDocumentId].filter((id) => id !== undefined).length !== 1) {
       throw new BadRequestException('附件必须关联一个业务对象');
-    }
-    if (params.itemId) {
-      const item = await this.prisma.item.findFirst({
-        where: { id: params.itemId, deletedAt: null },
-      });
-      if (!item) throw new NotFoundException('台账记录不存在');
-    }
-    if (params.distributionId) {
-      const dist = await this.prisma.distribution.findUnique({
-        where: { id: params.distributionId },
-      });
-      if (!dist) throw new NotFoundException('发放单不存在');
     }
     if (params.procurementRequestId) {
       const request = await this.prisma.procurementRequest.findUnique({ where: { id: params.procurementRequestId } });
@@ -86,8 +72,6 @@ export class AttachmentsService implements OnModuleDestroy {
     const record = await this.prisma.attachment.create({
       data: {
         kind: params.kind,
-        itemId: params.itemId ?? null,
-        distributionId: params.distributionId ?? null,
         procurementRequestId: params.procurementRequestId ?? null,
         businessDocumentId: params.businessDocumentId ?? null,
         filename,
@@ -108,11 +92,9 @@ export class AttachmentsService implements OnModuleDestroy {
     return record;
   }
 
-  async list(params: { itemId?: number; distributionId?: number; procurementRequestId?: number; businessDocumentId?: number }) {
+  async list(params: { procurementRequestId?: number; businessDocumentId?: number }) {
     return this.prisma.attachment.findMany({
       where: {
-        ...(params.itemId ? { itemId: params.itemId } : {}),
-        ...(params.distributionId ? { distributionId: params.distributionId } : {}),
         ...(params.procurementRequestId ? { procurementRequestId: params.procurementRequestId } : {}),
         ...(params.businessDocumentId ? { businessDocumentId: params.businessDocumentId } : {}),
       },
@@ -145,8 +127,8 @@ export class AttachmentsService implements OnModuleDestroy {
   }
 
   /**
-   * 按引用计数回收物理文件：OA 原件会被同一批导入的多条台账共享，
-   * 只有最后一条引用消失时才能真正删盘。
+   * 按引用计数回收物理文件：OA 原件由导入任务与它创建的申请（原件附件）共用同一个文件，
+   * 附件记录和导入任务都不再引用时才能真正删盘。
    */
   async releaseFile(storagePath: string): Promise<void> {
     const remaining = await this.prisma.attachment.count({ where: { storagePath } });

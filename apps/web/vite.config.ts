@@ -42,15 +42,11 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, 'src') },
   },
   build: {
-    // echarts 单独成 chunk 且仅被异步路由引用，~560KB 是按需加载的合理体积，告警阈值随之放宽
-    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        // 拆大依赖：echarts 只被 Reports 的异步路由引用，单独成 chunk 不拖累首屏；
         // vue 生态是入口常驻依赖，成 vendor chunk 利于长缓存（内容 hash 不变就不失效）
         manualChunks(id: string): string | undefined {
           if (!id.includes('node_modules')) return undefined;
-          if (/echarts|zrender|vue-echarts/.test(id)) return 'echarts';
           if (/[\\/]node_modules[\\/](vue|@vue|vue-router|pinia|axios|reka-ui)([\\/]|$)/.test(id))
             return 'vendor';
           return undefined;

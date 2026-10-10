@@ -16,6 +16,7 @@ import { BackupService } from './backup.service';
 import { AutoBackupService } from './auto-backup.service';
 import { OcrClient } from '../imports/ocr.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { StockReconcileService } from '../workflow/stock-reconcile.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { config } from '../config';
@@ -30,29 +31,39 @@ export class SystemController {
     private readonly autoBackup: AutoBackupService,
     private readonly ocr: OcrClient,
     private readonly prisma: PrismaService,
+    private readonly stock: StockReconcileService,
   ) {}
 
   @Get('status')
   async status() {
-    const [items, products, distributions] = await Promise.all([
-      this.prisma.item.count(),
-      this.prisma.product.count(),
-      this.prisma.distribution.count(),
+    const [requests, products, documents, stockCheck] = await Promise.all([
+      this.prisma.procurementRequest.count(),
+      this.prisma.catalogProduct.count(),
+      this.prisma.businessDocument.count({ where: { status: 'POSTED' } }),
+      this.stock.latest(),
     ]);
     let dbSizeBytes = 0;
     try {
       dbSizeBytes = fs.statSync(config.dbPath).size;
     } catch {
-      dbSizeBytes = 0;
+      // 数据库文件尚未创建时按 0 计
     }
     return {
       version: APP_VERSION,
       uptimeSeconds: Math.floor(process.uptime()),
       dbSizeBytes,
-      counts: { items, products, distributions },
+      counts: { requests, products, documents },
       autoBackup: await this.autoBackup.getConfig(),
       restoring: this.backup.isRestoring(),
+      stockCheck,
     };
+  }
+
+  /** 立即执行一次库存对账（每天 3 点也会自动执行，按服务器时区 TZ 计）；不一致时写审计日志，不自动修正 */
+  @Post('stock-check')
+  @HttpCode(200)
+  stockCheck() {
+    return this.stock.reconcile();
   }
 
   @Get('ocr-health')

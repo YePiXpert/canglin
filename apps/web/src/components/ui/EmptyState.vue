@@ -3,8 +3,6 @@ import { computed } from 'vue';
 import Icon from './Icon.vue';
 import IlluBox from '../illustrations/IlluBox.vue';
 import IlluLedger from '../illustrations/IlluLedger.vue';
-import IlluScan from '../illustrations/IlluScan.vue';
-import IlluChart from '../illustrations/IlluChart.vue';
 import IlluTruck from '../illustrations/IlluTruck.vue';
 import IlluSearch from '../illustrations/IlluSearch.vue';
 import IlluEmpty from '../illustrations/IlluEmpty.vue';
@@ -14,8 +12,6 @@ import type { IlluTone } from '../illustrations/tone';
 const scenes = {
   box: IlluBox,
   ledger: IlluLedger,
-  scan: IlluScan,
-  chart: IlluChart,
   truck: IlluTruck,
   search: IlluSearch,
   empty: IlluEmpty,

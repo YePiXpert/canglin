@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Notice from '@/components/ui/Notice.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Tabs from '@/components/ui/Tabs.vue';
@@ -71,10 +72,10 @@ defineExpose({ refresh });
     <div v-if="loading && !rows.length" class="space-y-2.5 px-5 py-4">
       <Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-4/5" />
     </div>
-    <div v-else-if="error && !rows.length" class="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-[13px] text-muted">
-      <span>列表加载失败：{{ error }}</span>
-      <Button size="sm" variant="ghost" @click="refresh()"><Icon name="refresh" :size="14" />重新加载</Button>
-    </div>
+    <Notice v-else-if="error && !rows.length" tone="red" variant="inline" class="px-5 py-4">
+      列表加载失败：{{ error }}
+      <template #actions><Button variant="link" size="sm" @click="refresh()"><Icon name="refresh" :size="14" />重新加载</Button></template>
+    </Notice>
     <p v-else-if="!rows.length" class="px-5 py-4 text-[13px] text-muted">{{ tab === 'pending' ? '没有未完成的导入' : '没有已入账的导入' }}</p>
     <ul v-else class="divide-y divide-line">
       <li v-for="task in rows" :key="task.id" class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition-colors duration-150" :class="task.id === props.currentTaskId ? 'bg-accent-soft/40' : ''" :aria-current="task.id === props.currentTaskId ? 'true' : undefined">
@@ -94,7 +95,7 @@ defineExpose({ refresh });
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p class="text-meta num">{{ total > rows.length ? `已显示 ${rows.length} 条` : `共 ${total} 条` }}</p>
         <Button v-if="total > rows.length" variant="ghost" size="sm" class="-mr-2" :loading="loading" @click="refresh(true)">显示更多（共 {{ total }} 条）</Button>
-        <p v-if="error" role="alert" class="text-meta text-red">{{ error }}</p>
+        <Notice v-if="error" tone="red" variant="inline" size="sm" role="alert">{{ error }}</Notice>
       </div>
     </template>
   </Panel>

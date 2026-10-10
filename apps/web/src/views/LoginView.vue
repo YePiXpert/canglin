@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
+import Notice from '@/components/ui/Notice.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import { apiError } from '@/api/client';
@@ -130,7 +131,7 @@ const subheading = computed(() =>
         </span>
         <div class="min-w-0">
           <p class="text-lg leading-6 font-semibold tracking-tight text-ink">Procure Lite</p>
-          <p class="text-[13px] text-muted">采购台账 · 单管理员</p>
+          <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
         </div>
       </div>
 
@@ -159,9 +160,7 @@ const subheading = computed(() =>
         <Button variant="secondary" size="sm" class="w-full mt-3" @click="copyCode">
           <Icon :name="copied ? 'check' : 'copy'" :size="14" /> {{ copied ? '已复制' : '复制恢复码' }}
         </Button>
-        <p class="mt-4 flex items-start gap-1.5 text-xs text-red">
-          <Icon name="alert" :size="13" class="mt-px shrink-0" />恢复码只显示这一次，离开页面后无法再次查看。
-        </p>
+        <Notice tone="red" variant="inline" size="sm" class="mt-4">恢复码只显示这一次，离开页面后无法再次查看。</Notice>
         <Button variant="primary" size="lg" class="w-full mt-5" @click="finishSetup">我已保存，进入系统</Button>
       </div>
 
@@ -199,10 +198,7 @@ const subheading = computed(() =>
             :error="errors.confirm"
           />
 
-          <p v-if="auth.status.locked" class="flex items-start gap-1.5 px-3 py-2 bg-red-soft rounded-lg text-[13px] text-red">
-            <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
-            失败次数过多已锁定，约 {{ lockMinutes }} 分钟后可重试
-          </p>
+          <Notice v-if="auth.status.locked" tone="red" size="sm">失败次数过多已锁定，约 {{ lockMinutes }} 分钟后可重试</Notice>
 
           <Button variant="primary" size="lg" type="submit" class="w-full mt-2" :loading="loading" :disabled="auth.status.locked">
             {{ mode === 'setup' ? '初始化系统' : mode === 'recover' ? '重置密码' : '登 录' }}
@@ -210,22 +206,12 @@ const subheading = computed(() =>
         </form>
 
         <!-- 进恢复模式后必须能回来：原来这个按钮在 recover 模式下会消失 -->
-        <button
-          v-if="mode === 'login'"
-          type="button"
-          class="mt-5 text-[13px] text-accent hover:text-accent-hover hover:underline underline-offset-2 cursor-pointer"
-          @click="openRecover"
-        >
+        <Button v-if="mode === 'login'" variant="link" class="mt-5 text-[13px]" @click="openRecover">
           忘记密码？使用恢复码
-        </button>
-        <button
-          v-else-if="mode === 'recover'"
-          type="button"
-          class="mt-5 inline-flex items-center gap-1 text-[13px] text-accent hover:text-accent-hover hover:underline underline-offset-2 cursor-pointer"
-          @click="backToLogin"
-        >
+        </Button>
+        <Button v-else-if="mode === 'recover'" variant="link" class="mt-5 text-[13px]" @click="backToLogin">
           <Icon name="chevron-left" :size="14" /> 返回登录
-        </button>
+        </Button>
       </template>
     </div>
 

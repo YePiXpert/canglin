@@ -2,7 +2,7 @@
 
 本文记录 2026-09-30 重构后的业务接口、原件识别与部署维护。需求已经确认，见 [重构需求](./rebuild-requirements.md)。技术栈仍为 Vue、Nest/Fastify、SQLite 与 Python OCR；主导航为工作台、申请、库存与领用、报表、系统设置。
 
-新主流程使用独立的申请、业务单据、库存余额和不可覆盖的库存流水。旧表与旧路由保留兼容，不推算或伪造历史采购、到货事实。本次开发不清空既有目录；在新测试库执行迁移即可使用新主流程。
+新主流程使用独立的申请、业务单据、库存余额和不可覆盖的库存流水，不推算或伪造历史采购、到货事实。旧表与旧路由曾保留兼容，已由 2026-10-08 的迁移删除（见[删除旧台账与加固](#2026-10-08-删除旧台账与加固)）。本次开发不清空既有目录；在新测试库执行迁移即可使用新主流程。
 
 ## 实现与默认值
 
@@ -56,11 +56,11 @@ services:
 - `GET .../:id/revisions`：本地识别与人工草稿版本记录。
 - `GET .../:id/original`、`GET .../:id/pages/:page`：鉴权读取，服务端路径不对外暴露。
 - `POST .../:id/retry`：`{stage:"local"|"ai",pages?:number[]}`；`POST .../:id/cancel` 取消当前代次。
-- `POST /api/workflow/imports/confirm`：人工确认后的最终值、taskId、version，以及 Idempotency-Key 请求头；同一事务校验任务/页核对/版本、建立申请与原件关联、标记确认并记录审计。旧 `POST /api/imports/confirm` 仅用于兼容旧台账。
+- `POST /api/workflow/imports/confirm`：人工确认后的最终值、taskId、version，以及 Idempotency-Key 请求头；同一事务校验任务/页核对/版本、建立申请与原件关联、标记确认并记录审计。旧 `POST /api/imports/confirm` 已随旧台账删除。
 - `POST /api/ai/capabilities`：检测 Responses 的实际能力。
 - OCR `/health` 为进程存活；`/ready` 要求加载模型并完成小样例推理。
 
-新增迁移 `20260927000000_trusted_import`，增加 ImportTask 字段、ImportRevision、OperationReceipt、AiCall。历史解析读取时补稳定历史 ID，未知值保持空；没有依据的历史字段不创建框选。历史台账和 Float 数据不自动重归并或转换。
+新增迁移 `20260927000000_trusted_import`，增加 ImportTask 字段、ImportRevision、OperationReceipt、AiCall。历史解析读取时补稳定历史 ID，未知值保持空；没有依据的历史字段不创建框选。历史台账和 Float 数据不重归并、不转换（2026-10-08 起随旧表删除）。
 
 ## 新业务接口与数据库
 
@@ -79,7 +79,20 @@ services:
 
 新数量以六位定点整数存储，单价四位，金额两位，接口返回十进制字符串。行金额使用四舍五入，聚合累加行金额。退款减少净成交，换货不减少；收货与实物退货单独统计。日期筛选按每次业务发生日期，跨期退款可使当期净额为负。不同物品、规格或单位的数量不混加，领用次数按发放单去重。
 
-旧 Float 台账不直接转换为新采购事实。恢复旧备份会先在隔离副本迁移结构，历史仍通过旧兼容入口查看；正式使用从新的申请开始。
+旧 Float 台账不转换为新采购事实：2026-10-08 的迁移直接删除旧表，恢复更早的备份时也会先在隔离副本执行同一迁移，其中的旧台账数据同样被删除；正式使用从新的申请开始。
+
+## 2026-10-08 删除旧台账与加固
+
+迁移 `20261008000000_drop_legacy_hardening` 删除旧台账的 `Item`、`ItemHistory`、`Distribution`、`DistributionLine`、`Product`、`InventoryMovement`、`SupplierPriceRecord` 表及索引。按[重构需求](./rebuild-requirements.md)，既有数据只是测试数据，迁移直接删除、不转换；对应的服务端模块、路由（`/api/items`、`/api/distributions`、`/api/inventory`、`/api/reports`、`POST /api/imports/confirm`）、前端页面与 `packages/shared` 里的旧契约一并移除，旧地址由前端路由重定向到新页面。
+
+- **附件**：只挂在旧台账或旧发放单上的附件记录随表删除（文件留在 `uploads/`，可手工清理）；已确认导入的 OA 原件挂在申请上，保留。`Attachment` 重建时沿用原来的自增计数，审计日志和历史链接里的旧附件 id 不会被新记录复用。
+- **导入任务**：经旧确认路径入账的任务重置为未确认（草稿与识别结果保留），之后按未确认原件 30 天的保留规则清理；新流程确认的任务不受影响。
+- **约束与索引**：`ImportTask.status`、`BusinessDocument.source` / `returnMode` 增加 CHECK（Prisma 看不到 CHECK，`migrate diff` 不会报漂移）；新增 `AuditLog(entity, entityId)` 与 `OperationReceipt(createdAt)` 索引。
+- **服务器时区**：`docker-compose.yml`、`deploy.sh` 生成的 `.env` 与 `.env.example` 设 `TZ=Asia/Shanghai`（服务端镜像安装 `tzdata`）。每日 03:00 的维护任务按该时区执行：清理 90 天前的操作回执、库存对账；遇到备份/恢复维护锁时每 15 分钟重试，最多 4 次，否则留到次日。
+- **库存对账**：`POST /api/system/stock-check` 立即核对每个库存余额与流水合计，结果也出现在 `GET /api/system/status` 的 `stockCheck`；不一致只写审计日志，不自动修正。
+- **导入只记申请事实**：导入页不再收集单价与采购链接，成交价和链接在登记采购时填写；`workflowImportConfirmSchema` 去掉 `supplierId`、`operationId`（操作编号只走 `Idempotency-Key` 请求头），草稿契约去掉 `supplierId`、`duplicateAction`。OCR/AI 读到的单价字段仍留在原始识别结果里，仅供核对。
+- **语义搜索**：开启后 `/api/workflow/requests`、`documents`、`stock` 的 `search` 用词表内的同义词扩展品名匹配，词表来自申请明细品名与物品目录。
+- **验证口径**：`deploy/tests/smoke-api.cjs` 改走新接口（导入确认建申请 → 备份 → 取消一行 → 恢复 → 校验申请与原件）；CI 增加前后端 lint；本地验证数字见 README。
 
 ## 验证命令
 

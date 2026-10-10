@@ -163,8 +163,26 @@ describe('AI primary original recognition', () => {
     expect(retried.draft?.items[0]).toMatchObject({ quantity: 11, spec: '人工规格' });
     expect(retried.result?.items[0].quantity).toBe(8);
     await expect(prisma.$transaction((tx) => imports.validateConfirmation(tx, {
-      ...draft, items: [{ ...draft.items[0], quantity: 11 }], taskId: task.id, version: retried.version,
+      ...draft, taskId: task.id, version: retried.version,
     }))).rejects.toThrow('请明确处理');
+  });
+
+  it('does not require a decision when an AI retry changes only the price or link', async () => {
+    const task = await settle(await upload());
+    const changed = response();
+    const page = JSON.parse(changed.content);
+    page.items[0].lineId = task.result!.items[0].lineId;
+    page.items[0].unitPrice = 25;
+    page.items[0].purchaseLink = 'https://example.com/item';
+    changed.content = JSON.stringify(page);
+    llm.chat.mockResolvedValueOnce(changed);
+    await imports.retry(task.id, 'ai', [1]);
+    const retried = await settle(task.id);
+    expect(retried.aiResult[0].items[0]).toMatchObject({ quantity: 8, unitPrice: 25 });
+    expect(retried.result?.items[0]).toMatchObject({ quantity: 8, unitPrice: 18 });
+    await expect(prisma.$transaction((tx) => imports.validateConfirmation(tx, {
+      taskId: task.id, version: retried.version,
+    }))).resolves.toMatchObject({ task: { id: task.id } });
   });
 
   it('retains a legacy human decision without spec, but a changed specification needs a new decision', async () => {

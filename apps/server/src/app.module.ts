@@ -5,12 +5,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard } from './auth/auth.guard';
-import { ItemsModule } from './items/items.module';
 import { ImportsModule } from './imports/imports.module';
-import { DistributionsModule } from './distributions/distributions.module';
-import { InventoryModule } from './inventory/inventory.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
-import { ReportsModule } from './reports/reports.module';
 import { SystemModule } from './system/system.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { AiCoreModule } from './ai/ai-core.module';
@@ -26,12 +22,8 @@ import { WorkflowImportModule } from './workflow-import/workflow-import.module';
     AuditModule,
     AiCoreModule,
     AuthModule,
-    ItemsModule,
     ImportsModule,
-    DistributionsModule,
-    InventoryModule,
     SuppliersModule,
-    ReportsModule,
     SystemModule,
     AttachmentsModule,
     WorkflowModule,

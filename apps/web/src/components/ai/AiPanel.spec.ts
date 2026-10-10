@@ -58,7 +58,7 @@ describe('AiPanel', () => {
     });
     mockedAsk.mockResolvedValue({
       answer: '上月共 3 条记录。',
-      steps: [{ name: 'query_items', args: { search: '上月' }, count: 3 }],
+      steps: [{ name: 'query_requests', args: { search: '上月' }, count: 3 }],
       model: 'glm-4.6',
     });
     const wrapper = mountPanel();

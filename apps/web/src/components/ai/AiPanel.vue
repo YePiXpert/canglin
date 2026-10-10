@@ -32,7 +32,7 @@ const configured = computed(() => config.value?.enabled && config.value.apiKeySe
 
 const EXAMPLES = [
   '本月各部门采购金额是多少？',
-  '哪些物品库存偏低？',
+  '哪些申请还有待采购的数量？',
   '上个月谁领用东西最多？',
   '未付款的采购单有哪些？',
 ];
@@ -149,7 +149,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
             <div class="min-w-0 leading-tight">
               <p class="text-[15px] leading-5 font-semibold text-ink">AI 助手</p>
               <p v-if="configured" class="text-meta truncate">{{ config?.model }} · 问答内容会发送给模型服务商</p>
-              <p v-else class="text-meta">自然语言查询台账与库存</p>
+              <p v-else class="text-meta">自然语言查询申请、单据与库存</p>
             </div>
             <button
               type="button"
@@ -171,7 +171,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
             </span>
             <p class="mt-4 text-sm font-semibold text-ink">AI 助手尚未启用</p>
             <p class="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted">
-              配置一个 OpenAI 兼容的大模型接口（默认 DeepSeek，也支持智谱 GLM 等）后，即可用自然语言查询台账、库存与发放记录。
+              配置一个 OpenAI 兼容的大模型接口（默认 DeepSeek，也支持智谱 GLM 等）后，即可用自然语言查询申请、采购与领用单据和库存。
             </p>
             <router-link
               to="/settings"

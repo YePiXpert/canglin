@@ -9,7 +9,7 @@ export function clientIp(req: FastifyRequest): string | undefined {
   return req.ip?.replace('::ffff:', '') || undefined;
 }
 
-export function operationId(req: FastifyRequest): string | undefined {
+export function operationId(req: FastifyRequest): string {
   const value = req.headers['idempotency-key'];
   if (value === undefined)
     throw new BadRequestException('缺少 Idempotency-Key 操作编号，请刷新客户端后重试');

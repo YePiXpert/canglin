@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { workflowRequestCreateSchema } from '@procure-lite/shared';
 import { workflowApi, type WorkflowRequestRow } from '@/api/workflow';
-import { apiError } from '@/api/client';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';
 import Textarea from '@/components/ui/Textarea.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Notice from '@/components/ui/Notice.vue';
+import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
 import { quantityError } from './presentation';
 
@@ -17,23 +18,16 @@ let sequence = 0;
 function emptyLine() { return { key: ++sequence, itemName: '', specification: '', unit: '', quantity: '' }; }
 const form = reactive({ serialNumber: '', department: '', handler: '', requestDate: todayString(), note: '' });
 const lines = ref([emptyLine()]);
-const errors = ref<Record<string, string>>({});
-const failure = ref('');
-const saving = ref(false);
-const initial = ref('');
 function snapshot() { return JSON.stringify({ form, lines: lines.value.map((line) => ({ itemName: line.itemName, specification: line.specification, unit: line.unit, quantity: line.quantity })) }); }
-const dirty = computed(() => snapshot() !== initial.value);
+const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 watch(() => props.open, (open) => {
   if (!open) return;
   Object.assign(form, { serialNumber: '', department: '', handler: '', requestDate: todayString(), note: '' });
   lines.value = [emptyLine()];
-  errors.value = {};
-  failure.value = '';
-  initial.value = snapshot();
+  reset();
 });
 
-async function submit() {
-  if (saving.value) return;
+async function save() {
   const invalid: Record<string, string> = {};
   for (const [key, label] of [['serialNumber', '流水号'], ['department', '申请部门'], ['handler', '经办人'], ['requestDate', '申请日期']] as const) {
     if (!form[key].trim()) invalid[key] = `请填写${label}`;
@@ -53,18 +47,10 @@ async function submit() {
   }
   errors.value = invalid;
   if (Object.keys(invalid).length || !result.success) return;
-  saving.value = true;
-  failure.value = '';
-  try {
-    const request = await workflowApi.createRequest(result.data);
-    initial.value = snapshot();
-    emit('update:open', false);
-    emit('created', request);
-  } catch (cause) {
-    failure.value = apiError(cause);
-  } finally {
-    saving.value = false;
-  }
+  const request = await submit(() => workflowApi.createRequest(result.data));
+  if (request === undefined) return;
+  emit('update:open', false);
+  emit('created', request);
 }
 </script>
 
@@ -88,6 +74,6 @@ async function submit() {
     </div>
     <Button class="mt-3" variant="ghost" size="sm" :disabled="saving || lines.length >= 500" @click="lines.push(emptyLine())"><Icon name="plus" :size="14" />添加申请明细</Button>
     <Textarea v-model="form.note" label="申请备注" :disabled="saving" class="mt-5" />
-    <template #footer><p v-if="failure" role="alert" class="mr-auto self-center text-[13px] text-red">{{ failure }}</p><Button variant="accent" :loading="saving" @click="submit">确认创建申请</Button></template>
+    <template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving" @click="close">取消</Button><Button variant="accent" :loading="saving" @click="save">确认创建申请</Button></template>
   </Dialog>
 </template>

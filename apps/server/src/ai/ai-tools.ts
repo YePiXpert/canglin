@@ -1,68 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import {
-  ITEM_STATUSES,
-  PAYMENT_STATUSES,
   WORKFLOW_DOCUMENT_KINDS,
   WORKFLOW_STAGES,
   workflowDateSchema,
   type WorkflowQuery,
-  type ItemQuery,
-  type DistributionQuery,
 } from '@procure-lite/shared';
-import { ItemsService } from '../items/items.service';
-import { InventoryService } from '../inventory/inventory.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import { ReportsService } from '../reports/reports.service';
-import { DistributionsService } from '../distributions/distributions.service';
-import { WorkflowService } from '../workflow/workflow.service';
+import { WorkflowQueryService } from '../workflow/workflow-query.service';
 import { todayString } from '../common/date.util';
 import type { ToolDef } from './llm.client';
-
-const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-
-const queryItemsArgs = z.object({
-  search: z.string().max(100).optional(),
-  status: z.enum(ITEM_STATUSES).optional(),
-  paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
-  department: z.string().max(64).optional(),
-  handler: z.string().max(64).optional(),
-  dateFrom: dateArg.optional(),
-  dateTo: dateArg.optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(50).optional(),
-});
-
-const queryDistributionsArgs = z.object({
-  search: z.string().max(100).optional(),
-  recipient: z.string().max(64).optional(),
-  department: z.string().max(64).optional(),
-  dateFrom: dateArg.optional(),
-  dateTo: dateArg.optional(),
-  page: z.number().int().min(1).optional(),
-  pageSize: z.number().int().min(1).max(50).optional(),
-});
-
-const queryInventoryArgs = z.object({
-  search: z.string().max(100).optional(),
-  lowOnly: z.boolean().optional(),
-});
-
-const queryPriceRecordsArgs = z.object({
-  itemName: z.string().max(200).optional(),
-  supplierId: z.number().int().positive().optional(),
-});
-
-const queryAmountArgs = z.object({
-  groupBy: z.enum(['month', 'department', 'supplier']),
-  dateFrom: dateArg.optional(),
-  dateTo: dateArg.optional(),
-});
-
-const reportRangeArgs = z.object({
-  dateFrom: dateArg.optional(),
-  dateTo: dateArg.optional(),
-});
 
 const workflowDates = { dateFrom: workflowDateSchema.optional(), dateTo: workflowDateSchema.optional() };
 const orderedDates = (value: { dateFrom?: string; dateTo?: string }) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo;
@@ -101,12 +48,8 @@ const requestUrl = (id: number | null) => id === null ? null : `/requests/${id}`
 @Injectable()
 export class AiToolsService {
   constructor(
-    private readonly items: ItemsService,
-    private readonly inventory: InventoryService,
     private readonly suppliers: SuppliersService,
-    private readonly reports: ReportsService,
-    private readonly distributions: DistributionsService,
-    private readonly workflow: WorkflowService,
+    private readonly workflow: WorkflowQueryService,
   ) {}
 
   definitions(): ToolDef[] {
@@ -197,64 +140,6 @@ export class AiToolsService {
           count: 1,
         };
       }
-      case 'query_items': {
-        const a = queryItemsArgs.parse(args);
-        const query: ItemQuery = {
-          search: a.search,
-          status: a.status,
-          paymentStatus: a.paymentStatus,
-          department: a.department,
-          handler: a.handler,
-          dateFrom: a.dateFrom,
-          dateTo: a.dateTo,
-          page: a.page ?? 1,
-          pageSize: a.pageSize ?? 20,
-          sort: 'requestDate_desc',
-        };
-        const page = await this.items.list(query);
-        return {
-          result: {
-            total: page.total,
-            page: page.page,
-            pageSize: page.pageSize,
-            items: page.items.map((i) => ({
-              id: i.id,
-              serialNumber: i.serialNumber,
-              department: i.department,
-              handler: i.handler,
-              requestDate: i.requestDate,
-              itemName: i.itemName,
-              quantity: i.quantity,
-              unit: i.unit,
-              unitPrice: i.unitPrice,
-              supplierName: i.supplierName,
-              status: i.status,
-              paymentStatus: i.paymentStatus,
-              invoiceIssued: i.invoiceIssued,
-              arrivalDate: i.arrivalDate,
-            })),
-          },
-          count: page.items.length,
-        };
-      }
-      case 'query_facets':
-        return { result: await this.items.facets(), count: 1 };
-      case 'query_inventory': {
-        const a = queryInventoryArgs.parse(args);
-        const products = await this.inventory.products(a.search, a.lowOnly);
-        return {
-          result: products.map((p) => ({
-            id: p.id,
-            name: p.name,
-            unit: p.unit,
-            category: p.category,
-            stockQty: p.stockQty,
-            lowStockThreshold: p.lowStockThreshold,
-            isLow: p.isLow,
-          })),
-          count: products.length,
-        };
-      }
       case 'query_suppliers': {
         z.object({}).strict().parse(args);
         const suppliers = await this.suppliers.list();
@@ -264,67 +149,10 @@ export class AiToolsService {
             name: s.name,
             contact: s.contact,
             phone: s.phone,
-            itemCount: s._count.items,
-            priceRecordCount: s._count.priceRecords,
             documentCount: s._count.businessDocuments,
           })),
           count: suppliers.length,
         };
-      }
-      case 'query_price_records': {
-        const a = queryPriceRecordsArgs.parse(args);
-        const records = await this.suppliers.priceRecords(a);
-        return {
-          result: records.map((r) => ({
-            id: r.id,
-            itemName: r.itemName,
-            unitPrice: r.unitPrice,
-            supplierName: r.supplier.name,
-            purchaseLink: r.purchaseLink,
-            createdAt: r.createdAt,
-          })),
-          count: records.length,
-        };
-      }
-      case 'query_distributions': {
-        const a = queryDistributionsArgs.parse(args);
-        const query: DistributionQuery = {
-          ...a,
-          page: a.page ?? 1,
-          pageSize: a.pageSize ?? 20,
-        };
-        const page = await this.distributions.list(query);
-        return {
-          result: {
-            total: page.total,
-            page: page.page,
-            pageSize: page.pageSize,
-            distributions: page.distributions.map((d) => ({
-              id: d.id,
-              date: d.date,
-              source: d.source,
-              department: d.department,
-              note: d.note,
-              lines: d.lines.map((l) => ({
-                itemName: l.itemName,
-                recipient: l.recipient,
-                quantity: l.quantity,
-                signoffNote: l.signoffNote,
-              })),
-            })),
-          },
-          count: page.distributions.length,
-        };
-      }
-      case 'query_report_dashboard':
-        return { result: await this.reports.dashboard(), count: 1 };
-      case 'query_report_amount': {
-        const a = queryAmountArgs.parse(args);
-        return { result: await this.reports.amount(a.groupBy, a.dateFrom, a.dateTo), count: 1 };
-      }
-      case 'query_report_recipients': {
-        const a = reportRangeArgs.parse(args);
-        return { result: await this.reports.recipients(a.dateFrom, a.dateTo), count: 1 };
       }
       default:
         throw new Error(`未知工具 ${name}`);

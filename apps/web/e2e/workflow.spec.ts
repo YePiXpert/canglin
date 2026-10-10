@@ -49,6 +49,11 @@ function progress(page: Page, name: string) {
   return page.locator('tr[data-request-line]').filter({ hasText: name });
 }
 
+/** 单据卡片：各用例共用一个临时库，「张三」这类常见文字之外再用本用例独有的品名限定 */
+function documentCard(page: Page, name: string, text: string) {
+  return page.locator('article[data-document-id]').filter({ hasText: name }).filter({ hasText: text });
+}
+
 async function direct(page: Page, name: string, quantity: string, recipient: string) {
   await product(page, name).getByRole('button', { name: '直接发放', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '直接发放', exact: true });
@@ -67,6 +72,20 @@ async function stockIn(page: Page, name: string, quantity: string, date?: string
   await dialog.getByRole('button', { name: '确认登记入库', exact: true }).click();
   await expect(dialog).toHaveCount(0);
 }
+
+test('旧版页面的书签跳到对应的新页面', async ({ page }) => {
+  await login(page);
+  for (const [from, to] of [
+    ['/legacy-workbench', '/workbench'],
+    ['/ledger', '/requests'],
+    ['/distributions', '/stock'],
+    ['/inventory', '/stock'],
+    ['/reports', '/insights'],
+  ] as const) {
+    await page.goto(from);
+    await expect(page).toHaveURL(new RegExp(`${to}$`));
+  }
+});
 
 test('按申请办理多供应商、分批到货、直发入库、领用撤销与两种实际退回', async ({ page }) => {
   await login(page);
@@ -128,7 +147,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await dialog.getByRole('button', { name: '确认库存领用', exact: true }).click();
   await expect(product(page, paper).locator('header')).toContainText('1 盒');
   await page.getByRole('button', { name: '领用与归还', exact: true }).click();
-  const issue = page.locator('article[data-document-id]').filter({ hasText: '王五' });
+  const issue = documentCard(page, paper, '王五');
   await issue.getByRole('button', { name: '撤销登记', exact: true }).click();
   dialog = page.getByRole('dialog', { name: '撤销业务登记', exact: true });
   await dialog.getByLabel('撤销日期', { exact: true }).fill(businessDate);
@@ -139,7 +158,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await expect(product(page, paper).locator('header')).toContainText('3 盒');
 
   await page.getByRole('button', { name: '领用与归还', exact: true }).click();
-  const initialDirect = page.locator('article[data-document-id]').filter({ hasText: '张三' });
+  const initialDirect = documentCard(page, paper, '张三');
   await initialDirect.getByRole('button', { name: '员工归还', exact: true }).click();
   dialog = page.getByRole('dialog', { name: '员工归还', exact: true });
   await dialog.getByLabel('业务日期', { exact: true }).fill(businessDate);

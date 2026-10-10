@@ -48,7 +48,7 @@ watch(confirmDiscard, (v) => {
   if (v) void nextTick(() => keepEditingBtn.value?.focus());
 });
 
-/** 所有关闭入口都先过这里 */
+/** 所有关闭入口都先过这里（也经 #footer 的 close 交给调用方：表单弹窗的「取消」照样受 dirty / persistent 约束） */
 function requestClose(): void {
   if (props.persistent) return;
   if (props.dirty) {
@@ -131,7 +131,7 @@ function onBackdropPointerDown(e: PointerEvent): void {
               class="flex shrink-0 flex-wrap justify-end gap-2 px-5 sm:px-6 py-4 border-t border-line bg-surface"
               :class="fullscreen ? 'pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4' : ''"
             >
-              <slot name="footer" />
+              <slot name="footer" :close="requestClose" />
             </div>
           </div>
         </div>

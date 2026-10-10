@@ -16,6 +16,7 @@ services:
   server:
     image: ghcr.io/yepixpert/procure-lite-server@sha256:3b89915e58ef56bb9c0501c8f8273c3bf7cae05cfdb9c03bca58e933110a147d
     environment:
+      TZ: Asia/Shanghai
       DATA_DIR: /app/state
       DATABASE_URL: file:/app/state/procure.db
       OCR_BASE_URL: http://ocr:8000
@@ -36,6 +37,7 @@ services:
   ocr:
     image: ghcr.io/yepixpert/procure-lite-ocr@sha256:6bd11b130f02a6bc90ca875cecfdbd80ab5662f3ec52b40bad789008f2753c3f
     environment:
+      TZ: Asia/Shanghai
       OCR_API_KEY: ${TRIAL_OCR_API_KEY:?Run deploy/trial.sh up first}
       OCR_MAX_CONCURRENT: "1"
       OCR_CPU_THREADS: "2"

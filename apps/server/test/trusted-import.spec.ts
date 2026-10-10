@@ -4,6 +4,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { ImportsService } from '../src/imports/imports.service';
 import { AiConfigService } from '../src/ai/ai-config.service';
 import { OcrClient } from '../src/imports/ocr.client';
+import { AttachmentsService } from '../src/attachments/attachments.service';
 import { AiResponseError, LlmClient } from '../src/ai/llm.client';
 import { config } from '../src/config';
 import fs from 'node:fs';
@@ -77,6 +78,7 @@ const base = {
   requestDate: '2026-09-27',
   items: [{ itemName: '纸', quantity: 2, unit: '包' }],
 };
+const CONFIRM = '/api/workflow/imports/confirm';
 function post(url: string, payload: unknown, key = randomUUID()) {
   return ctx.inject({
     method: 'POST',
@@ -112,42 +114,43 @@ async function settle(id: string) {
 }
 
 describe('trusted import', () => {
-  it('rejects missing quantities and duplicate names', async () => {
+  it('rejects missing quantities, units and source task', async () => {
+    const id = await seedTask(),
+      t = await imports.task(id),
+      body = { ...base, taskId: id, version: t.version };
     expect(
-      (await post('/api/imports/confirm', { ...base, items: [{ itemName: '纸', quantity: null }] }))
+      (await post(CONFIRM, { ...body, items: [{ itemName: '纸', quantity: null, unit: '包' }] }))
         .statusCode,
     ).toBe(400);
     expect(
-      (await post('/api/imports/confirm', { ...base, items: [...base.items, ...base.items] }))
-        .statusCode,
+      (await post(CONFIRM, { ...body, items: [{ itemName: '纸', quantity: 2 }] })).statusCode,
     ).toBe(400);
+    expect((await post(CONFIRM, base)).statusCode).toBe(400);
+    expect(await prisma.procurementRequest.count({ where: { serialNumber: base.serialNumber } })).toBe(0);
   });
   it('requires operation identity', async () => {
+    const id = await seedTask();
     expect(
       (
         await ctx.inject({
           method: 'POST',
-          url: '/api/imports/confirm',
+          url: CONFIRM,
           headers: { cookie: ctx.cookie },
-          payload: base,
+          payload: { ...base, taskId: id, version: 0 },
         })
       ).statusCode,
     ).toBe(400);
   });
-  it('replays a completed merge, rejects reuse with different content', async () => {
-    await post('/api/imports/confirm', base);
-    const key = randomUUID(),
-      body = { ...base, items: [{ ...base.items[0], quantity: 3, duplicateAction: 'merge' }] };
-    const first = await post('/api/imports/confirm', body, key),
-      second = await post('/api/imports/confirm', body, key);
-    expect(first.statusCode).toBe(201);
+  it('replays a completed confirmation, rejects reuse with different content', async () => {
+    const id = await seedTask(),
+      key = randomUUID(),
+      body = { ...base, serialNumber: 'OA-REPLAY', taskId: id, version: 0 };
+    const first = await post(CONFIRM, body, key),
+      second = await post(CONFIRM, body, key);
+    expect(first.statusCode, first.body).toBe(201);
     expect(second.json()).toEqual(first.json());
-    expect(
-      (await prisma.item.findFirstOrThrow({ where: { serialNumber: base.serialNumber } })).quantity,
-    ).toBe(5);
-    expect((await post('/api/imports/confirm', { ...body, handler: '不同' }, key)).statusCode).toBe(
-      409,
-    );
+    expect(await prisma.procurementRequest.count({ where: { serialNumber: 'OA-REPLAY' } })).toBe(1);
+    expect((await post(CONFIRM, { ...body, handler: '不同' }, key)).statusCode).toBe(409);
   });
   it('preserves source files, enforces draft version and confirms once', async () => {
     const id = await seedTask(),
@@ -157,15 +160,15 @@ describe('trusted import', () => {
     await imports.saveDraft(id, 0, draft);
     await expect(imports.saveDraft(id, 0, draft)).rejects.toThrow('更新');
     expect(
-      (await post('/api/imports/confirm', { ...draft, taskId: id, version: 0 })).statusCode,
+      (await post(CONFIRM, { ...draft, taskId: id, version: 0 })).statusCode,
     ).toBe(409);
     const key = randomUUID(),
       body = { ...draft, taskId: id, version: 1 };
-    const a = await post('/api/imports/confirm', body, key);
+    const a = await post(CONFIRM, body, key);
     expect(a.statusCode).toBe(201);
     expect(a.json().attached).toBe(1);
-    expect((await post('/api/imports/confirm', body, key)).json()).toEqual(a.json());
-    expect((await post('/api/imports/confirm', body)).statusCode).toBe(409);
+    expect((await post(CONFIRM, body, key)).json()).toEqual(a.json());
+    expect((await post(CONFIRM, body)).statusCode).toBe(409);
     expect((await imports.task(id)).originalAvailable).toBe(true);
   });
   it('blocks missing original and unresolved pages without writing rows', async () => {
@@ -187,22 +190,22 @@ describe('trusted import', () => {
       };
     await imports.saveDraft(id, 0, draft);
     expect(
-      (await post('/api/imports/confirm', { ...draft, taskId: id, version: 1 })).statusCode,
+      (await post(CONFIRM, { ...draft, taskId: id, version: 1 })).statusCode,
     ).toBe(400);
     draft.reviewedPages = [{ page: 1, note: '人工核对完成' }];
     await imports.saveDraft(id, 1, draft);
     const source = await imports.original(id);
     fs.rmSync(source.full);
     expect(
-      (await post('/api/imports/confirm', { ...draft, taskId: id, version: 2 })).statusCode,
+      (await post(CONFIRM, { ...draft, taskId: id, version: 2 })).statusCode,
     ).toBe(400);
-    expect(await prisma.item.count({ where: { serialNumber: 'OA-FAIL' } })).toBe(0);
+    expect(await prisma.procurementRequest.count({ where: { serialNumber: 'OA-FAIL' } })).toBe(0);
     // leave an intact fixture for backup tests in the separate suite
     fs.writeFileSync(source.full, 'original');
   });
   it('recognizes the original with AI first, seeds the draft, and preserves manual edits on retry', async () => {
     const cfgService = ctx.app.get(AiConfigService);
-    let cfg = await cfgService.updateConfig({
+    const cfg = await cfgService.updateConfig({
       enabled: true,
       baseUrl: 'https://example.com/v1',
       model: 'test-gpt',
@@ -262,7 +265,7 @@ describe('trusted import', () => {
     expect(continued.taskId).not.toBe(first.taskId);
     await settle(continued.taskId!);
   });
-  it('retains a shared original after either ledger attachment is removed', async () => {
+  it('keeps the confirmed original shared by the request and the source task', async () => {
     const id = await seedTask(),
       t = await imports.task(id);
     const draft = {
@@ -270,28 +273,32 @@ describe('trusted import', () => {
       serialNumber: 'OA-SHARED',
       items: [
         { ...t.draft!.items[0], quantity: 2 },
-        { itemName: '第二个物品', quantity: 3, lineId: randomUUID() },
+        { itemName: '第二个物品', quantity: 3, unit: '个', lineId: randomUUID() },
       ],
     };
     await imports.saveDraft(id, 0, draft);
-    const confirmed = await post('/api/imports/confirm', { ...draft, taskId: id, version: 1 });
-    expect(confirmed.json().attached).toBe(2);
+    const confirmed = await post(CONFIRM, { ...draft, taskId: id, version: 1 });
+    expect(confirmed.statusCode, confirmed.body).toBe(201);
+    expect(confirmed.json()).toMatchObject({ created: 2, attached: 1 });
     const source = await imports.original(id),
       attachments = await prisma.attachment.findMany({
         where: { storagePath: source.storagePath },
       });
-    for (const attachment of attachments) {
-      expect(
-        (
-          await ctx.inject({
-            method: 'DELETE',
-            url: `/api/attachments/${attachment.id}`,
-            headers: { cookie: ctx.cookie },
-          })
-        ).statusCode,
-      ).toBe(200);
-      expect(fs.existsSync(source.full)).toBe(true);
-    }
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].procurementRequestId).toBe(confirmed.json().requestId);
+    expect(
+      (
+        await ctx.inject({
+          method: 'DELETE',
+          url: `/api/attachments/${attachments[0].id}`,
+          headers: { cookie: ctx.cookie },
+        })
+      ).statusCode,
+    ).toBe(400);
+    // Reference counting: the import task still points at the file, so releasing it is a no-op.
+    await prisma.attachment.delete({ where: { id: attachments[0].id } });
+    await ctx.app.get(AttachmentsService).releaseFile(source.storagePath);
+    expect(fs.existsSync(source.full)).toBe(true);
   });
   it('resumes only remote pages never attempted after restart', async () => {
     const id = await seedTask('restart.pdf');
@@ -385,7 +392,7 @@ describe('release blocking review and accounting regressions', () => {
     expect(task.reviewPages).toEqual([]);
     const { draft, version } = await completedDraft(task.id);
     expect(
-      (await post('/api/imports/confirm', { ...draft, taskId: task.id, version }))
+      (await post(CONFIRM, { ...draft, taskId: task.id, version }))
         .statusCode,
     ).toBe(201);
   });
@@ -409,7 +416,7 @@ describe('release blocking review and accounting regressions', () => {
       expect((await imports.task(id)).reviewPages.map((p) => p.page)).toEqual([2]);
       const { draft, version } = await completedDraft(id);
       expect(
-        (await post('/api/imports/confirm', { ...draft, taskId: id, version })).statusCode,
+        (await post(CONFIRM, { ...draft, taskId: id, version })).statusCode,
       ).toBe(400);
     },
   );
@@ -431,7 +438,7 @@ describe('release blocking review and accounting regressions', () => {
     expect(after.reviewPages).toEqual([]);
     const { draft, version } = await completedDraft(task.id);
     expect(
-      (await post('/api/imports/confirm', { ...draft, taskId: task.id, version })).statusCode,
+      (await post(CONFIRM, { ...draft, taskId: task.id, version })).statusCode,
     ).toBe(201);
   });
 

@@ -42,3 +42,8 @@ export function priceError(value: string): string | undefined {
   }
   return undefined;
 }
+
+/** 商家链接只在是 http(s) 地址时渲染成 <a href>（不区分大小写）；其它内容（javascript: 之类、纯文字）返回 undefined */
+export function webLink(value: string | null | undefined): string | undefined {
+  return value && /^https?:\/\//i.test(value) ? value : undefined;
+}

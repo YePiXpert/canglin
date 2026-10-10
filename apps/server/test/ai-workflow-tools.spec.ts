@@ -150,11 +150,18 @@ describe('新业务 AI 只读查询', () => {
     expect(llm.chat).toHaveBeenCalledTimes(2);
   });
 
-  it('供应商定义覆盖新单据使用，旧只读工具执行兼容保留', async () => {
+  it('供应商定义覆盖新单据使用，旧台账工具已移除', async () => {
     const { result } = await tools.execute('query_suppliers', {});
     const documentCount = await prisma.businessDocument.count({ where: { supplierId } });
     expect(result).toEqual(expect.arrayContaining([expect.objectContaining({ id: supplierId, documentCount })]));
-    const legacy = await tools.execute('query_items', { search: name });
-    expect(legacy.result).toMatchObject({ total: 0, items: [] });
+    for (const row of result as Record<string, unknown>[]) {
+      expect(row).not.toHaveProperty('itemCount');
+      expect(row).not.toHaveProperty('priceRecordCount');
+    }
+    expect(tools.definitions().map((tool) => tool.function.name).sort()).toEqual(
+      ['query_documents', 'query_requests', 'query_stock', 'query_suppliers', 'query_workflow_reports'],
+    );
+    for (const legacy of ['query_items', 'query_facets', 'query_inventory', 'query_price_records', 'query_distributions', 'query_report_dashboard', 'query_report_amount', 'query_report_recipients'])
+      await expect(tools.execute(legacy, {})).rejects.toThrow('未知工具');
   });
 });

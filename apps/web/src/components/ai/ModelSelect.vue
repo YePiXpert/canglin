@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import Button from '../ui/Button.vue';
 import Input from '../ui/Input.vue';
 import Select from '../ui/Select.vue';
 
@@ -40,13 +41,8 @@ const options = computed(() => [
       :error="error"
       @update:model-value="emit('update:modelValue', String($event))"
     />
-    <button
-      v-if="models.length"
-      type="button"
-      class="mt-1.5 text-xs text-accent hover:underline underline-offset-2 cursor-pointer"
-      @click="manual = !manual"
-    >
+    <Button v-if="models.length" variant="link" class="mt-1.5 text-xs" @click="manual = !manual">
       {{ manual ? '从列表选择' : '手动填写' }}
-    </button>
+    </Button>
   </div>
 </template>

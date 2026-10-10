@@ -75,6 +75,7 @@ case "$ACTION" in
       -e DATA_DIR=/app/state -e DATABASE_URL=file:/app/state/procure.db \
       -e OCR_BASE_URL=http://127.0.0.1:8000 -e OCR_API_KEY=isolated-smoke \
       "$server_image")
-    docker exec -i "$container" node < "$REPO_DIR/deploy/tests/smoke-api.cjs" | tee "$TRIAL_DIR/smoke.json"
+    # The smoke test must match the candidate's API, so read it from the pinned revision, not the working tree.
+    git -C "$REPO_DIR" show "$REVISION:deploy/tests/smoke-api.cjs" | docker exec -i "$container" node | tee "$TRIAL_DIR/smoke.json"
     ;;
 esac

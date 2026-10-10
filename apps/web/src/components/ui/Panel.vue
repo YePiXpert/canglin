@@ -5,6 +5,8 @@ import { computed } from 'vue';
  * 面板（一层容器）：白底 + 发丝描边 + 可选头部 / 页脚。
  * 头部 px-5 py-4 + 底部发丝线：标题 h2 15px/600 ink，说明 13px muted，#actions 放在右侧；
  * 窄屏放不下时 #actions 换到标题下一行（与 PageHeader 一致）。
+ * #toolbar：头部与 body 之间的工具栏（分段 Tabs、搜索、筛选同行，右侧动作 ml-auto），px-4 py-3 + 底部发丝线，
+ * 不传就不渲染（DESIGN.md §6「工具栏、表格、分页放在同一个面板里」）。
  * body 默认 p-5；flush = 无内边距（表格、列表贴边）；bodyClass 可整体替换 body 的类。
  * #footer：px-5 py-3 + 顶部发丝线（分页、补充说明）。
  *
@@ -39,6 +41,9 @@ const bodyClasses = computed(() => props.bodyClass ?? (props.flush ? undefined :
         <slot name="actions" />
       </div>
     </header>
+    <div v-if="$slots.toolbar" class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+      <slot name="toolbar" />
+    </div>
     <div :class="bodyClasses">
       <slot />
     </div>

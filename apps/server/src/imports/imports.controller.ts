@@ -1,4 +1,3 @@
-import { operationId } from '../common/request.util';
 import {
   Body,
   Controller,
@@ -22,8 +21,6 @@ import { readUpload } from '../common/multipart.util';
 import {
   saveImportDraftSchema,
   type ImportDraft,
-  importConfirmSchema,
-  type ImportConfirmInput,
 } from '@procure-lite/shared';
 
 @Controller('imports')
@@ -111,33 +108,5 @@ export class ImportsController {
   @Post('tasks/:id/cancel')
   cancel(@Param('id') id: string) {
     return this.imports.cancel(id);
-  }
-
-  @Post('check-duplicates')
-  checkDuplicates(
-    @Body(
-      new ZodValidationPipe(
-        z.object({
-          serialNumber: z.string().trim().min(1).max(64),
-          handler: z.string().trim().min(1).max(64),
-          itemNames: z.array(z.string().trim().min(1).max(200)).min(1),
-        }),
-      ),
-    )
-    body: {
-      serialNumber: string;
-      handler: string;
-      itemNames: string[];
-    },
-  ) {
-    return this.imports.checkDuplicates(body);
-  }
-
-  @Post('confirm')
-  confirm(
-    @Body(new ZodValidationPipe(importConfirmSchema)) body: ImportConfirmInput,
-    @Req() req: FastifyRequest,
-  ) {
-    return this.imports.confirm(body, clientIp(req), operationId(req));
   }
 }

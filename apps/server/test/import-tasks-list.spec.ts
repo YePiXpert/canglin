@@ -130,7 +130,7 @@ describe('import task list', () => {
     expect((await allIds(false)).ids).toContain(id);
     expect((await allIds(true)).ids).not.toContain(id);
     const { body } = await completeDraft(id);
-    expect((await post('/api/imports/confirm', body)).statusCode).toBe(201);
+    expect((await post('/api/workflow/imports/confirm', body)).statusCode).toBe(201);
     expect((await allIds(false)).ids).not.toContain(id);
     expect((await allIds(true)).ids).toContain(id);
     const row = (await list('?confirmed=true&pageSize=50')).tasks.find((t) => t.id === id);
@@ -242,8 +242,8 @@ describe('import task list', () => {
   it('keeps a confirmed task read-only: no second confirmation, no draft writes', async () => {
     const id = await seedTask();
     const { draft, body } = await completeDraft(id);
-    expect((await post('/api/imports/confirm', body)).statusCode).toBe(201);
-    expect((await post('/api/imports/confirm', body)).statusCode).toBe(409);
+    expect((await post('/api/workflow/imports/confirm', body)).statusCode).toBe(201);
+    expect((await post('/api/workflow/imports/confirm', body)).statusCode).toBe(409);
     const put = await ctx.inject({
       method: 'PUT',
       url: `/api/imports/tasks/${id}/draft`,
@@ -259,7 +259,7 @@ describe('import task list', () => {
     const file = { buffer, filename: 'duplicate.png', size: buffer.length };
     const x = (await imports.upload(file)).taskId!;
     await settle(x);
-    expect((await post('/api/imports/confirm', (await completeDraft(x)).body)).statusCode).toBe(201);
+    expect((await post('/api/workflow/imports/confirm', (await completeDraft(x)).body)).statusCode).toBe(201);
     const y = (await imports.upload(file, undefined, true)).taskId!;
     expect(y).not.toBe(x);
     await settle(y);
@@ -268,7 +268,7 @@ describe('import task list', () => {
     expect(await imports.upload(file)).toEqual({ duplicateTaskId: y });
     expect(await prisma.importTask.count()).toBe(rows);
     // Once both are confirmed, the most recently confirmed task (Y) wins, not the first one.
-    expect((await post('/api/imports/confirm', (await completeDraft(y)).body)).statusCode).toBe(201);
+    expect((await post('/api/workflow/imports/confirm', (await completeDraft(y)).body)).statusCode).toBe(201);
     expect(await imports.upload(file)).toEqual({ duplicateTaskId: y });
     expect(await prisma.importTask.count()).toBe(rows);
     // An older unconfirmed task (Z) beats a newer confirmed one (W); plain createdAt desc would pick W.
@@ -276,12 +276,12 @@ describe('import task list', () => {
     await settle(z);
     const w = (await imports.upload(file, undefined, true)).taskId!;
     await settle(w);
-    expect((await post('/api/imports/confirm', (await completeDraft(w)).body)).statusCode).toBe(201);
+    expect((await post('/api/workflow/imports/confirm', (await completeDraft(w)).body)).statusCode).toBe(201);
     expect(await prisma.importTask.count()).toBe(rows + 2);
     expect(await imports.upload(file)).toEqual({ duplicateTaskId: z });
     expect(await prisma.importTask.count()).toBe(rows + 2);
     // All confirmed, in the order X, Y, W, Z: the most recently confirmed Z wins, although W is newer.
-    expect((await post('/api/imports/confirm', (await completeDraft(z)).body)).statusCode).toBe(201);
+    expect((await post('/api/workflow/imports/confirm', (await completeDraft(z)).body)).statusCode).toBe(201);
     expect(await imports.upload(file)).toEqual({ duplicateTaskId: z });
     expect(await prisma.importTask.count()).toBe(rows + 2);
   });

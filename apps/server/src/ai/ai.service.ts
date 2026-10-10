@@ -24,7 +24,6 @@ import { ImportsService } from '../imports/imports.service';
 import { LlmClient, type ChatMessage } from './llm.client';
 import { AiConfigService, type StoredAiConfig } from './ai-config.service';
 import { AiToolsService } from './ai-tools';
-import { AiSearchService } from './ai-search.service';
 
 /** 单条工具结果回传给 LLM 的字符上限，防止 token 失控 */
 const TOOL_RESULT_LIMIT = 16_000;
@@ -36,7 +35,6 @@ export class AiService {
     private readonly llm: LlmClient,
     private readonly aiConfig: AiConfigService,
     private readonly tools: AiToolsService,
-    private readonly search: AiSearchService,
     private readonly prisma: PrismaService,
     private readonly imports: ImportsService,
     private readonly audit: AuditService,
@@ -56,7 +54,7 @@ export class AiService {
     const cfg = await this.requireConfig();
     const capabilities = await this.aiConfig.capabilities(cfg);
     if (capabilities && !capabilities.tools)
-      throw new BadRequestException('当前服务未通过工具调用检测，台账问答不可用');
+      throw new BadRequestException('当前服务未通过工具调用检测，业务问答不可用');
     const messages: ChatMessage[] = [
       { role: 'system', content: this.tools.systemPrompt() },
       ...(input.history ?? []).map((h) => ({ role: h.role, content: h.content })),

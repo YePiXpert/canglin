@@ -15,12 +15,11 @@ function canonical(value: unknown): string {
 /** Must run INSIDE the same transaction as the business operation. */
 export async function operation<T>(
   tx: Prisma.TransactionClient,
-  id: string | undefined,
+  id: string,
   scope: string,
   input: unknown,
   action: () => Promise<T>,
 ): Promise<T> {
-  if (!id) return action(); // Legacy API callers retain business guards; new UI always supplies a key.
   const requestHash = createHash('sha256').update(canonical(input)).digest('hex');
   const prior = await tx.operationReceipt.findUnique({ where: { id } });
   if (prior) {

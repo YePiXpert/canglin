@@ -2,7 +2,7 @@
  * 按钮外观的唯一来源：Button.vue 用它，需要「长得像按钮的链接」（router-link / <a>）时也直接用它，
  * 例如 <router-link :class="buttonClass({ variant: 'primary', size: 'sm' })">。
  */
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost' | 'accent';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost' | 'accent' | 'link';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonClassOptions {
@@ -25,7 +25,7 @@ const BASE =
  * 实心按钮的文字用 primary-fg（浅色下白、深色下墨）：深色主题里 accent / red 都是提亮过的颜色，
  * 白字对比度不够（accent 仅 2.2:1），跟主按钮一样反转成深色字。
  */
-const VARIANTS: Record<ButtonVariant, string> = {
+const VARIANTS: Record<Exclude<ButtonVariant, 'link'>, string> = {
   primary:
     'bg-primary text-primary-fg border-transparent shadow-(--shadow-xs) hover:bg-primary-hover',
   secondary:
@@ -42,6 +42,16 @@ const VARIANTS: Record<ButtonVariant, string> = {
  * 不取决于 class 的先后，叠加会时灵时不灵。
  */
 const PRESSED = 'bg-primary-soft text-ink border-line-strong hover:border-faint';
+
+/*
+ * 文字链接样式的按钮（「来源明细 #12」「重试」这类行内动作）：不套按钮的高度、内边距、边框与按压缩放，
+ * 字号字重随上下文（需要时调用方加 text-xs / font-medium）；size / iconOnly / pressed 对它不起作用。
+ */
+const LINK =
+  'inline-flex items-center gap-1 text-accent cursor-pointer transition-colors duration-150 ' +
+  'hover:text-accent-hover hover:underline underline-offset-2 ' +
+  'focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 rounded-xs ' +
+  'disabled:cursor-not-allowed disabled:text-faint disabled:no-underline';
 
 const SIZES: Record<ButtonSize, string> = {
   sm: 'h-8 px-3 text-xs gap-1.5',
@@ -61,5 +71,6 @@ export function buttonClass({
   iconOnly = false,
   pressed = false,
 }: ButtonClassOptions = {}): string {
+  if (variant === 'link') return LINK;
   return `${BASE} ${pressed ? PRESSED : VARIANTS[variant]} ${iconOnly ? ICON_SIZES[size] : SIZES[size]}`;
 }

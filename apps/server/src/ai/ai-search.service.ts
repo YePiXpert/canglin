@@ -10,7 +10,7 @@ const MAX_SYNONYMS = 8;
 
 /**
  * 语义搜索扩展：把用户输入的搜索词扩展为库里真实存在的近似品名。
- * 独立于 AiService（后者依赖各查询模块，若放一起会与 ItemsModule 循环依赖）。
+ * 独立于 AiService（后者依赖各查询模块，若放一起会与业务模块循环依赖）。
  */
 @Injectable()
 export class AiSearchService {
@@ -26,7 +26,7 @@ export class AiSearchService {
   ) {}
 
   /**
-   * 返回与 term 语义相近、且确实存在于台账/库存中的品名（不含 term 本身与已被 contains 命中的词）。
+   * 返回与 term 语义相近、且确实存在于申请明细/物品目录中的品名（不含 term 本身与已被 contains 命中的词）。
    * 任何失败都降级为空数组，绝不阻塞原有搜索。
    */
   async synonyms(term: string): Promise<string[]> {
@@ -36,9 +36,11 @@ export class AiSearchService {
       this.epoch = maintenance.epoch;
     }
     if (term.length < 2 || /^\d+$/.test(term)) return [];
-    const cached = this.cache.get(term);
-    if (cached && cached.exp > Date.now()) return cached.terms;
     try {
+      // 先看开关再查缓存：开关切换立即生效，不沿用缓存中的扩展结果
+      if (!(await this.aiConfig.semanticSearchEnabled())) return [];
+      const cached = this.cache.get(term);
+      if (cached && cached.exp > Date.now()) return cached.terms;
       const terms = await this.expand(term);
       this.putCache(term, terms);
       return terms;
@@ -50,7 +52,7 @@ export class AiSearchService {
     }
   }
 
-  /** 品名词表（台账高频品名 + 库存物品名），扩展与 OCR 校对共用 */
+  /** 品名词表（申请明细品名按出现次数降序 + 物品目录名），扩展词只能取自其中 */
   async vocabulary(): Promise<string[]> {
     if (this.epoch !== maintenance.epoch) {
       this.cache.clear();
@@ -58,25 +60,28 @@ export class AiSearchService {
       this.epoch = maintenance.epoch;
     }
     if (this.vocabCache && this.vocabCache.exp > Date.now()) return this.vocabCache.names;
-    const [itemNames, products] = await Promise.all([
-      this.prisma.item.groupBy({
+    const [lineNames, products] = await Promise.all([
+      this.prisma.procurementLine.groupBy({
         by: ['itemName'],
-        where: { deletedAt: null },
         _count: { _all: true },
-        orderBy: { _count: { itemName: 'desc' } },
+        orderBy: [{ _count: { itemName: 'desc' } }, { itemName: 'asc' }],
         take: 300,
       }),
-      this.prisma.product.findMany({ select: { name: true }, take: 200 }),
+      this.prisma.catalogProduct.findMany({
+        select: { name: true },
+        distinct: ['name'],
+        orderBy: { id: 'desc' },
+        take: 200,
+      }),
     ]);
     const names = [
-      ...new Set([...itemNames.map((g) => g.itemName), ...products.map((p) => p.name)]),
+      ...new Set([...lineNames.map((g) => g.itemName), ...products.map((p) => p.name)]),
     ];
     this.vocabCache = { names, exp: Date.now() + VOCAB_TTL_MS };
     return names;
   }
 
   private async expand(term: string): Promise<string[]> {
-    if (!(await this.aiConfig.semanticSearchEnabled())) return [];
     const cfg = await this.aiConfig.getConfig();
     const vocab = await this.vocabulary();
     if (vocab.length === 0) return [];
@@ -89,7 +94,7 @@ export class AiSearchService {
         {
           role: 'system',
           content:
-            '你是采购台账的搜索助手。下面给出系统现有品名词表与用户搜索词。' +
+            '你是采购申请与库存的搜索助手。下面给出系统现有品名词表与用户搜索词。' +
             '从词表中选出与搜索词指同一种或相近物品的名称（忽略词表中已包含搜索词字面的项）。' +
             '只输出 JSON：{"terms": ["..."]}，最多 ' +
             MAX_SYNONYMS +

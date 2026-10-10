@@ -34,12 +34,12 @@ defineExpose({ refresh: load });
 <template>
   <div>
     <Panel flush>
-      <div class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+      <template #toolbar>
         <SearchInput v-model="filters.search" placeholder="流水号 / 品名 / 规格 / 部门 / 经办人" aria-label="搜索申请" class="w-full sm:flex-1" @search="apply" />
         <Select v-model="filters.stage" label="" placeholder="全部进度" :options="[{ value: 'PENDING_PURCHASE', label: '有待采购' }, { value: 'PENDING_ARRIVAL', label: '有待到货' }, { value: 'PENDING_DISTRIBUTION', label: '有待处理' }, ...(!pending ? [{ value: 'COMPLETED', label: '实物已办结' }] : [])]" clearable aria-label="申请进度" class="w-full sm:w-40" @update:model-value="apply" />
         <Button v-if="filters.search || filters.stage" variant="ghost" size="sm" @click="reset">清除条件</Button>
         <span v-if="refreshing" class="text-meta" role="status">刷新中…</span>
-      </div>
+      </template>
       <div v-if="loading" class="p-4 space-y-3"><Skeleton v-for="n in 3" :key="n" class="h-28" /></div>
       <ErrorState v-else-if="error" :message="error" @retry="load" />
       <EmptyState v-else-if="!data?.items.length" :illustration="filters.search || filters.stage ? 'search' : 'ledger'" :title="filters.search || filters.stage ? '没有符合条件的申请' : pending ? '当前没有待办申请' : '还没有申请单'" :description="filters.search || filters.stage ? '清除或更改条件后再查看' : '从 OA 原件导入，或人工录入一张已审批申请'">

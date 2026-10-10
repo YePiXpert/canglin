@@ -25,6 +25,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @procure-lite/shared build
       - run: pnpm --filter @procure-lite/web typecheck
+      - run: pnpm --filter @procure-lite/web lint
       - run: pnpm --filter @procure-lite/web test
       - run: pnpm --filter @procure-lite/web build
 
@@ -42,6 +43,7 @@ jobs:
       - run: pnpm --filter @procure-lite/shared build
       - run: pnpm --filter @procure-lite/server exec prisma generate
       - run: pnpm --filter @procure-lite/server typecheck
+      - run: pnpm --filter @procure-lite/server lint
       - run: pnpm --filter @procure-lite/server test
       - run: pnpm --filter @procure-lite/server build
       - run: pnpm --filter @procure-lite/web exec playwright install --with-deps chromium

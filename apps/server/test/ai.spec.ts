@@ -3,6 +3,9 @@ import { createApp, closeApp, type TestApp } from './utils';
 import { LlmClient, type ChatCallOptions, type ChatCompletionResult } from '../src/ai/llm.client';
 import { config } from '../src/config';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AiSearchService } from '../src/ai/ai-search.service';
+import { AiConfigService } from '../src/ai/ai-config.service';
+import type { WorkflowDocumentRow, WorkflowPage, WorkflowRequestRow, WorkflowStockRow } from '@procure-lite/shared';
 
 /**
  * 假 LLM：jsonMode 调用（同义词扩展 / OCR 校对）统一回 json 字段；
@@ -47,23 +50,21 @@ function auth(payload: Record<string, unknown> = {}): Record<string, unknown> {
   return { headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() }, ...payload };
 }
 
-async function seedItem(over: Record<string, unknown> = {}): Promise<void> {
+async function seedRequest(itemName: string, quantity = '10'): Promise<void> {
   const res = await ctx.inject({
     method: 'POST',
-    url: '/api/items',
+    url: '/api/workflow/requests',
     ...auth({
       payload: {
-        serialNumber: 'OA-AI-1',
+        serialNumber: `OA-AI-${crypto.randomUUID().slice(0, 8)}`,
         department: '行政部',
         handler: '刘洋',
         requestDate: '2026-08-20',
-        itemName: 'A4复印纸',
-        quantity: 10,
-        ...over,
+        lines: [{ itemName, specification: '', unit: '件', quantity }],
       },
     }),
   });
-  expect(res.statusCode).toBe(201);
+  expect(res.statusCode, res.body).toBe(201);
 }
 
 describe('AI 配置', () => {
@@ -247,27 +248,27 @@ describe('AI 配置', () => {
 });
 
 describe('AI 问答', () => {
-  it('tool-calling：先查台账再作答，steps 记录调用轨迹', async () => {
-    await seedItem(); // 默认品名 A4复印纸，供语义搜索词表使用
-    await seedItem({ itemName: '签字笔', quantity: 5 });
+  it('tool-calling：先查申请再作答，steps 记录调用轨迹', async () => {
+    await seedRequest('A4复印纸'); // 同时供语义搜索词表使用
+    await seedRequest('签字笔', '5');
 
     fake.queue = [
       {
         content: null,
-        toolCalls: [{ id: 'call-1', name: 'query_items', args: { search: '签字笔', pageSize: 5 } }],
+        toolCalls: [{ id: 'call-1', name: 'query_requests', args: { search: '签字笔', pageSize: 5 } }],
       },
       { content: '共 1 条签字笔记录。', toolCalls: [] },
     ];
     const res = await ctx.inject({
       method: 'POST',
       url: '/api/ai/ask',
-      ...auth({ payload: { question: '台账里有签字笔吗？' } }),
+      ...auth({ payload: { question: '有签字笔的申请吗？' } }),
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.answer).toBe('共 1 条签字笔记录。');
     expect(body.steps).toHaveLength(1);
-    expect(body.steps[0]).toMatchObject({ name: 'query_items', count: 1 });
+    expect(body.steps[0]).toMatchObject({ name: 'query_requests', count: 1 });
     expect(body.model).toBe('glm-4.6');
 
     // 第二轮请求里应带有工具结果消息
@@ -289,33 +290,87 @@ describe('AI 问答', () => {
   });
 });
 
+async function get<T>(url: string, query: Record<string, string>): Promise<T> {
+  const res = await ctx.inject({ method: 'GET', url, ...auth({ query }) });
+  expect(res.statusCode, res.body).toBe(200);
+  return res.json() as T;
+}
+
 describe('AI 语义搜索', () => {
-  it('搜索词经同义词扩展命中近似品名', async () => {
-    fake.json = '{"terms":["A4复印纸"]}';
-    const res = await ctx.inject({
-      method: 'GET',
-      url: '/api/items?search=' + encodeURIComponent('打印纸'),
-      ...auth(),
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().total).toBeGreaterThanOrEqual(1);
-    expect(res.json().items.some((i: { itemName: string }) => i.itemName === 'A4复印纸')).toBe(
-      true,
-    );
+  const requestNames = (page: WorkflowPage<WorkflowRequestRow>) =>
+    new Set(page.items.flatMap((request) => request.lines.map((line) => line.itemName)));
+  const stockNames = (rows: WorkflowStockRow[]) => rows.map((row) => row.itemName);
+
+  beforeAll(async () => {
+    // 品名字面包含「打印纸」：区分原词命中与同义词命中
+    await seedRequest('激光打印纸（A3）');
   });
 
-  it('词表外的扩展词被丢弃（结果落地）', async () => {
-    fake.json = '{"terms":["激光打印纸（不存在）","签字笔"]}';
-    const res = await ctx.inject({
-      method: 'GET',
-      url: '/api/items?search=' + encodeURIComponent('打印纸2'),
-      ...auth(),
+  it('词表来自申请明细与物品目录：申请品名按出现次数降序，去重', async () => {
+    const prisma = ctx.app.get(PrismaService);
+    await seedRequest('A4复印纸', '2'); // 同名再出现一次，词表中仍只有一个
+    // 按名称「档案盒」在前；「订书钉」出现次数更多，词表中应排在前面
+    for (let i = 0; i < 3; i++) await seedRequest('订书钉', '1');
+    await seedRequest('档案盒', '1');
+    await prisma.catalogProduct.create({ data: { name: '目录专有品名', specification: '', unit: '个' } });
+    // 应用内实例的词表已在问答搜索时缓存（5 分钟），这里用新实例直接读库
+    const vocab = await new AiSearchService(prisma, ctx.app.get(AiConfigService), ctx.app.get(LlmClient)).vocabulary();
+    expect(vocab).toEqual(expect.arrayContaining(['A4复印纸', '签字笔', '订书钉', '档案盒', '目录专有品名']));
+    expect(vocab.filter((name) => name === 'A4复印纸')).toHaveLength(1);
+    expect(vocab.indexOf('订书钉')).toBeLessThan(vocab.indexOf('档案盒'));
+  });
+
+  it('申请、库存与单据搜索：原词照常命中，品名另按同义词扩展', async () => {
+    const prisma = ctx.app.get(PrismaService);
+    fake.json = '{"terms":["A4复印纸"]}';
+    const before = fake.calls.length;
+    const requests = await get<WorkflowPage<WorkflowRequestRow>>('/api/workflow/requests', { search: '打印纸' });
+    expect(requestNames(requests)).toEqual(new Set(['A4复印纸', '激光打印纸（A3）']));
+    const stock = await get<WorkflowStockRow[]>('/api/workflow/stock', { search: '打印纸' });
+    expect(stockNames(stock)).toEqual(['A4复印纸', '激光打印纸（A3）']);
+
+    const supplier = await prisma.supplier.create({ data: { name: '语义搜索测试供应商' } });
+    const line = requests.items.flatMap((request) => request.lines).find((row) => row.itemName === 'A4复印纸')!;
+    const purchase = await ctx.inject({
+      method: 'POST',
+      url: '/api/workflow/purchases',
+      ...auth({
+        payload: { date: '2026-08-21', supplierId: supplier.id, lines: [{ requestLineId: line.id, quantity: '1', unitPrice: '1' }] },
+      }),
     });
-    expect(res.statusCode).toBe(200);
-    // 「打印纸2」本身不命中，词表外的词也被过滤 → 总数与 A4复印纸 无关
-    expect(res.json().items.some((i: { itemName: string }) => i.itemName === 'A4复印纸')).toBe(
-      false,
-    );
+    expect(purchase.statusCode, purchase.body).toBe(201);
+    const documents = await get<WorkflowPage<WorkflowDocumentRow>>('/api/workflow/documents', { search: '打印纸' });
+    expect(documents.items.map((document) => document.id)).toEqual([purchase.json().id]);
+    // 同一搜索词走缓存：三处搜索只调用一次模型
+    expect(fake.calls.length - before).toBe(1);
+  });
+
+  it('词表外的扩展词被丢弃，词表内的扩展词照常命中', async () => {
+    // 「激光打印纸」不是现有品名（只有「激光打印纸（A3）」），未被丢弃就会经包含匹配误命中
+    fake.json = '{"terms":["激光打印纸","签字笔"]}';
+    const requests = await get<WorkflowPage<WorkflowRequestRow>>('/api/workflow/requests', { search: '打印纸2' });
+    expect(requestNames(requests)).toEqual(new Set(['签字笔']));
+  });
+
+  it('关闭语义搜索后不调用模型，只按原词包含匹配', async () => {
+    const semanticSearch = (enabled: boolean) =>
+      ctx.inject({
+        method: 'PUT',
+        url: '/api/ai/config',
+        ...auth({
+          payload: { enabled: true, baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', semanticSearch: enabled },
+        }),
+      });
+    expect((await semanticSearch(false)).statusCode).toBe(200);
+    fake.json = '{"terms":["A4复印纸"]}';
+    const before = fake.calls.length;
+    // 「打印纸」此前已扩展为「A4复印纸」并缓存，关闭后不再沿用
+    const requests = await get<WorkflowPage<WorkflowRequestRow>>('/api/workflow/requests', { search: '打印纸' });
+    expect(requestNames(requests)).toEqual(new Set(['激光打印纸（A3）']));
+    expect(stockNames(await get<WorkflowStockRow[]>('/api/workflow/stock', { search: '打印纸' }))).toEqual(['激光打印纸（A3）']);
+    expect((await get<WorkflowPage<WorkflowDocumentRow>>('/api/workflow/documents', { search: '打印纸' })).total).toBe(0);
+    expect(fake.calls.length).toBe(before);
+    expect((await semanticSearch(true)).statusCode).toBe(200);
   });
 });
 

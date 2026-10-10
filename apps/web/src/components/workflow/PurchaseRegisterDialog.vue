@@ -11,7 +11,10 @@ import Select from '@/components/ui/Select.vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Notice from '@/components/ui/Notice.vue';
+import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
+import { issueText } from '@/utils/form';
 import { draftLineAmount, priceError, quantityError, quantityLabel } from './presentation';
 
 const props = defineProps<{ open: boolean; request: WorkflowRequestRow }>();
@@ -25,13 +28,9 @@ const clearedPrices = ref(0);
 const newSupplierName = ref('');
 const newSupplierOpen = ref(false);
 const creatingSupplier = ref(false);
-const failure = ref('');
-const errors = ref<Record<string, string>>({});
-const saving = ref(false);
 const lines = ref<{ id: number; productId: number; itemName: string; specification: string; unit: string; maximum: string; selected: boolean; quantity: string; unitPrice: string; purchaseLink: string; quotes: WorkflowPriceRow[]; quotesFailed: boolean; appliedFrom: number | null; appliedLink: string | null }[]>([]);
-const initial = ref('');
 const snapshot = () => JSON.stringify({ form, lines: lines.value.map((line) => ({ id: line.id, selected: line.selected, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink })), newSupplierName: newSupplierName.value });
-const dirty = computed(() => snapshot() !== initial.value);
+const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 const supplierOptions = computed(() => suppliers.value.map((supplier) => ({ label: supplier.name, value: String(supplier.id) })));
 watch(() => props.open, async (open, _previous, onCleanup) => {
   let current = true;
@@ -43,12 +42,10 @@ watch(() => props.open, async (open, _previous, onCleanup) => {
     maximum: line.pendingPurchaseQuantity, selected: true, quantity: line.pendingPurchaseQuantity,
     unitPrice: '', purchaseLink: '', quotes: [], quotesFailed: false, appliedFrom: null, appliedLink: null,
   }));
-  errors.value = {};
-  failure.value = '';
   newSupplierName.value = '';
   newSupplierOpen.value = false;
   clearedPrices.value = 0;
-  initial.value = snapshot();
+  reset();
   loadingSuppliers.value = true;
   loadingQuotes.value = true;
   try { const rows = await suppliersApi.list(); if (current) suppliers.value = rows; }
@@ -115,7 +112,7 @@ async function createSupplier() {
   finally { creatingSupplier.value = false; }
 }
 
-async function submit() {
+async function save() {
   if (saving.value || creatingSupplier.value) return;
   const invalid: Record<string, string> = {};
   if (!form.supplierId) invalid.supplierId = '请选择或新增本次成交的供应商';
@@ -130,16 +127,11 @@ async function submit() {
   const parsed = workflowPurchaseSchema.safeParse({ ...form, supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
-  if (!parsed.success) { failure.value = parsed.error.issues.map((issue) => issue.message).join('；'); return; }
-  saving.value = true;
-  failure.value = '';
-  try {
-    const result = await workflowApi.purchase(parsed.data);
-    initial.value = snapshot();
-    emit('update:open', false);
-    emit('recorded', result);
-  } catch (cause) { failure.value = apiError(cause); }
-  finally { saving.value = false; }
+  if (!parsed.success) { failure.value = issueText(parsed.error); return; }
+  const result = await submit(() => workflowApi.purchase(parsed.data));
+  if (result === undefined) return;
+  emit('update:open', false);
+  emit('recorded', result);
 }
 </script>
 
@@ -153,7 +145,7 @@ async function submit() {
       <Button v-if="!newSupplierOpen" variant="ghost" size="sm" :disabled="saving" @click="newSupplierOpen = true"><Icon name="plus" :size="14" />新增供应商</Button>
       <div v-else class="flex flex-wrap items-end gap-2 py-2"><Input v-model="newSupplierName" label="新供应商名称" :error="errors.newSupplier" :disabled="creatingSupplier" class="min-w-0 flex-1" /><Button :loading="creatingSupplier" @click="createSupplier">保存供应商</Button><Button variant="ghost" :disabled="creatingSupplier" @click="newSupplierOpen = false">收起</Button></div>
     </div>
-    <p v-if="clearedPrices" class="mt-2 text-xs text-amber">已清空 {{ clearedPrices }} 条来自其他供应商的历史成交价，请填写本次实际单价。</p>
+    <Notice v-if="clearedPrices" tone="amber" variant="inline" size="sm" :icon="false" class="mt-2">已清空 {{ clearedPrices }} 条来自其他供应商的历史成交价，请填写本次实际单价。</Notice>
     <div class="mt-5 space-y-3">
       <div v-for="line in lines" :key="line.id" class="rounded-lg border border-line bg-surface-2 p-3">
         <Checkbox v-model="line.selected" :label="line.itemName" :description="`${line.specification ? line.specification + ' · ' : ''}待采购 ${quantityLabel(line.maximum, line.unit)}`" :disabled="saving" />
@@ -165,10 +157,10 @@ async function submit() {
           <Input v-model="line.purchaseLink" :label="`${line.itemName} 采购链接`" placeholder="https://…（可空）" :disabled="saving" class="sm:col-span-3" />
         </div>
       </div>
-      <p v-if="errors.lines" role="alert" class="text-[13px] text-red">{{ errors.lines }}</p>
+      <Notice v-if="errors.lines" tone="red" variant="inline" role="alert">{{ errors.lines }}</Notice>
     </div>
     <Input v-model="form.note" label="本次采购备注" :disabled="saving" class="mt-5" />
     <p class="mt-4 text-right text-sm text-muted">{{ total.missing ? '已填价合计' : '本次成交合计' }} <b class="num font-semibold text-ink">¥{{ total.amount }}</b><span v-if="total.missing" class="ml-2 text-xs">{{ total.missing }} 条价格待填</span></p>
-    <template #footer><p v-if="failure" role="alert" class="mr-auto self-center text-[13px] text-red">{{ failure }}</p><Button variant="primary" :loading="saving" :disabled="creatingSupplier || loadingSuppliers" @click="submit">登记已下单</Button></template>
+    <template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving || creatingSupplier" @click="close">取消</Button><Button variant="primary" :loading="saving" :disabled="creatingSupplier || loadingSuppliers" @click="save">登记已下单</Button></template>
   </Dialog>
 </template>

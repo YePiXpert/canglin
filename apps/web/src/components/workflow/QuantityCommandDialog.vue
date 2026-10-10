@@ -6,7 +6,6 @@ import {
   type WorkflowLocation,
 } from '@procure-lite/shared';
 import { workflowApi, type WorkflowDocumentRow } from '@/api/workflow';
-import { apiError } from '@/api/client';
 import Dialog from '@/components/ui/Dialog.vue';
 import Input from '@/components/ui/Input.vue';
 import Textarea from '@/components/ui/Textarea.vue';
@@ -14,6 +13,8 @@ import Checkbox from '@/components/ui/Checkbox.vue';
 import Tabs from '@/components/ui/Tabs.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Notice from '@/components/ui/Notice.vue';
+import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
 import { quantityError, quantityLabel } from './presentation';
 
@@ -33,19 +34,13 @@ const requiresReason = computed(() => ['SUPPLIER_RETURN', 'EMPLOYEE_RETURN', 'PU
 const form = reactive({ date: todayString(), department: '', note: '', reason: '', returnMode: 'REFUND' as 'REFUND' | 'REPLACEMENT' });
 let sequence = 0;
 const lines = ref<(QuantityChoice & { key: number; selected: boolean; quantity: string; recipient: string })[]>([]);
-const errors = ref<Record<string, string>>({});
-const failure = ref('');
-const saving = ref(false);
-const initial = ref('');
 const snapshot = () => JSON.stringify({ form, lines: lines.value });
-const dirty = computed(() => snapshot() !== initial.value);
+const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 watch(() => props.open, (open) => {
   if (!open) return;
   Object.assign(form, { date: todayString(), department: props.department || '', note: '', reason: '', returnMode: 'REFUND' });
   lines.value = props.choices.filter((line) => line.available !== '0').map((line) => ({ ...line, key: ++sequence, selected: true, quantity: line.available, recipient: '' }));
-  errors.value = {};
-  failure.value = '';
-  initial.value = snapshot();
+  reset();
 }, { immediate: true });
 
 function split(key: number) {
@@ -53,8 +48,7 @@ function split(key: number) {
   if (line) lines.value.push({ ...line, key: ++sequence, quantity: '', recipient: '', selected: true });
 }
 
-async function submit() {
-  if (saving.value) return;
+async function save() {
   const selected = lines.value.filter((line) => line.selected);
   const invalid: Record<string, string> = {};
   if (!selected.length) invalid.lines = '请至少选择一条明细';
@@ -73,24 +67,19 @@ async function submit() {
   }
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
-  saving.value = true;
-  failure.value = '';
-  try {
+  // 契约的 parse 放在 run 里：抛出的 zod 校验错误由 submit 交给 failureText，显示为各条原因
+  const result = await submit(() => {
     const base = { date: form.date, note: form.note.trim() || undefined };
-    let result: WorkflowDocumentRow;
-    if (props.action === 'STOCK_IN') result = await workflowApi.stockIn(workflowStockInSchema.parse({ ...base, lines: selected.map((line) => ({ receiptLineId: line.id, quantity: line.quantity })) }));
-    else if (distribution.value) result = await workflowApi.distribute(workflowDistributionSchema.parse({ ...base, source: props.action === 'DIRECT' ? 'DIRECT' : 'STOCK', department: form.department.trim() || undefined, lines: selected.map((line) => ({ ...(props.action === 'DIRECT' ? { receiptLineId: line.id } : { productId: line.id }), recipient: line.recipient, quantity: line.quantity })) }));
-    else if (props.action === 'SUPPLIER_RETURN') result = await workflowApi.supplierReturn(workflowSupplierReturnSchema.parse({ date: form.date, reason: form.reason, returnMode: form.returnMode, lines: selected.map((line) => ({ receiptLineId: line.id, quantity: line.quantity, location: line.location || 'RECEIVING' })) }));
-    else if (props.action === 'EMPLOYEE_RETURN') result = await workflowApi.employeeReturn(workflowEmployeeReturnSchema.parse({ date: form.date, reason: form.reason, lines: selected.map((line) => ({ distributionLineId: line.id, quantity: line.quantity })) }));
-    else if (props.action === 'PURCHASE_CANCEL') result = await workflowApi.cancelPurchase(workflowPurchaseCancelSchema.parse({ date: form.date, reason: form.reason, lines: selected.map((line) => ({ purchaseLineId: line.id, quantity: line.quantity })) }));
-    else result = await workflowApi.cancelRequest(workflowRequestCancelSchema.parse({ date: form.date, reason: form.reason, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity })) }));
-    initial.value = snapshot();
-    emit('update:open', false);
-    emit('recorded', result);
-  } catch (cause) {
-    if (cause && typeof cause === 'object' && 'issues' in cause && Array.isArray(cause.issues)) failure.value = cause.issues.map((issue: { message: string }) => issue.message).join('；');
-    else failure.value = apiError(cause);
-  } finally { saving.value = false; }
+    if (props.action === 'STOCK_IN') return workflowApi.stockIn(workflowStockInSchema.parse({ ...base, lines: selected.map((line) => ({ receiptLineId: line.id, quantity: line.quantity })) }));
+    if (distribution.value) return workflowApi.distribute(workflowDistributionSchema.parse({ ...base, source: props.action === 'DIRECT' ? 'DIRECT' : 'STOCK', department: form.department.trim() || undefined, lines: selected.map((line) => ({ ...(props.action === 'DIRECT' ? { receiptLineId: line.id } : { productId: line.id }), recipient: line.recipient, quantity: line.quantity })) }));
+    if (props.action === 'SUPPLIER_RETURN') return workflowApi.supplierReturn(workflowSupplierReturnSchema.parse({ date: form.date, reason: form.reason, returnMode: form.returnMode, lines: selected.map((line) => ({ receiptLineId: line.id, quantity: line.quantity, location: line.location || 'RECEIVING' })) }));
+    if (props.action === 'EMPLOYEE_RETURN') return workflowApi.employeeReturn(workflowEmployeeReturnSchema.parse({ date: form.date, reason: form.reason, lines: selected.map((line) => ({ distributionLineId: line.id, quantity: line.quantity })) }));
+    if (props.action === 'PURCHASE_CANCEL') return workflowApi.cancelPurchase(workflowPurchaseCancelSchema.parse({ date: form.date, reason: form.reason, lines: selected.map((line) => ({ purchaseLineId: line.id, quantity: line.quantity })) }));
+    return workflowApi.cancelRequest(workflowRequestCancelSchema.parse({ date: form.date, reason: form.reason, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity })) }));
+  });
+  if (result === undefined) return;
+  emit('update:open', false);
+  emit('recorded', result);
 }
 </script>
 
@@ -108,10 +97,10 @@ async function submit() {
         </div>
         <Button v-if="distribution && line.selected" variant="ghost" size="sm" class="mt-2" :disabled="saving || lines.length >= 200" @click="split(line.key)"><Icon name="plus" :size="14" />拆给另一位领用人</Button>
       </div>
-      <p v-if="errors.lines" role="alert" class="text-[13px] text-red">{{ errors.lines }}</p>
+      <Notice v-if="errors.lines" tone="red" variant="inline" role="alert">{{ errors.lines }}</Notice>
     </div>
     <Textarea v-if="requiresReason" v-model="form.reason" label="原因" required :error="errors.reason" :disabled="saving" class="mt-5" />
     <Input v-else v-model="form.note" label="业务备注 / 签收信息" :disabled="saving" class="mt-5" />
-    <template #footer><p v-if="failure" role="alert" class="mr-auto self-center text-[13px] text-red">{{ failure }}</p><Button :variant="requiresReason ? 'primary' : 'accent'" :loading="saving" @click="submit">确认{{ labels[action] }}</Button></template>
+    <template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving" @click="close">取消</Button><Button :variant="requiresReason ? 'primary' : 'accent'" :loading="saving" @click="save">确认{{ labels[action] }}</Button></template>
   </Dialog>
 </template>

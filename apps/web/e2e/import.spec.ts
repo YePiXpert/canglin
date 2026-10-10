@@ -3,6 +3,8 @@ import { capabilityImage } from '../../server/src/ai/capability-image';
 
 // Valid image bytes exercise direct original preview; suffix keeps each synthetic source unique.
 const imageFile = (marker: string) => Buffer.concat([Buffer.from(capabilityImage().split(',')[1], 'base64'), Buffer.from(marker)]);
+/** 合成原件上的申请日期；后续采购、到货、发放都用同一天 */
+const businessDate = '2026-09-27';
 
 test('服务器已配置密钥时可直接选择模型，列表故障保留手工入口', async ({ page, request }) => {
   const password = 'browser-test-password';
@@ -80,7 +82,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
         (await page.request.put('/api/ai/config', { data: { ...cfg, autoImport: true } })).ok(),
       ).toBeTruthy();
     }
-    await page.goto('/import?legacy=1');
+    await page.goto('/import');
     await page.locator('input[type=file]').setInputFiles({
       name: `${scenario}.png`,
       mimeType: 'image/png',
@@ -92,16 +94,20 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     if (ai && !timeout) {
       await expect(page.getByText('AI：已完成', { exact: false })).toBeVisible();
       await expect(qty).toHaveValue('8');
-      await expect(page.locator('input[type=date]')).toHaveValue('2026-09-27');
+      await expect(page.locator('input[type=date]')).toHaveValue(businessDate);
     } else {
       await expect(qty).toHaveValue('');
       await qty.fill('8');
-      await page.locator('input[type=date]').fill('2026-09-27');
+      await page.locator('input[type=date]').fill(businessDate);
     }
     if (timeout) {
       await expect(page.getByText('AI：部分失败', { exact: false })).toBeVisible();
       await expect(page.getByText('第 1 页 AI 未完成，已使用本地 OCR，请核对原件', { exact: false })).toBeVisible();
     }
+    // 生成申请必须有原件单位；识别结果没有时人工补上
+    const unitInput = page.getByPlaceholder('单位', { exact: true });
+    if (!(await unitInput.inputValue())) await unitInput.fill('盒');
+    const unit = await unitInput.inputValue();
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
     await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
     await page.reload();
@@ -113,29 +119,47 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     const name = await page.getByPlaceholder('品名（同名不同规格请明确区分）').inputValue();
     await page.getByRole('button', { name: '确认全部内容并导入' }).click();
     await expect(page.getByText(/已创建 1 条/)).toBeVisible();
-    await page.goto('/legacy-workbench');
-    const card = page.locator('article').filter({ hasText: name });
-    await card.getByRole('button', { name: '下单登记', exact: true }).click();
-    await page
-      .getByRole('checkbox', { name: '单价记入比价库（下次采购同一品名时自动提示）' })
-      .uncheck();
-    await page.getByRole('button', { name: '保存并标记已下单' }).click();
-    await card.getByRole('button', { name: '确认到货', exact: true }).click();
-    await card.getByRole('button', { name: ai ? '发放' : '入库', exact: true }).click();
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: ai ? '确认发放' : '确认入库', exact: true })
-      .click();
-    await expect(card).toHaveCount(0);
+
+    // 在申请详情里继续办理：采购 → 到货 → 直发（AI）/ 入库（本地）
+    await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
+    await expect(page).toHaveURL(/\/requests\/\d+$/);
+    await page.getByRole('button', { name: '登记采购', exact: true }).click();
+    let dialog = page.getByRole('dialog', { name: '登记本次采购', exact: true });
+    await dialog.getByRole('button', { name: '新增供应商', exact: true }).click();
+    const supplierName = `导入供应商-${scenario}-${Date.now()}`;
+    await dialog.getByLabel('新供应商名称', { exact: true }).fill(supplierName);
+    await dialog.getByRole('button', { name: '保存供应商', exact: true }).click();
+    await expect(dialog.getByRole('combobox', { name: '本次供应商', exact: true })).toContainText(supplierName);
+    await dialog.getByLabel('采购日期', { exact: true }).fill(businessDate);
+    await dialog.getByLabel(`${name} 成交单价（元/${unit}）`, { exact: true }).fill('20');
+    await dialog.getByRole('button', { name: '登记已下单', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    const purchase = page
+      .locator('article[data-document-id]')
+      .filter({ has: page.getByRole('heading', { name: /^采购成交/ }) });
+    await purchase.getByRole('button', { name: '登记到货', exact: true }).click();
+    dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
+    await dialog.getByLabel('到货日期', { exact: true }).fill(businessDate);
+    await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    const card = page
+      .locator('article[data-product-id]')
+      .filter({ has: page.getByRole('heading', { name, exact: true }) });
+    const action = ai ? '直接发放' : '登记入库';
+    await card.getByRole('button', { name: action, exact: true }).click();
+    dialog = page.getByRole('dialog', { name: action, exact: true });
+    await dialog.getByLabel('业务日期', { exact: true }).fill(businessDate);
+    await dialog.getByLabel(`${name} 本次数量（${unit}）`, { exact: true }).fill('8');
+    // 各用例共用一个临时库：领用人按场景区分，别的用例按领用人筛单据时不会撞上这里的发放
+    if (ai) await dialog.getByLabel(`${name} 领用人`, { exact: true }).fill(`导入领用人-${scenario}`);
+    await dialog.getByRole('button', { name: `确认${action}`, exact: true }).click();
+    await expect(dialog).toHaveCount(0);
     if (!ai) {
-      // 入库后库存页能看到这件物品；不同单位的库存不相加，不再显示「合计 N 件」
-      await page.goto('/inventory');
-      const product = page.locator('tr').filter({ has: page.getByText(name, { exact: true }) });
-      await expect(product.locator('td[data-label="当前库存"]')).toHaveText('8');
-      await expect(page.getByText(/^\d+ 种/)).toBeVisible();
-      await expect(page.getByText(/合计 \d+ 件/)).toHaveCount(0);
+      // 入库后库存页能看到这件物品，当前库存按它自己的单位显示；整段精确匹配，「18 盒」不算
+      await page.goto('/stock');
+      await expect(card.locator('header').getByText(`8 ${unit}`, { exact: true })).toBeVisible();
       // 已入账的任务不在「未完成」里；切到「已入账」能找到它，并且只能只读打开
-      await page.goto('/import?legacy=1');
+      await page.goto('/import');
       const panel = importPanel(page);
       const listed = panel.getByRole('listitem').filter({ hasText: `${scenario}.png` });
       await expect(panel.getByText(/没有未完成的导入|共 \d+ 条|已显示 \d+ 条/).first()).toBeVisible();
@@ -150,10 +174,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     await page.goto(taskUrl);
     await expect(page.getByText('此任务已经确认入账，仅供查看。')).toBeVisible();
     await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeDisabled();
-    await page.goto('/ledger');
-    const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: '导出', exact: true }).click();
-    expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
+    await expect(page.getByRole('button', { name: '查看已入账申请', exact: true })).toBeVisible();
   });
 }
 

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { WorkflowRequestRow, WorkflowRequestLineRow } from '@/api/workflow';
 import Badge from '@/components/ui/Badge.vue';
 import Icon from '@/components/ui/Icon.vue';
+import { buttonClass } from '@/components/ui/button';
 import { quantityLabel } from './presentation';
 
 const props = defineProps<{ request: WorkflowRequestRow }>();
@@ -21,7 +22,7 @@ function nextSteps(line: WorkflowRequestLineRow) {
 </script>
 
 <template>
-  <article class="bg-surface border border-line rounded-(--radius-card) overflow-clip">
+  <article class="card overflow-clip">
     <header class="flex flex-wrap items-start gap-x-4 gap-y-2 p-4 sm:p-5">
       <div class="min-w-0 flex-1">
         <router-link :to="`/requests/${request.id}`" class="inline-flex items-center gap-2 font-mono text-[14px] font-semibold text-ink hover:text-accent break-all">{{ request.serialNumber }}<Icon name="arrow-up-right" :size="14" /></router-link>
@@ -35,6 +36,6 @@ function nextSteps(line: WorkflowRequestLineRow) {
         <p class="self-center text-xs text-muted">{{ nextSteps(line) }}</p>
       </li>
     </ul>
-    <footer class="flex items-center justify-between gap-3 border-t border-line px-4 py-3 sm:px-5"><span class="text-meta">{{ request.lines.length }} 条明细 · {{ request.attachments.length }} 份原件</span><router-link :to="`/requests/${request.id}`" class="inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline">查看申请并办理<Icon name="arrow-right" :size="14" /></router-link></footer>
+    <footer class="flex items-center justify-between gap-3 border-t border-line px-4 py-3 sm:px-5"><span class="text-meta">{{ request.lines.length }} 条明细 · {{ request.attachments.length }} 份原件</span><router-link :to="`/requests/${request.id}`" class="text-[13px] font-medium" :class="buttonClass({ variant: 'link' })">查看申请并办理<Icon name="arrow-right" :size="14" /></router-link></footer>
   </article>
 </template>

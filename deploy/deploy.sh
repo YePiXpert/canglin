@@ -46,6 +46,8 @@ if [ ! -f .env ]; then
 OCR_API_KEY=$OCR_KEY
 COMPOSE_PROJECT_NAME=procure-lite
 WEB_PORT=$WEB_PORT
+# 服务器时区：每日 3 点的维护任务和本地日期按它计算
+TZ=Asia/Shanghai
 EOF
   chmod 600 .env
   info "已生成 .env（含随机 OCR_API_KEY）"

@@ -10,6 +10,7 @@ import { apiError } from '@/api/client';
 import { createRequestGuard } from '@/utils/request';
 import { useUrlState } from '@/composables/useUrlState';
 import Button from '@/components/ui/Button.vue';
+import { buttonClass } from '@/components/ui/button';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import SearchInput from '@/components/ui/SearchInput.vue';
@@ -20,6 +21,7 @@ import Tabs from '@/components/ui/Tabs.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Dialog from '@/components/ui/Dialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import { webLink } from '@/components/workflow/presentation';
 
 const router = useRouter(), catalog = useCatalogStore(), toast = useToastStore();
 const defaults = { tab: 'suppliers', priceSearch: '' };
@@ -82,7 +84,6 @@ async function openPurchase(lineId: number) {
   } catch (cause) { toast.error(apiError(cause)); }
   finally { openingPrice.value = null; }
 }
-function webLink(value: string | null) { return value && /^https?:\/\//i.test(value) ? value : undefined; }
 onMounted(() => { void loadSuppliers(); if (state.tab === 'prices') void loadPrices(); });
 onUnmounted(() => priceGuard.abandon());
 </script>
@@ -90,11 +91,11 @@ onUnmounted(() => priceGuard.abandon());
 <template>
   <div class="space-y-6">
     <Panel title="供应商与成交价格" description="同一物品、规格、单位下，各供应商最近一次实际成交价；采购时可直接参考" flush>
-      <div class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+      <template #toolbar>
         <Tabs :model-value="state.tab" variant="segmented" :tabs="[{ value: 'suppliers', label: '供应商' }, { value: 'prices', label: '成交价格' }]" @change="switchTab" />
         <SearchInput v-if="state.tab === 'prices'" v-model="state.priceSearch" class="w-full sm:w-64" placeholder="搜索品名或规格" aria-label="搜索成交价格" @search="loadPrices" />
         <Button variant="primary" size="sm" class="ml-auto" @click="openSupplierDialog(null)"><Icon name="plus" :size="14" />新增供应商</Button>
-      </div>
+      </template>
       <!-- 供应商列表 -->
       <template v-if="state.tab !== 'prices'">
         <div v-if="loading" class="p-4 space-y-2">
@@ -153,7 +154,7 @@ onUnmounted(() => priceGuard.abandon());
         <EmptyState v-else-if="!prices.length" illustration="search" title="暂无匹配的成交价格" description="登记采购后会自动保留成交价；同名不同规格或单位分别展示。" />
         <div v-else class="overflow-x-auto"><table class="table-base table-cards min-w-[640px]">
           <thead><tr><th>品名 / 规格</th><th>供应商</th><th class="text-right">成交单价</th><th>日期</th><th>来源</th></tr></thead>
-          <tbody><tr v-for="price in prices" :key="price.purchaseLineId"><td class="font-medium text-ink">{{ price.itemName }}<p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">¥{{ price.unitPrice }} / {{ price.unit }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源"><Button size="sm" variant="ghost" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" class="ml-2 text-xs text-accent hover:underline">商家链接</a></td></tr></tbody>
+          <tbody><tr v-for="price in prices" :key="price.purchaseLineId"><td class="font-medium text-ink">{{ price.itemName }}<p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">¥{{ price.unitPrice }} / {{ price.unit }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源"><Button size="sm" variant="ghost" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="ml-2 text-xs">商家链接</a></td></tr></tbody>
         </table></div>
       </template>
     </Panel>

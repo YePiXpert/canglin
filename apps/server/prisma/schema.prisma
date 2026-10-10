@@ -7,59 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* 台账：一行 = OA 单上的一条申领物品 */
-model Item {
-  id               Int        @id @default(autoincrement())
-  serialNumber     String
-  department       String
-  handler          String
-  requestDate      String // YYYY-MM-DD
-  itemName         String
-  quantity         Float
-  unit             String?
-  purchaseLink     String?
-  unitPrice        Float?
-  supplierId       Int?
-  supplier         Supplier?  @relation(fields: [supplierId], references: [id])
-  supplierName     String?
-  status           String     @default("PENDING_PURCHASE")
-  invoiceIssued    Boolean    @default(false)
-  paymentStatus    String     @default("UNPAID")
-  arrivalDate      String?
-  distributionDate String?
-  signoffNote      String?
-  note             String?
-  deletedAt        DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-
-  history       ItemHistory[]
-  distributionLines DistributionLine[]
-  attachments   Attachment[]
-
-  @@unique([serialNumber, itemName, handler])
-  @@index([status, deletedAt, createdAt])
-  @@index([department, deletedAt])
-  @@index([handler])
-  @@index([requestDate])
-  @@index([supplierId])
-  @@index([deletedAt, createdAt])
-}
-
-/* 修改历史：字段级快照，支持回滚 */
-model ItemHistory {
-  id            Int      @id @default(autoincrement())
-  itemId        Int
-  item          Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  action        String // CREATE / UPDATE / BATCH_UPDATE / ROLLBACK / STATUS / DELETE / RESTORE
-  changedFields String? // JSON: {field: [before, after]}
-  beforeData    String? // JSON 快照
-  afterData     String? // JSON 快照
-  createdAt     DateTime @default(now())
-
-  @@index([itemId, createdAt])
-}
-
 model AuditLog {
   id         Int      @id @default(autoincrement())
   action     String
@@ -70,78 +17,7 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
-}
-
-/* 发放单：一次发放动作（可含多个领用人/多条物品） */
-model Distribution {
-  id            Int      @id @default(autoincrement())
-  date          String // YYYY-MM-DD
-  source        String // DIRECT | STOCK
-  department    String?
-  note          String?
-  totalQuantity Float
-  createdAt     DateTime @default(now())
-
-  lines       DistributionLine[]
-  attachments Attachment[]
-
-  @@index([date])
-  @@index([department])
-  @@index([createdAt])
-}
-
-/* 领用明细：谁领了多少 */
-model DistributionLine {
-  id            Int         @id @default(autoincrement())
-  distributionId Int
-  distribution  Distribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
-  itemId        Int?
-  item          Item?       @relation(fields: [itemId], references: [id])
-  productId     Int?
-  product       Product?    @relation(fields: [productId], references: [id])
-  itemName      String
-  recipient     String
-  quantity      Float
-  signoffNote   String?
-  createdAt     DateTime    @default(now())
-
-  @@index([recipient])
-  @@index([itemId])
-  @@index([productId])
-  @@index([distributionId])
-}
-
-/* 物品主数据（库存账面） */
-model Product {
-  id                Int      @id @default(autoincrement())
-  name              String   @unique
-  unit              String?
-  category          String?
-  stockQty          Float    @default(0)
-  lowStockThreshold Float?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  movements         InventoryMovement[]
-  distributionLines DistributionLine[]
-
-  @@index([name])
-}
-
-/* 库存流水：quantity 为带符号增量，stockQty = SUM(quantity) */
-model InventoryMovement {
-  id                    Int      @id @default(autoincrement())
-  productId             Int
-  product               Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity              Float
-  type                  String // INBOUND | OUTBOUND | ADJUSTMENT
-  relatedItemId         Int?
-  relatedDistributionId Int?
-  note                  String?
-  createdAt             DateTime @default(now())
-
-  @@index([productId, createdAt])
-  @@index([type])
+  @@index([entity, entityId])
 }
 
 model Supplier {
@@ -153,33 +29,13 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items        Item[]
-  priceRecords SupplierPriceRecord[]
   businessDocuments BusinessDocument[]
 }
 
-/* 价格记忆：同一品名在各供应商的单价与链接 */
-model SupplierPriceRecord {
-  id           Int      @id @default(autoincrement())
-  supplierId   Int
-  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  itemName     String
-  unitPrice    Float
-  purchaseLink String?
-  createdAt    DateTime @default(now())
-
-  @@index([itemName])
-  @@index([supplierId, createdAt])
-}
-
-/* 附件：发票、签收凭证等 */
+/* 附件：申请原件（OA_DOC）、采购发票、发放签收凭证 */
 model Attachment {
   id            Int          @id @default(autoincrement())
-  kind          String // INVOICE | SIGNOFF
-  itemId        Int?
-  item          Item?        @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  distributionId Int?
-  distribution  Distribution? @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  kind          String // OA_DOC | INVOICE | SIGNOFF
   procurementRequestId Int?
   procurementRequest ProcurementRequest? @relation(fields: [procurementRequestId], references: [id], onDelete: Restrict)
   businessDocumentId Int?
@@ -190,8 +46,6 @@ model Attachment {
   sizeBytes     Int
   createdAt     DateTime     @default(now())
 
-  @@index([itemId])
-  @@index([distributionId])
   @@index([procurementRequestId])
   @@index([businessDocumentId])
 }
@@ -203,7 +57,7 @@ model ImportTask {
   status      String // PENDING | RUNNING | DONE | FAILED
   result      String? // JSON ParseResult
   error       String?
-  /** 原件相对 uploads 的路径；确认导入后转为台账附件，未确认的由定期清理回收 */
+  /** 原件相对 uploads 的路径；确认导入后转为申请原件附件，未确认的由定期清理回收 */
   storagePath String?
   createdAt   DateTime  @default(now())
   finishedAt  DateTime?
@@ -242,6 +96,7 @@ model OperationReceipt {
   requestHash String
   response String
   createdAt DateTime @default(now())
+  @@index([createdAt])
 }
 
 model ImportRevision {
@@ -271,7 +126,7 @@ model AiCall {
   @@index([taskId, createdAt])
 }
 
-// V3 workflow is additive: old ledger and API remain readable during rollout.
+// V3 workflow. CHECK constraints on enum-like columns live in the migrations (Prisma cannot model them).
 // Scaled integers: quantities 6 decimals, unit prices 4, line amounts CNY fen.
 model CatalogProduct {
   id Int @id @default(autoincrement())
@@ -323,9 +178,9 @@ model ProcurementLine {
 
 model BusinessDocument {
   id Int @id @default(autoincrement())
-  kind String
+  kind String // WORKFLOW_DOCUMENT_KINDS
   date String
-  status String @default("POSTED")
+  status String @default("POSTED") // POSTED | VOIDED
   supplierId Int?
   supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   supplierName String?
@@ -334,7 +189,7 @@ model BusinessDocument {
   returnMode String?
   note String?
   totalAmountUnits BigInt?
-  paymentStatus String @default("UNPAID")
+  paymentStatus String @default("UNPAID") // PAYMENT_STATUSES
   invoiceIssued Boolean @default(false)
   voidReason String?
   voidDate String?

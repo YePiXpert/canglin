@@ -20,6 +20,8 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.server
     environment:
+      # 服务器时区：每日 3 点的维护任务和本地日期按它计算
+      TZ: ${TZ:-Asia/Shanghai}
       DATA_DIR: /app/state
       DATABASE_URL: file:/app/state/procure.db
       OCR_BASE_URL: http://ocr:8000
@@ -40,6 +42,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.ocr
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       OCR_API_KEY: ${OCR_API_KEY:-please-change-ocr-key}
       OCR_MAX_CONCURRENT: "1"
       OCR_CPU_THREADS: "2"

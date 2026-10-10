@@ -16,7 +16,7 @@ describe('认证流程', () => {
   });
 
   it('未登录访问业务接口返回 401', async () => {
-    const res = await ctx.inject({ method: 'GET', url: '/api/items' });
+    const res = await ctx.inject({ method: 'GET', url: '/api/workflow/requests' });
     expect(res.statusCode).toBe(401);
   });
 
@@ -61,14 +61,14 @@ describe('认证流程', () => {
   it('登录后可访问业务接口，伪造 Cookie 拒绝', async () => {
     const ok = await ctx.inject({
       method: 'GET',
-      url: '/api/items',
+      url: '/api/workflow/requests',
       headers: { cookie: ctx.cookie, 'idempotency-key': crypto.randomUUID() },
     });
     expect(ok.statusCode).toBe(200);
 
     const forged = await ctx.inject({
       method: 'GET',
-      url: '/api/items',
+      url: '/api/workflow/requests',
       headers: { cookie: 'pl_session=Zm9v.bg==' },
     });
     expect(forged.statusCode).toBe(401);

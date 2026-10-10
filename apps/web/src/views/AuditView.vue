@@ -45,14 +45,15 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'blue' | 'teal' | 'am
   AUTH_RECOVER_FAILED: { label: '恢复码错误', tone: 'red', group: '账号' },
   AUTH_CHANGE_PASSWORD: { label: '修改密码', tone: 'amber', group: '账号' },
   AUTH_REGENERATE_RECOVERY: { label: '重置恢复码', tone: 'amber', group: '账号' },
-  ITEM_CREATE: { label: '新增台账', tone: 'blue', group: '台账' },
-  ITEM_UPDATE: { label: '修改台账', tone: 'blue', group: '台账' },
-  ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'blue', group: '台账' },
-  ITEM_PURCHASE: { label: '下单登记', tone: 'blue', group: '台账' },
-  ITEM_DELETE: { label: '删除台账', tone: 'red', group: '台账' },
-  ITEM_RESTORE: { label: '恢复台账', tone: 'blue', group: '台账' },
-  ITEM_PURGE: { label: '彻底删除', tone: 'red', group: '台账' },
-  ITEM_ROLLBACK: { label: '回滚', tone: 'amber', group: '台账' },
+  // 旧版台账已删除，保留这些动作名只为显示历史审计记录
+  ITEM_CREATE: { label: '新增台账', tone: 'blue', group: '旧台账' },
+  ITEM_UPDATE: { label: '修改台账', tone: 'blue', group: '旧台账' },
+  ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'blue', group: '旧台账' },
+  ITEM_PURCHASE: { label: '下单登记', tone: 'blue', group: '旧台账' },
+  ITEM_DELETE: { label: '删除台账', tone: 'red', group: '旧台账' },
+  ITEM_RESTORE: { label: '恢复台账', tone: 'blue', group: '旧台账' },
+  ITEM_PURGE: { label: '彻底删除', tone: 'red', group: '旧台账' },
+  ITEM_ROLLBACK: { label: '回滚', tone: 'amber', group: '旧台账' },
   ITEM_STOCK_IN: { label: '采购入库', tone: 'teal', group: '库存' },
   ITEM_STOCK_IN_BATCH: { label: '整单入库', tone: 'teal', group: '库存' },
   AI_CONFIG_UPDATE: { label: '修改 AI 设置', tone: 'blue', group: 'AI' },
@@ -117,7 +118,7 @@ function applyFilters(): void {
 
 /**
  * 详情原来是把 JSON 原样塞进单元格再 truncate，基本没法读。
- * 这里拆成键值对，字段名走台账的中文映射，展开才显示完整内容。
+ * 这里拆成键值对，字段名走旧台账字段（ITEM_FIELD_LABELS）的中文映射，展开才显示完整内容。
  */
 interface DetailEntry {
   key: string;
@@ -166,6 +167,7 @@ const DETAIL_KEY_LABELS: Record<string, string> = {
   scope: '范围',
   patch: '修改内容',
   filename: '文件名',
+  serialNumber: '流水号',
   kind: '类型',
   historyId: '历史版本',
   id: 'ID',
@@ -191,7 +193,7 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
 <template>
   <!-- 工具栏 + 表格 + 分页在同一个贴边面板里，面板随内容增高（<main> 才是滚动容器） -->
   <Panel flush>
-    <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+    <template #toolbar>
       <SearchInput v-model="filters.search" class="w-full sm:w-72" placeholder="搜索详情内容" @search="applyFilters" />
       <NativeSelect
         v-model="filters.action"
@@ -204,8 +206,8 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
       <Button v-if="hasFilters" variant="ghost" size="sm" @click="Object.assign(filters, DEFAULTS); load()">
         <Icon name="close" :size="14" /> 清除
       </Button>
-      <p class="ml-auto text-meta tabular-nums">共 {{ total }} 条</p>
-    </div>
+      <p class="ml-auto text-meta num">共 {{ total }} 条</p>
+    </template>
 
     <div v-if="loading" class="p-4 space-y-2">
       <Skeleton v-for="i in 8" :key="i" class="h-10" />
@@ -285,8 +287,8 @@ const hasFilters = computed(() => !!(filters.search || filters.action));
       </table>
     </div>
 
-    <div v-if="!loading && !loadError && logs.length > 0" class="px-4 py-3 border-t border-line">
+    <template v-if="!loading && !loadError && logs.length > 0" #footer>
       <Pagination :page="filters.page" :page-size="pageSize" :total="total" @change="(p) => { filters.page = p; load(true); }" />
-    </div>
+    </template>
   </Panel>
 </template>

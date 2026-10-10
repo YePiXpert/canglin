@@ -1,6 +1,4 @@
 import {
-  BadRequestException,
-  Body,
   Controller,
   Delete,
   Get,
@@ -27,25 +25,6 @@ const kindQuery = z.object({
 export class AttachmentsController {
   constructor(private readonly attachments: AttachmentsService) {}
 
-  @Post('items/:id')
-  async uploadForItem(
-    @Param('id', ParseIntPipe) id: number,
-    @Query(new ZodValidationPipe(kindQuery)) query: { kind: 'INVOICE' | 'SIGNOFF' },
-    @Req() req: FastifyRequest,
-  ) {
-    const file = await readUpload(req);
-    return this.attachments.save({ file, kind: query.kind, itemId: id, ip: clientIp(req) });
-  }
-
-  @Post('distributions/:id')
-  async uploadForDistribution(
-    @Param('id', ParseIntPipe) id: number,
-    @Req() req: FastifyRequest,
-  ) {
-    const file = await readUpload(req);
-    return this.attachments.save({ file, kind: 'SIGNOFF', distributionId: id, ip: clientIp(req) });
-  }
-
   @Post('requests/:id')
   async uploadForRequest(@Param('id', ParseIntPipe) id: number, @Req() req: FastifyRequest) {
     return this.attachments.save({ file: await readUpload(req), kind: 'OA_DOC', procurementRequestId: id, ip: clientIp(req) });
@@ -65,14 +44,12 @@ export class AttachmentsController {
     @Query(
       new ZodValidationPipe(
         z.object({
-          itemId: z.coerce.number().int().positive().optional(),
-          distributionId: z.coerce.number().int().positive().optional(),
           procurementRequestId: z.coerce.number().int().positive().optional(),
           businessDocumentId: z.coerce.number().int().positive().optional(),
         }),
       ),
     )
-    query: { itemId?: number; distributionId?: number; procurementRequestId?: number; businessDocumentId?: number },
+    query: { procurementRequestId?: number; businessDocumentId?: number },
   ) {
     return this.attachments.list(query);
   }

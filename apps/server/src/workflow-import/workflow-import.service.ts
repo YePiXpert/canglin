@@ -18,9 +18,9 @@ export class WorkflowImportService {
     private readonly workflow: WorkflowService,
   ) {}
 
-  confirm(input: WorkflowImportConfirmInput, ip?: string, operationId?: string) {
+  confirm(input: WorkflowImportConfirmInput, ip: string | undefined, operationId: string) {
     return this.prisma.$transaction((tx) => operation(
-      tx, operationId ?? input.operationId, 'workflow:import-confirm', input, async () => {
+      tx, operationId, 'workflow:import-confirm', input, async () => {
         const { task, draft, local, source } = await this.imports.validateConfirmation(tx, input);
         if (!task || !source) throw new NotFoundException('来源任务或原件不存在');
         const parsed = workflowRequestCreateSchema.safeParse({

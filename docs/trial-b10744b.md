@@ -61,7 +61,7 @@ ssh -N -L 18080:127.0.0.1:18080 用户名@VPS地址
 bash deploy/trial.sh smoke
 ```
 
-其固定合成密码只用于自动销毁的断网临时容器；正式试用环境没有预设密码。结果保存在配置目录的 `readiness.json`、`smoke.json`。这些证据只证明环境与恢复链路可运行，不证明真实单据识别效果，也不是完整升级/回退演练。
+冒烟脚本取自候选提交自身的 `deploy/tests/smoke-api.cjs`（`git show b10744b:deploy/tests/smoke-api.cjs`），与候选镜像的接口一致；当前 `main` 的同名脚本已改走新的 `/api/workflow` 接口，不适用于该镜像。其固定合成密码只用于自动销毁的断网临时容器；正式试用环境没有预设密码。结果保存在配置目录的 `readiness.json`、`smoke.json`。这些证据只证明环境与恢复链路可运行，不证明真实单据识别效果，也不是完整升级/回退演练。
 
 ## 后续试用顺序
 

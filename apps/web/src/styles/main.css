@@ -8,7 +8,7 @@
  * - 暖纸色画布 + 白色面板 + 墨色文字与主按钮；品牌绿（accent）只做点睛
  * - 语义色：blue = 进行中、amber = 等待、red = 危险，只用于状态
  * - 深色模式只在下方 .dark 里改令牌值，全站工具类自动翻转
- * - static：chartTheme.ts 与插画在运行时按名字读令牌，没被工具类引用的也必须输出
+ * - static：插画在运行时按名字读令牌，没被工具类引用的也必须输出
  */
 @theme static {
   /* 纸与墨 */
@@ -271,7 +271,7 @@
     @apply opacity-100;
   }
   /*
-   * 行高统一在 44px：放了 24px 药丸（Badge / StatusBadge 根元素带 .badge）的单元格上下各 10px，
+   * 行高统一在 44px：放了 24px 药丸（Badge 根元素带 .badge）的单元格上下各 10px，
    * 放了 32px 操作按钮的单元格上下各 6px；页面不用再手写 py-*。
    */
   .table-base td:has(.badge) {
@@ -446,7 +446,7 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
-  /* 14px 小号（Checkbox / Radio 组件的 size="sm"）：class="checkbox checkbox-sm" / "radio radio-sm" */
+  /* 14px 小号（Checkbox 组件的 size="sm" 与单选输入）：class="checkbox checkbox-sm" / "radio radio-sm" */
   .checkbox-sm,
   .radio-sm {
     width: 0.875rem;

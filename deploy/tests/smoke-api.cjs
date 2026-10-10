@@ -40,9 +40,13 @@ async function call(method, route, data, expected = 200) {
   });
   assert.equal(upload.status, 201);
   const { taskId } = await upload.json();
+  // An image needs no OCR call to count its pages, so the unreachable OCR leaves the task
+  // settled with page 1 unrecognized: it must be reviewed by hand before confirmation.
+  let task;
   for (let n = 0; n < 40; n++) {
-    const task = (await call('GET', `/imports/tasks/${taskId}`)).value;
-    if (task.status === 'FAILED') break;
+    task = (await call('GET', `/imports/tasks/${taskId}`)).value;
+    const busy = [task.status, task.aiStatus].some((s) => s === 'PENDING' || s === 'RUNNING');
+    if (!busy && task.reviewPages.some((p) => p.page === 1 && !p.reviewed)) break;
     if (n === 39) throw new Error('Offline OCR failure not visible');
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -55,17 +59,40 @@ async function call(method, route, data, expected = 200) {
     reviewedPages: [{ page: 1, note: '已核对原件全部页面' }],
     reviewedAi: [],
   };
-  await call('PUT', `/imports/tasks/${taskId}/draft`, { version: 0, draft });
-  const confirmed = (await call('POST', '/imports/confirm', { ...draft, taskId, version: 1 }, 201))
-    .value;
+  const { version } = (
+    await call('PUT', `/imports/tasks/${taskId}/draft`, { version: task.version, draft })
+  ).value;
+  // The confirmation creates the request and attaches the original in one transaction.
+  const confirmed = (
+    await call('POST', '/workflow/imports/confirm', { ...draft, taskId, version }, 201)
+  ).value;
+  assert.equal(confirmed.created, 1);
   assert.equal(confirmed.attached, 1);
-  const id = confirmed.ids[0];
+  const id = confirmed.requestId;
+  const [line] = (await call('GET', `/workflow/requests/${id}`)).value.lines;
   const backup = (await call('POST', '/system/backups', {}, 201)).value;
-  await call('PATCH', `/items/${id}`, { quantity: 9 });
+  // A change made after the backup must be rolled back by the restore.
+  await call(
+    'POST',
+    '/workflow/request-cancellations',
+    {
+      date: draft.requestDate,
+      reason: '备份后的改动',
+      lines: [{ requestLineId: line.id, quantity: 1 }],
+    },
+    201,
+  );
   await call('POST', `/system/backups/${backup.name}/restore`, {});
-  await call('GET', '/items', undefined, 401);
+  await call('GET', '/workflow/requests', undefined, 401);
   cookie = (await call('POST', '/auth/login', { password })).cookie;
-  assert.equal((await call('GET', `/items/${id}`)).value.quantity, 4);
+  const request = (await call('GET', `/workflow/requests/${id}`)).value;
+  assert.equal(request.serialNumber, draft.serialNumber);
+  assert.equal(request.sourceTaskId, taskId);
+  // Quantities are fixed-point decimal strings.
+  assert.deepEqual(
+    request.lines.map((l) => [l.itemName, l.unit, l.quantity, l.cancelledQuantity]),
+    [['容器样本', '件', '4', '0']],
+  );
   const recovered = await fetch(`http://127.0.0.1:3000/api/imports/tasks/${taskId}/original`, {
     headers: { cookie },
   });
