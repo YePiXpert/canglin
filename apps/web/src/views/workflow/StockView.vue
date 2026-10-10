@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { workflowApi } from '@/api/workflow';
+import { workflowApi, type WorkflowStockRow } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
 import { useUrlState } from '@/composables/useUrlState';
 import PageHeader from '@/components/ui/PageHeader.vue';
@@ -36,8 +36,11 @@ const stockFilter = computed(() => (state.stock === 'in' || state.stock === 'emp
 const filterLabel = computed(() => (stockFilter.value === 'empty' ? '已空' : '有库存'));
 /** 当前页签的物品（搜索在接口里做，结果已按品名排序）：到货待处理页签只留有待处理数量的 */
 const tabProducts = computed(() => (stock.value || []).filter((product) => !receivingTab.value || product.receivingQuantity !== '0'));
-const emptyCount = computed(() => tabProducts.value.filter((product) => product.stockQuantity === '0').length);
-const products = computed(() => tabProducts.value.filter((product) => !stockFilter.value || (product.stockQuantity === '0') === (stockFilter.value === 'empty')));
+/** 已空 = 当前库存为 0 且有过来源批次；从没入过库的物品只在「全部」里出现 */
+const isEmptied = (product: WorkflowStockRow) => product.stockQuantity === '0' && product.sources.length > 0;
+const emptyCount = computed(() => tabProducts.value.filter(isEmptied).length);
+const inStockCount = computed(() => tabProducts.value.filter((product) => product.stockQuantity !== '0').length);
+const products = computed(() => tabProducts.value.filter((product) => !stockFilter.value || (stockFilter.value === 'empty' ? isEmptied(product) : product.stockQuantity !== '0')));
 /* 页签计数跟着当前搜索：库存物品 = 物品种数，到货待处理 = 有待处理数量的种数；没加载完不显示 */
 const tabs = computed(() => [
   { value: 'products', label: '库存物品', count: stock.value?.length },
@@ -75,7 +78,7 @@ function clearAll() { state.stock = ''; clearSearch(); }
     <Panel v-if="state.tab === 'products' || state.tab === 'receiving'" flush>
       <template #toolbar>
         <SearchInput v-model="state.search" placeholder="搜索品名或规格" aria-label="搜索库存物品" class="w-full sm:w-75" @search="load" />
-        <Button size="sm" :pressed="stockFilter === 'in'" @click="toggleStock('in')">有库存 <span v-if="stock" class="num">{{ tabProducts.length - emptyCount }}</span></Button>
+        <Button size="sm" :pressed="stockFilter === 'in'" @click="toggleStock('in')">有库存 <span v-if="stock" class="num">{{ inStockCount }}</span></Button>
         <Button size="sm" :pressed="stockFilter === 'empty'" @click="toggleStock('empty')">已空 <span v-if="stock" class="num">{{ emptyCount }}</span></Button>
         <span v-if="stock && (refreshing || products.length)" class="ml-auto text-meta num">{{ refreshing ? '刷新中…' : `按品名排序 · 共 ${products.length} 种` }}</span>
       </template>

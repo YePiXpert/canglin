@@ -29,6 +29,8 @@ const sourcesId = `stock-sources-${useId()}`;
 const row = computed(() => props.layout === 'row');
 const unit = computed(() => props.product.unit || '（单位未填写）');
 const empty = computed(() => props.product.stockQuantity === '0');
+/** 「已空」只给曾经有过来源批次的物品；只在申请里出现过、从没入过库的物品不叫已空 */
+const emptied = computed(() => empty.value && props.product.sources.length > 0);
 const pending = computed(() => props.product.receivingQuantity !== '0');
 /** 主数量：到货待处理模式是待处理量（蓝），否则是当前库存（为 0 时淡色 + 已空）；次数量是另一个 */
 const primary = computed(() => (props.receiving ? props.product.receivingQuantity : props.product.stockQuantity));
@@ -94,7 +96,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
         <span class="text-xs text-faint sm:sr-only">{{ receiving ? '到货待处理 ' : '当前库存 ' }}</span>
         <span class="inline-flex items-center gap-1.5">
           <span class="num text-[15px] font-semibold" :class="primaryTone">{{ primary }}<span class="sm:sr-only">{{ ' ' + unit }}</span></span>
-          <Badge v-if="!receiving && empty" tone="amber">已空</Badge>
+          <Badge v-if="!receiving && emptied" tone="amber">已空</Badge>
         </span>
       </p>
       <p class="col-span-full flex items-baseline justify-between gap-3 sm:col-span-1 sm:block sm:text-right">
@@ -125,7 +127,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
         <span class="text-meta sm:block">{{ receiving ? '待处理 ' : '当前库存 ' }}</span>
         <span class="inline-flex items-center gap-1.5">
           <span class="num text-xl leading-7 font-semibold" :class="primaryTone">{{ quantityLabel(primary, product.unit) }}</span>
-          <Badge v-if="!receiving && empty" tone="amber">已空</Badge>
+          <Badge v-if="!receiving && emptied" tone="amber">已空</Badge>
         </span>
       </p>
       <div v-if="actions.length" class="flex flex-wrap gap-1.5">
