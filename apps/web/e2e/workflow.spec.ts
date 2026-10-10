@@ -154,7 +154,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await dialog.getByLabel('撤销原因', { exact: true }).fill('验收：撤销重复领用');
   await dialog.getByRole('button', { name: '确认撤销登记', exact: true }).click();
   await expect(issue).toContainText('已撤销');
-  await page.getByRole('button', { name: '库存物品', exact: true }).click();
+  await page.getByRole('button', { name: /^库存物品( \d+)?$/ }).click();
   await expect(product(page, paper).locator('header')).toContainText('3 盒');
 
   await page.getByRole('button', { name: '领用与归还', exact: true }).click();
@@ -165,7 +165,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await dialog.getByLabel(`${paper} 本次数量（盒）`, { exact: true }).fill('1');
   await dialog.getByLabel('原因', { exact: true }).fill('验收：员工归还未使用用品');
   await dialog.getByRole('button', { name: '确认员工归还', exact: true }).click();
-  await page.getByRole('button', { name: '库存物品', exact: true }).click();
+  await page.getByRole('button', { name: /^库存物品( \d+)?$/ }).click();
   await expect(product(page, paper).locator('header')).toContainText('4 盒');
 
   await product(page, paper).getByRole('button', { name: '退回供应商', exact: true }).click();
