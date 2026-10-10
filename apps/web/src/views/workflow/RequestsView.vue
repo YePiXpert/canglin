@@ -14,5 +14,12 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
 </script>
 
 <template>
-  <div><PageHeader title="申请单" description="一张 OA 申请的原件、采购成交、到货与物品去向放在一起"><Button variant="primary" @click="creating = true"><Icon name="plus" :size="16" />人工录入申请</Button></PageHeader><RequestCollection @create="creating = true" /><RequestCreateDialog v-model:open="creating" @created="created" /></div>
+  <div>
+    <!-- 顶栏已有实心的「导入 OA 单」：页头的人工录入用二级按钮 -->
+    <PageHeader title="申请单" description="查找并查阅已审批申请；一张申请的原件、采购、到货与物品去向都在详情里办理">
+      <Button variant="secondary" @click="creating = true"><Icon name="plus" :size="16" />人工录入申请</Button>
+    </PageHeader>
+    <RequestCollection @create="creating = true" />
+    <RequestCreateDialog v-model:open="creating" @created="created" />
+  </div>
 </template>
