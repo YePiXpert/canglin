@@ -60,7 +60,7 @@
 | 表格 | 13px；表头 12px / 500 / `text-muted`，surface-2 底，不加粗不大写 |
 | 表单 label | 12.5px / 500 / `text-text`，在字段上方；必填星号朱砂 |
 | 元信息 `.text-meta` | 12px / 18px，默认 `faint`，可叠颜色类；「部门 · 经办人 · 日期」用「·」分隔 |
-| 指标数字 | 报表核心数字 34px / 700；工作台概览与 StatCard 26px / 700；表格内重点数 15px / 600；都 `tabular-nums` |
+| 指标数字 | 报表核心数字 34px / 700；工作台概览 26px / 700；表格内重点数 15px / 600；都 `tabular-nums` |
 | 数字 `.num` | 只加 `tabular-nums`，不换等宽字体；金额 ¥ 前缀、千分位、两位小数；流水号用 `font-mono` |
 
 深色模式：
@@ -230,10 +230,9 @@
 - props：`accept`（拖入的文件也按它过滤）、`multiple`（默认只交出第一个文件）、`label`、`hint`、`disabled`、`capture`（手机上多一个「拍照上传」，临时给同一个 input 加 `capture`）；默认插槽追加在文案下方。
 - 事件：`files(File[])`（交出后清空 input，同一文件可以再选）；`rejected(File[])`——组件已经弹了错误 Toast，调用方不要再弹。组件用到 toast store，单测挂载需要活动的 pinia（见 `FileDropzone.spec.ts`）。
 
-### 5.7 Badge / StatCard / Pagination
+### 5.7 Badge / Pagination
 
 - `Badge`（状态 chip）：22px 高、4px 圆角、柔底同色字、不描边、12px / 500；文字尽量带数量（「待处理 4 包」优于「进行中」）。`tone`：`gray`（默认，未开始 / 中性：待采购、未开票）、`amber`（等待外部：待到货、未付款）、`blue`（轮到你处理：待处理）、`teal`（完成：已办结、正常）、`red`（错误）、`accent`（朱砂柔底：只给需处理计数与「示例数据」这类印记）、`outline`（只有描边：已撤销）；已取消用 gray 再加 `class="line-through"`。`dot`：文字前 6px 圆点。根元素带 `.badge`，表格里 `td:has(.badge)` 自动收紧上下留白，单行行高保持 44px。
-- `StatCard`：降噪的指标瓦片——12px muted 标签 + 26px / 700 数字 + 一行 12px 提示，没有图标方块；`label`、`value`、`unit?`、`hint?`、`tone?`（只画标签前的圆点，gray 不画）、`to?`（可点：悬停描边加深、标签行右侧出现箭头）；`icon` 已不显示，只为兼容旧调用方保留。工作台的待办概览不再用四张等权卡片。
 - `Pagination`：`page`、`pageSize`（默认 20）、`total`；事件 `change(page)`；放在表格面板的 `#footer`。左边「第 1–20 条 · 共 128 条」，右边页码（当前页墨色实心小方块，在 `<nav aria-label="分页">` 里）。`total` 为 0 时整个组件不渲染，放在 Panel 页脚里时页脚也跟着隐藏，不出现「第 0–0 条」。
 
 ### 5.8 Dialog / ConfirmDialog
