@@ -380,6 +380,12 @@
 
 - **登录**：单个居中面板；保留 `input[type=password]` 与按钮文字「登 录」（e2e 用 `/^登\s*录$/` 匹配）。
 - **工作台 `/workbench`**：页头说明写等待推进的申请张数（待办总数）。「待办概览」是一行数字：到货待处理在最前（大于 0 时数字朱砂）、待到货、待采购、未完成导入，最右库存物品；各项链接到 `/requests?stage=…`、`/import`、`/stock`，手机上是通栏横向滑动的小卡。主体「待办申请」取后端待办的前 10 张（`pending: '1'`，后端按录入倒序），前端按下一步重排：有待处理 > 有待到货 > 仅待采购，同级按申请日期升序（`components/workflow/workbench.ts`）；每行是 `WorkbenchRequestRow`（流水号、部门 · 经办人、日期 · 明细数与状态 chip ｜ 各明细的剩余数量，待处理蓝色加粗、已办结绿色 ｜ 下一步按钮 + 一句原因：定去向 primary，登记到货 / 登记采购 secondary），按钮都进 `/requests/:id` 办理，工作台不直接登记；桌面三栏 200 / 1fr / 180，窄屏纵向堆叠、按钮整宽。待办清空时是一行提示（不占高度），从没有申请时给「人工录入申请」入口。右栏（< xl 排到主体下方）：`components/import/ImportPendingAside`（最近 5 份未入账的导入，「继续处理」进 `/import?task=…`，总数交给概览）与 `RecentDocumentsAside`（最近录入的 3 条业务记录，能对应到申请的链接到申请详情）。
+- **申请详情 `/requests/:id`**：
+  - 页头：`#meta` 是面包屑「申请单 / 流水号」；标题只有流水号（`mono`，e2e 按 `h1` 的文字断言），状态 chip 放 `#status`（待处理 blue / 待到货 amber / 待采购 gray：单条明细写数量，多条写「N 项」；都没有时「实物已办结」teal，整张取消是删除线的「已取消」）；说明行「部门 · 经办人 · 申请日期 · 由 OA 原件导入 / 人工录入 · N 条明细」；动作依次「取消未采购量」ghost、刷新（secondary 图标）、「登记采购」primary。
+  - 区块标题在面板外（15px / 600 + 13px 说明，标题到面板 10px，区块之间 28px）。从上到下：①「申请明细与数量进度」（`RequestProgress`，页脚是申请备注）②「已到货，待决定去向」（有到货待处理时出现，标题旁 blue chip「N 批」，`StockProductCard receiving` 单列排）③ 两栏 `lg:grid-cols-[minmax(0,1fr)_360px]`：左「业务记录」，右「OA 原件与附件」与「付款与开票」；`< lg` 单列。
+  - 进度表：第二列是四段进度条（已处理 = 直发 + 入库 teal / 待处理 blue / 待到货 `bg-amber/60` / 待采购 line-strong，段间 2px，按申请量折算，取消与退回的部分留空轨道）+ 一行说明，分段与页头 chip 的计算在 `lineProgress.ts`；条 `aria-hidden`，图例在区块标题右侧。其余数量列的 `data-label`、「6 盒」格式和 `tr[data-request-line]` 是 e2e 接口。≥ 640px 放不下时在自己的容器里横向滚动并钉住首列（真在滚动时首列右侧才有发丝线）；< 640px 走 `.table-cards`，进度条整行。
+  - 业务记录（`DocumentCollection`，库存页「领用与归还」共用）：标题与类型筛选（`NativeSelect`，可访问名称「业务记录类型」）在面板外，面板里一条记录一行（`DocumentCard row`；不传 `row` 是「查看业务来源」弹窗里的独立卡片）。头行：类型 chip 与 #编号同在 `h3`（读作「采购成交 #117」，e2e 按 `/^采购成交/` 找）、日期、供应商或去向（直发 / 库存领用 · 部门）、已撤销（outline）/ 付款 / 开票 chip、右侧金额；动作行「登记到货」primary，其余 secondary，「撤销登记」ghost 靠右；`article[data-document-id]` 保留。
+  - 右栏：「OA 原件与附件」是 `WorkflowAttachments sheet`（贴面板的文件行 + 顶部计数与「上传附件」）加一行说明与「查看原件识别与核对记录」；「付款与开票」（`RequestPayments`）列出本申请未撤销的采购单（编号 · 供应商、金额、付款与开票 chip），点整行打开「付款与发票」弹窗。
 - **导入 `/import`**：
   - 从上到下：步骤条（上传原件 → 识别单据 → 人工核对）、状态条（文件名、「识别：…」「AI：…」、「草稿已保存」、停止 / 重试）、页级核对复选框；桌面双栏（原件预览 : 草稿 = 5 : 7，`lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]`），手机用「明细 / 原件」分段切换。
   - StickyActionBar：「保存草稿」「确认全部内容并导入」（accent），保存失败与其它错误放在 `#start`；其后是修改历史与 AI 用量、上传区（有任务时在页尾，方便导入下一份），页面最后是「未完成的导入」面板。
