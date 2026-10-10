@@ -148,7 +148,7 @@
 
 - `variant`：`primary`（墨色实心主动作，一个区域只放一个；没有阴影）、`secondary`（默认，surface 底 + line-strong 描边，悬停 surface-2）、`ghost`（无底 muted，工具按钮、弹窗「取消」）、`danger`（朱砂实心，**只**用于确认弹窗里的危险动作）、`danger-ghost`（朱砂文字，低强调的危险动作，如申请明细的「删除第 N 行」）、`accent`（旧名字：「确认入账 / 确认发放 / 确认全部内容并导入」这类完成性动作，和 `primary` 同样式——完成的反馈靠 Toast 和绿色 chip，不靠按钮颜色；保留名字只为不改调用方，新代码直接写 `primary`）、`link`（文字链接，见下条）。
 - `link`：蓝色文字、悬停下划线，没有高度、内边距和边框，字号字重随上下文（需要时调用方加 `text-xs` / `font-medium`）；`size` / `iconOnly` / `pressed` 对它不起作用。用于行内的次要动作（「来源明细 #12」、错误行后的「重试」），不再手写 `text-blue hover:underline` 的按钮；跳转用的文字链接（`router-link` / `<a>`）同样套 `buttonClass({ variant: 'link' })`。
-- `size`：`sm`（28px，表格行内、工具栏）、`md`（34px，默认）、`lg`（40px，登录与整宽主动作；手机上的主动作再加 `max-sm:h-11` 到 44px）。`iconOnly`：正方形图标按钮（28 / 34 / 40），必须配 `aria-label`。
+- `size`：`sm`（28px，表格行内、工具栏）、`md`（34px，默认）、`lg`（40px，登录与整宽主动作；手机上的主动作再加 `max-sm:h-11` 到 44px）。触控设备（`pointer: coarse`）下三档自动加高到 40 / 44 / 44px，图标按钮同样放大，页面不用再为触屏单独写高度。`iconOnly`：正方形图标按钮（28 / 34 / 40），必须配 `aria-label`。
 - 交互：悬停 primary → `primary-hover`、secondary / ghost → surface-2 底；键盘焦点 2px 朱砂外框（外扩 2px）；按下缩放 0.98；禁用 50%。
 - `pressed`：开关按钮（「只看低库存」「筛选」）。传了才渲染 `aria-pressed`，`true` 时换成 surface-2 底 + 墨色字。按钮已经带 `aria-expanded`（展开器）时只借样式、不加 `aria-pressed`——一个按钮不该既是开关又是展开器。
 - `loading`（转圈并禁用，不加全屏遮罩）、`disabled`、`type`（默认 `button`）。
