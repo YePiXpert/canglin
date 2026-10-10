@@ -40,9 +40,16 @@ async function save() {
 </script>
 
 <template>
-  <Dialog :open="open" title="撤销业务登记" :description="`${documentKindLabels[document.kind]} #${document.id} · ${document.date}`" width="560px" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
-    <p class="mb-5 text-[13px] leading-6 text-muted">撤销会回冲本次数量和金额，原登记与撤销原因继续保留。已有后续到货、发放、退回或库存使用时，需要先处理相关操作；系统会检查依赖并说明无法撤销的原因。</p>
-    <Input v-model="form.date" label="撤销日期" type="date" required :disabled="saving" /><Textarea v-model="form.reason" label="撤销原因" required :error="errors.reason" :disabled="saving" class="mt-4" />
-    <template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving" @click="close">取消</Button><Button variant="danger" :loading="saving" @click="save">确认撤销登记</Button></template>
+  <!-- 确认框排版（ConfirmDialog 的样式）：420 宽、16px 标题、手机上不全屏；需要日期与原因，所以用 Dialog compact 自带未保存确认 -->
+  <Dialog :open="open" title="撤销业务登记" :description="`${documentKindLabels[document.kind]} #${document.id} · ${document.date}`" width="420px" compact :mobile-fullscreen="false" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
+    <p class="text-[13px] leading-relaxed text-muted">撤销会回冲本次数量和金额，原登记与撤销原因继续保留。</p>
+    <p class="mt-1.5 text-xs leading-relaxed text-muted">已有后续到货、发放、退回或库存使用时，需要先处理相关操作；系统会检查依赖并说明无法撤销的原因。</p>
+    <Input v-model="form.date" label="撤销日期" type="date" required :disabled="saving" class="mt-4" />
+    <Textarea v-model="form.reason" label="撤销原因" :rows="2" placeholder="如：数量登记错误" required :error="errors.reason" :disabled="saving" class="mt-4" />
+    <Notice v-if="failure" tone="red" size="sm" role="alert" class="mt-4">{{ failure }}</Notice>
+    <template #footer="{ close }">
+      <Button variant="ghost" :disabled="saving" @click="close">取消</Button>
+      <Button variant="danger" :loading="saving" @click="save">确认撤销登记</Button>
+    </template>
   </Dialog>
 </template>

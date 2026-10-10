@@ -71,6 +71,20 @@ describe('StockAdjustmentDialog', () => {
     expect(preview(wrapper)?.text()).toBe('调整后库存：2.300001 盒');
   });
 
+  it('没有规格时说明里不留空位', () => {
+    const wrapper = mountDialog({ specification: '' });
+    expect(wrapper.find('.dialog-description').text()).toBe('A4 复印纸 · 当前库存 3 盒');
+  });
+
+  it('预览在页脚左侧；调整后为负数时标红', async () => {
+    const wrapper = mountDialog({ stockQuantity: '1' });
+    await quantity(wrapper).setValue('2');
+    expect(preview(wrapper)?.find('b').classes()).toContain('text-ink');
+    await quantity(wrapper).setValue('-2');
+    expect(preview(wrapper)?.text()).toBe('调整后库存：-1 盒');
+    expect(preview(wrapper)?.find('b').classes()).toContain('text-red');
+  });
+
   it('差额格式无效时不显示预览', async () => {
     const wrapper = mountDialog();
     await quantity(wrapper).setValue('0.0000001');

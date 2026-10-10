@@ -16,6 +16,7 @@ import Icon from '@/components/ui/Icon.vue';
 import Notice from '@/components/ui/Notice.vue';
 import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
+import RegisterLineTable from './RegisterLineTable.vue';
 import { quantityError, quantityLabel } from './presentation';
 
 export type QuantityCommand = 'STOCK_IN' | 'DIRECT' | 'STOCK' | 'SUPPLIER_RETURN' | 'EMPLOYEE_RETURN' | 'PURCHASE_CANCEL' | 'REQUEST_CANCEL';
@@ -29,13 +30,21 @@ const descriptions: Record<QuantityCommand, string> = {
   EMPLOYEE_RETURN: '关联原领用明细，归还后转入库存；再次领用应新增领用记录',
   PURCHASE_CANCEL: '只取消本次成交尚未到货的数量；已到货物品请登记供应商退货', REQUEST_CANCEL: '只取消尚未采购的申请数量，保留原申请和取消原因',
 };
+const returnModes = [{ value: 'REFUND' as const, label: '退款退货' }, { value: 'REPLACEMENT' as const, label: '换货补货' }];
 const distribution = computed(() => props.action === 'DIRECT' || props.action === 'STOCK');
 const requiresReason = computed(() => ['SUPPLIER_RETURN', 'EMPLOYEE_RETURN', 'PURCHASE_CANCEL', 'REQUEST_CANCEL'].includes(props.action));
 const form = reactive({ date: todayString(), department: '', note: '', reason: '', returnMode: 'REFUND' as 'REFUND' | 'REPLACEMENT' });
 let sequence = 0;
-const lines = ref<(QuantityChoice & { key: number; selected: boolean; quantity: string; recipient: string })[]>([]);
+type Line = QuantityChoice & { key: number; selected: boolean; quantity: string; recipient: string };
+const lines = ref<Line[]>([]);
 const snapshot = () => JSON.stringify({ form, lines: lines.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
+const selectedCount = computed(() => lines.value.filter((line) => line.selected).length);
+/** 表下汇总的行级错误（单元格里只标红框）；顺序与列一致：本次数量在前、领用人在后 */
+const rowErrors = computed(() => lines.value.flatMap((line, index) => {
+  const reasons = [errors.value[`quantity.${line.key}`], errors.value[`recipient.${line.key}`]].filter(Boolean);
+  return reasons.length ? [`第 ${index + 1} 行 · ${line.itemName}：${reasons.join('；')}`] : [];
+}));
 watch(() => props.open, (open) => {
   if (!open) return;
   Object.assign(form, { date: todayString(), department: props.department || '', note: '', reason: '', returnMode: 'REFUND' });
@@ -43,9 +52,21 @@ watch(() => props.open, (open) => {
   reset();
 }, { immediate: true });
 
+const sourceKey = (line: Line) => `${line.id}:${line.location ?? ''}`;
+function lineMeta(line: Line): string {
+  return [line.specification, line.sourceHint].filter(Boolean).join(' · ');
+}
+function selectAll(value: boolean) {
+  for (const line of lines.value) line.selected = value;
+}
+/** 拆出的行紧跟在同一来源的最后一行之后：表格里同一来源的几行挨在一起 */
 function split(key: number) {
-  const line = lines.value.find((item) => item.key === key);
-  if (line) lines.value.push({ ...line, key: ++sequence, quantity: '', recipient: '', selected: true });
+  const index = lines.value.findIndex((item) => item.key === key);
+  if (index < 0) return;
+  const line = lines.value[index];
+  let end = index;
+  while (end + 1 < lines.value.length && sourceKey(lines.value[end + 1]) === sourceKey(line)) end++;
+  lines.value.splice(end + 1, 0, { ...line, key: ++sequence, quantity: '', recipient: '', selected: true });
 }
 
 async function save() {
@@ -59,7 +80,7 @@ async function save() {
     if (reason) invalid[`quantity.${line.key}`] = reason;
     if (distribution.value && !line.recipient.trim()) invalid[`recipient.${line.key}`] = '请填写实际领用人';
     if (!reason) {
-      const source = `${line.id}:${line.location ?? ''}`;
+      const source = sourceKey(line);
       const sum = (sums.get(source) || 0n) + quantityUnits(line.quantity);
       sums.set(source, sum);
       if (sum > quantityUnits(line.available)) invalid[`quantity.${line.key}`] = `同一来源的合计数量不能超过 ${quantityLabel(line.available, line.unit)}`;
@@ -85,22 +106,53 @@ async function save() {
 
 <template>
   <Dialog :open="open" :title="labels[action]" :description="[context, descriptions[action]].filter(Boolean).join(' · ')" width="760px" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
-    <div class="grid gap-4 sm:grid-cols-2"><Input v-model="form.date" label="业务日期" type="date" required :disabled="saving" /><Input v-if="distribution" v-model="form.department" label="领用部门" :disabled="saving" /></div>
-    <template v-if="action === 'SUPPLIER_RETURN'"><p class="mt-5 mb-2 text-[13px] font-medium text-text">退货处理方式</p><Tabs v-model="form.returnMode" :tabs="[{ value: 'REFUND', label: '退款退货' }, { value: 'REPLACEMENT', label: '换货补货' }]" /><p class="mt-2 text-xs text-muted">{{ form.returnMode === 'REFUND' ? '扣减这批采购的净成交数量与金额，保留原成交记录。' : '保留成交金额，退回数量重新成为该采购的待到货量。' }}</p></template>
-    <div class="mt-5 space-y-3">
-      <div v-for="line in lines" :key="line.key" class="rounded-lg border border-line bg-surface-2 p-3">
-        <Checkbox v-model="line.selected" :label="line.itemName" :description="`${line.specification ? line.specification + ' · ' : ''}可操作 ${quantityLabel(line.available, line.unit)}`" :disabled="saving" />
-        <p v-if="line.sourceHint" class="mt-1 ml-7 text-meta">{{ line.sourceHint }}</p>
-        <div v-if="line.selected" class="mt-3 grid gap-3" :class="distribution ? 'sm:grid-cols-2' : ''">
-          <Input v-if="distribution" v-model="line.recipient" :label="`${line.itemName} 领用人`" placeholder="填写实际领用人" required :error="errors[`recipient.${line.key}`]" :disabled="saving" />
-          <Input v-model="line.quantity" :label="`${line.itemName} 本次数量（${line.unit}）`" type="number" min="0" :max="line.available" step="0.000001" required :error="errors[`quantity.${line.key}`]" :disabled="saving" :class="distribution ? '' : 'sm:max-w-64'" />
-        </div>
-        <Button v-if="distribution && line.selected" variant="ghost" size="sm" class="mt-2" :disabled="saving || lines.length >= 200" @click="split(line.key)"><Icon name="plus" :size="14" />拆给另一位领用人</Button>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <Input v-model="form.date" label="业务日期" type="date" required :disabled="saving" />
+      <Input v-if="distribution" v-model="form.department" label="领用部门" :disabled="saving" />
+      <div v-else-if="action === 'SUPPLIER_RETURN'">
+        <span class="mb-1.5 block text-[12.5px] leading-[18px] font-medium text-text" aria-hidden="true">退货处理方式</span>
+        <Tabs v-model="form.returnMode" variant="segmented" aria-label="退货处理方式" :tabs="returnModes" />
+        <p class="mt-1.5 text-xs text-muted">{{ form.returnMode === 'REFUND' ? '扣减这批采购的净成交数量与金额，保留原成交记录。' : '保留成交金额，退回数量重新成为该采购的待到货量。' }}</p>
       </div>
-      <Notice v-if="errors.lines" tone="red" variant="inline" role="alert">{{ errors.lines }}</Notice>
     </div>
-    <Textarea v-if="requiresReason" v-model="form.reason" label="原因" required :error="errors.reason" :disabled="saving" class="mt-5" />
+    <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
+      <template #head>
+        <th class="w-28 text-right">可操作</th>
+        <th class="w-40">本次数量</th>
+        <th v-if="distribution" class="w-44">领用人</th>
+      </template>
+      <tbody>
+        <tr v-for="line in lines" :key="line.key" :data-command-line="line.id">
+          <td>
+            <Checkbox v-model="line.selected" size="sm" :aria-label="line.itemName" :description="lineMeta(line) || undefined" :disabled="saving">
+              <span class="font-medium" :class="line.selected ? 'text-ink' : 'text-muted'">{{ line.itemName }}</span>
+            </Checkbox>
+            <div v-if="distribution && line.selected" class="mt-0.5 pl-3">
+              <Button variant="ghost" size="sm" :disabled="saving || lines.length >= 200" @click="split(line.key)"><Icon name="plus" :size="14" />拆给另一位领用人</Button>
+            </div>
+          </td>
+          <td data-label="可操作" class="num text-right" :class="line.selected ? '' : 'text-faint'">{{ quantityLabel(line.available, line.unit) }}</td>
+          <td data-label="本次数量" class="sm:py-2">
+            <div v-if="line.selected" class="flex items-center gap-1.5 max-sm:w-44">
+              <Input v-model="line.quantity" size="sm" hide-label :label="`${line.itemName} 本次数量（${line.unit}）`" type="number" min="0" :max="line.available" step="0.000001" required :error="errors[`quantity.${line.key}`]" :disabled="saving" class="min-w-0 flex-1 [&_input]:text-right" />
+              <span class="shrink-0 text-meta">{{ line.unit }}</span>
+            </div>
+            <span v-else class="text-faint">—</span>
+          </td>
+          <td v-if="distribution" data-label="领用人" class="sm:py-2">
+            <Input v-if="line.selected" v-model="line.recipient" size="sm" hide-label :label="`${line.itemName} 领用人`" placeholder="填写实际领用人" required :error="errors[`recipient.${line.key}`]" :disabled="saving" class="max-sm:w-44" />
+            <span v-else class="text-faint">—</span>
+          </td>
+        </tr>
+      </tbody>
+    </RegisterLineTable>
+    <Textarea v-if="requiresReason" v-model="form.reason" label="原因" :rows="2" required :error="errors.reason" :disabled="saving" class="mt-5" />
     <Input v-else v-model="form.note" label="业务备注 / 签收信息" :disabled="saving" class="mt-5" />
-    <template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving" @click="close">取消</Button><Button :variant="requiresReason ? 'primary' : 'accent'" :loading="saving" @click="save">确认{{ labels[action] }}</Button></template>
+    <template #footer="{ close }">
+      <Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center max-sm:w-full">{{ failure }}</Notice>
+      <p v-else class="mr-auto self-center text-meta num max-sm:hidden">已选 {{ selectedCount }} / {{ lines.length }} 条明细</p>
+      <Button variant="ghost" :disabled="saving" class="max-sm:h-11" @click="close">取消</Button>
+      <Button variant="primary" :loading="saving" class="max-sm:h-11 max-sm:flex-1" @click="save">确认{{ labels[action] }}</Button>
+    </template>
   </Dialog>
 </template>

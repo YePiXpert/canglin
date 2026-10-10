@@ -171,7 +171,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await product(page, paper).getByRole('button', { name: '退回供应商', exact: true }).click();
   dialog = page.getByRole('dialog', { name: '供应商退货', exact: true });
   await dialog.getByLabel('业务日期', { exact: true }).fill(businessDate);
-  const returnLines = dialog.locator('div.rounded-lg').filter({ has: page.getByRole('checkbox', { name: paper, exact: true }) });
+  const returnLines = dialog.locator('tr[data-command-line]').filter({ has: page.getByRole('checkbox', { name: paper, exact: true }) });
   const returnA = returnLines.filter({ hasText: supplierA });
   const returnB = returnLines.filter({ hasText: supplierB });
   await returnB.getByRole('checkbox').uncheck();

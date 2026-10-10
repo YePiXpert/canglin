@@ -31,4 +31,16 @@ function back() {
 }
 </script>
 
-<template><Dialog :open="open" title="查看业务来源" description="按稳定的业务明细逐层查看原到货、采购及 OA 申请" width="760px" @update:open="emit('update:open', $event)"><Button v-if="history.length" variant="ghost" size="sm" class="mb-3" @click="back"><Icon name="chevron-left" :size="14" />返回上层记录</Button><Skeleton v-if="loading" class="h-48" /><ErrorState v-else-if="error" :message="error" @retry="load" /><DocumentCard v-else-if="data" :document="data" readonly @source="source" /></Dialog></template>
+<template>
+  <Dialog :open="open" title="查看业务来源" description="按稳定的业务明细逐层查看原到货、采购及 OA 申请" width="760px" @update:open="emit('update:open', $event)">
+    <Button v-if="history.length" variant="ghost" size="sm" class="-ml-2.5 mb-3" @click="back"><Icon name="chevron-left" :size="14" />返回上层记录</Button>
+    <!-- 首次加载：按单据卡片的形状拼骨架（标题行 + 两条明细） -->
+    <div v-if="loading" class="card relative" aria-busy="true">
+      <span class="sr-only">正在加载业务记录…</span>
+      <div class="flex items-center gap-2 border-b border-line p-4"><Skeleton class="h-4 w-28" /><Skeleton class="h-4 w-20" /><Skeleton class="ml-auto h-4 w-24" /></div>
+      <div v-for="row in 2" :key="row" class="space-y-2 px-4 py-3" :class="row > 1 ? 'border-t border-line' : ''"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
+    </div>
+    <div v-else-if="error" class="card"><ErrorState :message="error" @retry="load" /></div>
+    <DocumentCard v-else-if="data" :document="data" readonly @source="source" />
+  </Dialog>
+</template>

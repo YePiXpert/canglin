@@ -27,4 +27,17 @@ async function save() {
   emit('update:open', false); emit('created');
 }
 </script>
-<template><Dialog :open="open" title="新增库存物品" description="品名、规格与计量单位共同区分物品；创建后可登记盘点增加，申请到货入库会自动建立物品" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)"><Input v-model="form.itemName" label="物品名称" required :error="errors.itemName" :disabled="saving" /><Input v-model="form.specification" label="规格" :disabled="saving" class="mt-4" /><Input v-model="form.unit" label="计量单位" required :error="errors.unit" :disabled="saving" class="mt-4" /><template #footer="{ close }"><Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center">{{ failure }}</Notice><Button variant="ghost" :disabled="saving" @click="close">取消</Button><Button variant="primary" :loading="saving" @click="save">创建库存物品</Button></template></Dialog></template>
+<template>
+  <Dialog :open="open" title="新增库存物品" description="品名、规格与计量单位共同区分物品；创建后可登记盘点增加，申请到货入库会自动建立物品" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
+    <Input v-model="form.itemName" label="物品名称" required :error="errors.itemName" :disabled="saving" />
+    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <Input v-model="form.specification" label="规格" placeholder="如 A4 / 80g（可空）" :disabled="saving" />
+      <Input v-model="form.unit" label="计量单位" placeholder="盒 / 支 / 包" required :error="errors.unit" :disabled="saving" />
+    </div>
+    <template #footer="{ close }">
+      <Notice v-if="failure" tone="red" variant="inline" role="alert" class="mr-auto self-center max-sm:w-full">{{ failure }}</Notice>
+      <Button variant="ghost" :disabled="saving" class="max-sm:h-11" @click="close">取消</Button>
+      <Button variant="primary" :loading="saving" class="max-sm:h-11 max-sm:flex-1" @click="save">创建库存物品</Button>
+    </template>
+  </Dialog>
+</template>

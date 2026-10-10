@@ -43,6 +43,11 @@ function mountDialog(action: QuantityCommand, choices: QuantityChoice[], extra: 
 }
 
 const field = (wrapper: VueWrapper, label: string) => wrapper.find(`input[aria-label="${label}"]`);
+/** 行内复选框：可访问名称就是品名（e2e 用 getByRole('checkbox', { name }) 找它） */
+const lineCheckbox = (wrapper: VueWrapper, name: string) => wrapper.find(`input[type=checkbox][aria-label="${name}"]`);
+/** 表头的「全选」（手机上换到表格上方的那个没有 aria-label，只有可见文字） */
+const selectAll = (wrapper: VueWrapper) => wrapper.find('input[type=checkbox][aria-label="全选"]');
+const rows = (wrapper: VueWrapper) => wrapper.findAll('tr[data-command-line]');
 const submitButton = (wrapper: VueWrapper, label: string) => {
   const button = wrapper.findAll('button').find((b) => b.text() === `确认${label}`);
   if (!button) throw new Error(`没有找到「确认${label}」按钮`);
@@ -65,18 +70,31 @@ afterEach(() => {
 });
 
 describe('QuantityCommandDialog：打开时的默认值', () => {
-  it('每行默认填满可操作数量；可操作为 0 的行不出现；标签与说明都带单位', () => {
+  it('每行默认填满可操作数量；可操作为 0 的行不出现；可操作列与字段名都带单位', () => {
     const wrapper = mountDialog('STOCK_IN', [paper, pen, exhausted]);
     expect(field(wrapper, 'A4 复印纸 本次数量（盒）').element).toHaveProperty('value', '2.5');
     expect(field(wrapper, '中性笔 本次数量（支）').element).toHaveProperty('value', '3');
     expect(wrapper.text()).not.toContain('订书钉');
-    expect(wrapper.text()).toContain('A4 / 80g · 可操作 2.5 盒');
-    expect(wrapper.text()).toContain('可操作 3 支');
-    expect(wrapper.text()).toContain('到货明细 #101');
+    // 表格式明细：一条明细一行；规格与来源是品名下方的 meta，可操作数量单独一列
+    expect(rows(wrapper)).toHaveLength(2);
+    expect(rows(wrapper)[0].text()).toContain('A4 / 80g · 到货明细 #101');
+    expect(rows(wrapper)[0].find('td[data-label="可操作"]').text()).toBe('2.5 盒');
+    expect(rows(wrapper)[1].find('td[data-label="可操作"]').text()).toBe('3 支');
+    expect(lineCheckbox(wrapper, 'A4 复印纸').element).toHaveProperty('checked', true);
+    expect(lineCheckbox(wrapper, '中性笔').element).toHaveProperty('checked', true);
     expect(field(wrapper, '业务日期').element).toHaveProperty('value', TODAY);
     // 数量框的 max 是接口给的十进制字符串，不经过浮点
     expect(field(wrapper, 'A4 复印纸 本次数量（盒）').attributes('max')).toBe('2.5');
     expect(field(wrapper, 'A4 复印纸 本次数量（盒）').attributes('step')).toBe('0.000001');
+  });
+
+  it('没有可操作的明细时不画空表，直接说明', async () => {
+    const wrapper = mountDialog('STOCK_IN', [exhausted]);
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.text()).toContain('没有可办理的明细');
+    await submit(wrapper, '登记入库');
+    expect(wrapper.find('[role=alert]').text()).toBe('请至少选择一条明细');
+    expect(api.stockIn).not.toHaveBeenCalled();
   });
 
   it('提交按钮平时可点，只在保存中禁用', async () => {
@@ -99,11 +117,11 @@ describe('QuantityCommandDialog：打开时的默认值', () => {
 });
 
 describe('QuantityCommandDialog：数量校验', () => {
-  it('超过可操作数量时字段下方给出原因，不调用接口', async () => {
+  it('超过可操作数量时该格标红，原因在表下按「第 N 行 · 品名」汇总，不调用接口', async () => {
     const wrapper = mountDialog('STOCK_IN', [paper]);
     await field(wrapper, 'A4 复印纸 本次数量（盒）').setValue('2.500001');
     await submit(wrapper, '登记入库');
-    expect(wrapper.text()).toContain('不能超过可用数量 2.5');
+    expect(wrapper.find('[role=alert]').text()).toBe('第 1 行 · A4 复印纸：不能超过可用数量 2.5');
     expect(field(wrapper, 'A4 复印纸 本次数量（盒）').attributes('aria-invalid')).toBe('true');
     expect(api.stockIn).not.toHaveBeenCalled();
     expect(wrapper.emitted('update:open')).toBeUndefined();
@@ -126,8 +144,25 @@ describe('QuantityCommandDialog：数量校验', () => {
 
   it('一行都不选时提示至少选择一条', async () => {
     const wrapper = mountDialog('STOCK_IN', [paper]);
-    await wrapper.find('input[type=checkbox]').setValue(false);
+    await lineCheckbox(wrapper, 'A4 复印纸').setValue(false);
     expect(field(wrapper, 'A4 复印纸 本次数量（盒）').exists()).toBe(false);
+    await submit(wrapper, '登记入库');
+    expect(wrapper.find('[role=alert]').text()).toBe('请至少选择一条明细');
+    expect(api.stockIn).not.toHaveBeenCalled();
+  });
+
+  it('全选：部分勾选时是半选；点一下全部勾上，再点一下全部取消', async () => {
+    const wrapper = mountDialog('STOCK_IN', [paper, pen]);
+    expect(selectAll(wrapper).element).toHaveProperty('checked', true);
+    expect(wrapper.text()).toContain('已选 2 / 2 条明细');
+    await lineCheckbox(wrapper, '中性笔').setValue(false);
+    expect(selectAll(wrapper).element).toHaveProperty('indeterminate', true);
+    expect(wrapper.text()).toContain('已选 1 / 2 条明细');
+    await selectAll(wrapper).setValue(true);
+    expect(lineCheckbox(wrapper, '中性笔').element).toHaveProperty('checked', true);
+    expect(field(wrapper, '中性笔 本次数量（支）').exists()).toBe(true);
+    await selectAll(wrapper).setValue(false);
+    expect(wrapper.findAll('input[type=number]')).toHaveLength(0);
     await submit(wrapper, '登记入库');
     expect(wrapper.find('[role=alert]').text()).toBe('请至少选择一条明细');
     expect(api.stockIn).not.toHaveBeenCalled();
@@ -145,7 +180,7 @@ describe('QuantityCommandDialog：提交的数据', () => {
   it('登记入库：按到货明细提交，数量规范成最简十进制字符串，取消勾选的行不提交', async () => {
     const wrapper = mountDialog('STOCK_IN', [paper, pen]);
     await field(wrapper, 'A4 复印纸 本次数量（盒）').setValue('1.500000');
-    await wrapper.findAll('input[type=checkbox]')[1].setValue(false);
+    await lineCheckbox(wrapper, '中性笔').setValue(false);
     await field(wrapper, '业务备注 / 签收信息').setValue('  仓库签收  ');
     await submit(wrapper, '登记入库');
     expect(api.stockIn).toHaveBeenCalledWith({
@@ -160,7 +195,9 @@ describe('QuantityCommandDialog：提交的数据', () => {
   it('直接发放：领用人必填', async () => {
     const wrapper = mountDialog('DIRECT', [paper]);
     await submit(wrapper, '直接发放');
-    expect(wrapper.text()).toContain('请填写实际领用人');
+    expect(wrapper.find('[role=alert]').text()).toBe('第 1 行 · A4 复印纸：请填写实际领用人');
+    expect(field(wrapper, 'A4 复印纸 领用人').attributes('aria-invalid')).toBe('true');
+    expect(field(wrapper, 'A4 复印纸 本次数量（盒）').attributes('aria-invalid')).toBeUndefined();
     expect(api.distribute).not.toHaveBeenCalled();
   });
 
@@ -199,10 +236,33 @@ describe('QuantityCommandDialog：提交的数据', () => {
     await recipients[0].setValue('张三');
     await recipients[1].setValue('李四');
     await submit(wrapper, '直接发放');
-    expect(wrapper.text()).toContain('同一来源的合计数量不能超过 3 盒');
+    expect(wrapper.find('[role=alert]').text()).toBe('第 2 行 · A4 复印纸：同一来源的合计数量不能超过 3 盒');
     expect(quantities[0].attributes('aria-invalid')).toBeUndefined();
     expect(quantities[1].attributes('aria-invalid')).toBe('true');
     expect(api.distribute).not.toHaveBeenCalled();
+  });
+
+  it('直接发放：拆出的行紧跟在同一来源之后，按表格顺序提交', async () => {
+    const wrapper = mountDialog('DIRECT', [paper, { ...pen, id: 104 }]);
+    const splitButtons = wrapper.findAll('button').filter((b) => b.text().includes('拆给另一位领用人'));
+    expect(splitButtons).toHaveLength(2);
+    await splitButtons[0].trigger('click');
+    expect(rows(wrapper).map((row) => row.attributes('data-command-line'))).toEqual(['101', '101', '104']);
+    const quantities = wrapper.findAll('input[aria-label="A4 复印纸 本次数量（盒）"]');
+    const recipients = wrapper.findAll('input[aria-label="A4 复印纸 领用人"]');
+    await quantities[0].setValue('2');
+    await quantities[1].setValue('0.5');
+    await recipients[0].setValue('张三');
+    await recipients[1].setValue('李四');
+    await field(wrapper, '中性笔 领用人').setValue('王五');
+    await submit(wrapper, '直接发放');
+    expect(api.distribute).toHaveBeenCalledWith(expect.objectContaining({
+      lines: [
+        { receiptLineId: 101, recipient: '张三', quantity: '2' },
+        { receiptLineId: 101, recipient: '李四', quantity: '0.5' },
+        { receiptLineId: 104, recipient: '王五', quantity: '3' },
+      ],
+    }));
   });
 
   it('库存领用：按物品提交 productId，部门留空时不提交', async () => {
@@ -232,6 +292,22 @@ describe('QuantityCommandDialog：提交的数据', () => {
         { receiptLineId: 101, quantity: '1', location: 'STOCK' },
         { receiptLineId: 104, quantity: '3', location: 'RECEIVING' },
       ],
+    });
+  });
+
+  it('供应商退货：处理方式是分段控件，切到换货补货后按 REPLACEMENT 提交', async () => {
+    const wrapper = mountDialog('SUPPLIER_RETURN', [{ ...paper, location: 'STOCK' }]);
+    const modes = wrapper.find('[role=group][aria-label="退货处理方式"]');
+    expect(modes.find('button[aria-pressed=true]').text()).toBe('退款退货');
+    await modes.findAll('button').find((b) => b.text() === '换货补货')!.trigger('click');
+    expect(wrapper.text()).toContain('保留成交金额，退回数量重新成为该采购的待到货量。');
+    await wrapper.find('textarea').setValue('型号不符');
+    await submit(wrapper, '供应商退货');
+    expect(api.supplierReturn).toHaveBeenCalledWith({
+      date: TODAY,
+      reason: '型号不符',
+      returnMode: 'REPLACEMENT',
+      lines: [{ receiptLineId: 101, quantity: '2.5', location: 'STOCK' }],
     });
   });
 
