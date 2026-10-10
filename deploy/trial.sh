@@ -2,9 +2,9 @@
 # Isolated candidate trial. Never invokes deploy.sh, upgrade.sh or production Compose.
 set -euo pipefail
 REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-PROJECT=canglin-trial-b92d162
-REVISION=b92d162ff737699f742c359e79ad4d265f940531
-TRIAL_DIR=$(realpath -m "${CANGLIN_TRIAL_DIR:-$REPO_DIR/state/trial-b92d162}")
+PROJECT=canglin-trial-42b9ae6
+REVISION=42b9ae68367e7b9ea27c34b8d6627049728b990b
+TRIAL_DIR=$(realpath -m "${CANGLIN_TRIAL_DIR:-$REPO_DIR/state/trial-42b9ae6}")
 ACTION=${1:-status}
 case "$ACTION" in up|check|status|logs|stop|smoke) ;; *) echo 'Usage: bash deploy/trial.sh up|check|status|logs|stop|smoke' >&2; exit 2 ;; esac
 [ $# -le 1 ] || { echo 'Unexpected arguments' >&2; exit 2; }

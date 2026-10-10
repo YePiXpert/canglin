@@ -1,9 +1,9 @@
-# Fixed candidate b92d162ff737699f742c359e79ad4d265f940531.
+# Fixed candidate 42b9ae68367e7b9ea27c34b8d6627049728b990b.
 # Standalone file: never merge with the production Compose configuration.
-name: canglin-trial-b92d162
+name: canglin-trial-42b9ae6
 services:
   web:
-    image: ghcr.io/yepixpert/canglin-web@sha256:a4358c384ac15fd9dd8178a8120e88d056af3f9e809c5805581ec97908e7c321
+    image: ghcr.io/yepixpert/canglin-web@sha256:7111f99de24b9cb76f10ddf2dc6ed6099e74f98ad3e7b5afce440637b57ad20f
     ports:
       - "127.0.0.1:18080:80"
     depends_on:
@@ -14,7 +14,7 @@ services:
       com.centurylinklabs.watchtower.enable: "false"
     restart: "no"
   server:
-    image: ghcr.io/yepixpert/canglin-server@sha256:fb0de831397b03af8c52cac6e5ed7ad5ed6448bfd8f67eeb21a837b72617020d
+    image: ghcr.io/yepixpert/canglin-server@sha256:cb912964c4e23823cc79ce4855ebb63eea031d0a78b5483e02954bdb23ed1fb6
     environment:
       TZ: Asia/Shanghai
       DATA_DIR: /app/state
@@ -35,7 +35,7 @@ services:
       com.centurylinklabs.watchtower.enable: "false"
     restart: "no"
   ocr:
-    image: ghcr.io/yepixpert/canglin-ocr@sha256:3a7660a71a4e2cffe666b4c5e260cefe1629606280e4448fd2440c6cf647686d
+    image: ghcr.io/yepixpert/canglin-ocr@sha256:22ef72757b91e5540bff3c20b2fef6418f0eb709fd6f84cf0dc1daf6c53b9069
     environment:
       TZ: Asia/Shanghai
       OCR_API_KEY: ${TRIAL_OCR_API_KEY:?Run deploy/trial.sh up first}

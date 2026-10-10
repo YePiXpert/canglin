@@ -10,6 +10,8 @@ import { useToastStore } from '@/stores/toast';
 import { apiError } from '@/api/client';
 
 type Mode = 'login' | 'setup' | 'recover';
+/** 版本号来自 package.json（构建时注入），登录页页脚显示 */
+const appVersion = __APP_VERSION__;
 
 const auth = useAuthStore();
 const toast = useToastStore();
@@ -206,6 +208,6 @@ const subheading = computed(() =>
       </template>
     </div>
 
-    <p class="mt-6 text-meta">本地部署 · 数据自持 · v2.0</p>
+    <p class="mt-6 text-meta">本地部署 · 数据自持 · v{{ appVersion }}</p>
   </div>
 </template>

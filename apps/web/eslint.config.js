@@ -16,7 +16,7 @@ export default tseslint.config(
   },
   {
     languageOptions: {
-      globals: { ...globals.browser },
+      globals: { ...globals.browser, __APP_VERSION__: 'readonly' },
     },
     rules: {
       // Badge / Dialog / Button 这类 UI 基元是刻意的单词命名，目录结构已表达归属
