@@ -127,7 +127,7 @@ services:
 
 **版本与标签**：旧的 v1.2.x 标签属于重写前的旧代码库，已从仓库删除，版本从 v2.0.0 重新开始，变更见 [CHANGELOG](../CHANGELOG.md)。早先拉取到本机的旧标签不会被 `git fetch --tags` 自动删除，不影响升级。
 
-**试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 已钉到 v2.0.0（提交 `ce8fe2e`）：项目名 `canglin-trial-ce8fe2e`，数据卷 `canglin-trial-ce8fe2e_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。
+**试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 钉在候选提交 `b92d162`（v2.0.0 的代码，镜像标签 `sha-b92d162`）：项目名 `canglin-trial-b92d162`，数据卷 `canglin-trial-b92d162_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。
 
 ## 验证命令
 

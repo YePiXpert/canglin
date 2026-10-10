@@ -2,9 +2,9 @@
 # Isolated candidate trial. Never invokes deploy.sh, upgrade.sh or production Compose.
 set -euo pipefail
 REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-PROJECT=canglin-trial-ce8fe2e
-REVISION=ce8fe2ef40f7d0e4f482335ead0143716e3e9478
-TRIAL_DIR=$(realpath -m "${CANGLIN_TRIAL_DIR:-$REPO_DIR/state/trial-ce8fe2e}")
+PROJECT=canglin-trial-b92d162
+REVISION=b92d162ff737699f742c359e79ad4d265f940531
+TRIAL_DIR=$(realpath -m "${CANGLIN_TRIAL_DIR:-$REPO_DIR/state/trial-b92d162}")
 ACTION=${1:-status}
 case "$ACTION" in up|check|status|logs|stop|smoke) ;; *) echo 'Usage: bash deploy/trial.sh up|check|status|logs|stop|smoke' >&2; exit 2 ;; esac
 [ $# -le 1 ] || { echo 'Unexpected arguments' >&2; exit 2; }
@@ -72,7 +72,7 @@ case "$ACTION" in
     container=$(docker run -d --rm --network none --cpus 1 --memory 1g \
       --label com.centurylinklabs.watchtower.enable=false \
       --mount type=volume,destination=/app/state \
-      -e DATA_DIR=/app/state -e DATABASE_URL=file:/app/state/procure.db \
+      -e DATA_DIR=/app/state -e DATABASE_URL=file:/app/state/canglin.db \
       -e OCR_BASE_URL=http://127.0.0.1:8000 -e OCR_API_KEY=isolated-smoke \
       "$server_image")
     # The smoke test must match the candidate's API, so read it from the pinned revision, not the working tree.
