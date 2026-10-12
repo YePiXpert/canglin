@@ -1,20 +1,37 @@
 #!/usr/bin/env python3
-"""Compare independently annotated source-row IDs, never match by item name."""
+"""Compare independently annotated source-row IDs, never match by item name.
+
+The manifest is either a JSON array of samples, or an object {"variants": [...], "baseline": "...", "samples": [...]}.
+Variant names come from --variants, then the manifest's "variants", then the runs present in the samples; the
+baseline is --baseline, then the manifest's "baseline", then "fixed_old". The last variant is the final pipeline
+whose human review effort must improve on the baseline.
+"""
 import argparse
 import json
 from decimal import Decimal
 
-VARIANTS = ('old', 'fixed_old', 'new_ocr', 'new_ocr_gpt')
+DEFAULT_BASELINE = 'fixed_old'
+METRICS = ('missingRate', 'extraRate', 'numericErrorRate', 'nameErrorRate', 'unitErrorRate', 'specErrorRate')
 
 
 def number(value):
     return None if value is None else Decimal(str(value))
 
 
-def evaluate(samples, split):
+def manifest_parts(manifest):
+    """(samples, variants or None, baseline or None) from either manifest form."""
+    if isinstance(manifest, list):
+        return manifest, None, None
+    return manifest['samples'], manifest.get('variants'), manifest.get('baseline')
+
+
+def evaluate(samples, split, variants=None, baseline=DEFAULT_BASELINE):
+    variants = list(variants or sorted({v for s in samples for v in s['runs']}))
+    if baseline not in variants:
+        raise ValueError(f'Baseline {baseline!r} is not one of the variants {variants}')
     selected = [s for s in samples if s['split'] == split]
     reports = {}
-    for variant in VARIANTS:
+    for variant in variants:
         total = missing = numeric = errors = extra = names = units = specs = 0
         edits, seconds = [], []
         complete = True
@@ -50,22 +67,32 @@ def evaluate(samples, split):
                             'numericErrorRate': errors / numeric if numeric else None,
                             'humanEdits': sum(edits) if len(edits) == len(selected) and edits else None,
                             'reviewSeconds': sum(seconds) if len(seconds) == len(selected) and seconds else None}
-    baseline, new, gpt = (reports[k] for k in ('fixed_old', 'new_ocr', 'new_ocr_gpt'))
+    base = reports[baseline]
+    candidates = [v for v in variants if v != baseline]
+    final = reports[candidates[-1]] if candidates else base
     ready = all(r['complete'] for r in reports.values())
-    metrics = ('missingRate', 'extraRate', 'numericErrorRate', 'nameErrorRate', 'unitErrorRate', 'specErrorRate')
-    accuracy = ready and all(baseline[key] is not None and all(r[key] is not None and r[key] <= baseline[key] for r in (new, gpt)) for key in metrics)
-    improved = any(baseline[k] is not None and gpt[k] is not None and gpt[k] < baseline[k] for k in ('humanEdits', 'reviewSeconds'))
+    accuracy = ready and bool(candidates) and all(
+        base[key] is not None and all(reports[c][key] is not None and reports[c][key] <= base[key] for c in candidates)
+        for key in METRICS)
+    improved = any(base[k] is not None and final[k] is not None and final[k] < base[k] for k in ('humanEdits', 'reviewSeconds'))
     holdout = sum(s['split'] == 'holdout' for s in samples)
     sample_gate = 30 <= len(samples) <= 50 and holdout * 3 >= len(samples)
-    return {'split': split, 'variants': reports, 'sampleGate': sample_gate,
+    return {'split': split, 'baseline': baseline, 'final': candidates[-1] if candidates else None,
+            'variants': reports, 'sampleGate': sample_gate,
             'accuracyGate': accuracy, 'humanBenefitGate': improved,
             'effectAccepted': split == 'holdout' and sample_gate and accuracy and improved,
             'note': 'Does not replace interface, resource, backup or deployment acceptance.'}
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('manifest'); parser.add_argument('--split', choices=['development', 'holdout'], default='holdout')
+    parser.add_argument('--variants', help='comma separated, baseline included, final pipeline last')
+    parser.add_argument('--baseline')
     args = parser.parse_args()
-    with open(args.manifest) as file: samples = json.load(file)
-    print(json.dumps(evaluate(samples, args.split), ensure_ascii=False, indent=2))
+    with open(args.manifest) as file:
+        samples, variants, baseline = manifest_parts(json.load(file))
+    if args.variants:
+        variants = [v.strip() for v in args.variants.split(',') if v.strip()]
+    print(json.dumps(evaluate(samples, args.split, variants, args.baseline or baseline or DEFAULT_BASELINE),
+                     ensure_ascii=False, indent=2))

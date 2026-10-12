@@ -6,7 +6,6 @@ import type {
   AiAskResponse,
   AiConfigInput,
   AiConfigView,
-  AiOcrReviewResult,
   AutoBackupConfig,
   WorkflowImportConfirmInput,
   ParseResult,
@@ -26,6 +25,8 @@ export interface Paged {
 /** AI 单页识别结果（服务端 aiPageSchema v2）；旧任务里保存的结果没有 rawText、amount、templateType */
 export interface AiImportPage {
   page: number;
+  /** RECOGNITION：从图像识别；REVIEW：核对文本层重建的物理行（旧结果没有） */
+  mode?: 'RECOGNITION' | 'REVIEW';
   templateType?: TemplateType | null;
   serialNumber: string | null;
   department: string | null;
@@ -68,6 +69,9 @@ export interface ImportTaskView {
     outputTokens: number | null;
     cost: number | null;
     durationMs: number | null;
+    /** RECOGNITION | REVIEW；旧调用记录为 null */
+    mode?: string | null;
+    promptVersion?: string | null;
   }[];
 }
 /** 导入任务列表的一行（找回未完成的导入；按 confirmedAt 区分是否已入账） */
@@ -221,10 +225,6 @@ export const aiApi = {
   ask: (body: AiAskInput) =>
     // 问答要跑多轮工具调用，放宽到与导入上传同级的超时
     http.post<AiAskResponse>('/ai/ask', body, { timeout: 180_000 }).then((r) => r.data),
-  ocrReview: (taskId: string) =>
-    http
-      .post<AiOcrReviewResult>('/ai/ocr-review', { taskId }, { timeout: 120_000 })
-      .then((r) => r.data),
 };
 
 /* ---------------------------------- 审计 ---------------------------------- */

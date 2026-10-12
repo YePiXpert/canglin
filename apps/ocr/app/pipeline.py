@@ -80,9 +80,23 @@ def _grid(page, number: int, carry: dict | None) -> tuple[dict | None, dict | No
     return state, result, chars, None
 
 
-async def parse_pdf(pdf_bytes: bytes, page_number: int | None = None) -> dict:
+def _text_layer(page) -> str:
+    """Body text of the page (browser header and footer removed), one line per text row."""
+    lines: list[list[dict]] = []
+    for w in sorted(page_words(page), key=lambda w: (w["top"], w["x0"])):
+        if lines and abs(lines[-1][0]["top"] - w["top"]) <= 3:
+            lines[-1].append(w)
+        else:
+            lines.append([w])
+    return "\n".join(" ".join(w["text"] for w in sorted(line, key=lambda w: w["x0"])) for line in lines)
+
+
+async def parse_pdf(pdf_bytes: bytes, page_number: int | None = None, text_only: bool = False) -> dict:
+    """Parse PDF pages. text_only (mode=text): text layer and grid reconstruction only, never rendering, OCR or the
+    line parser; the result carries the pages' body text as textLayer (False when no page has a text layer)."""
     import pdfplumber
     parts = []
+    texts = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         total = len(pdf.pages)
         if total > MAX_PAGES:
@@ -101,6 +115,10 @@ async def parse_pdf(pdf_bytes: bytes, page_number: int | None = None) -> dict:
             number = index + 1
             try:
                 carry, grid, chars, fallback = _grid(page, number, carry)
+                if text_only:
+                    if chars >= MIN_TEXT_CHARS and not _scanned(page):
+                        texts.append(_text_layer(page))
+                    grid = grid or {"items": [], "warnings": []}
                 if grid is not None:
                     grid["items"], warnings = finalize_items(grid["items"])
                     grid["warnings"] = warnings + grid["warnings"]
@@ -146,7 +164,10 @@ async def parse_pdf(pdf_bytes: bytes, page_number: int | None = None) -> dict:
             except Exception as error:
                 carry = None
                 parts.append({"page": number, "status": "FAILED", "mode": "PDF_OCR", "error": str(error), "items": [], "warnings": [f"第 {number} 页解析失败，请重试或人工核对"]})
-    return _result(parts, total)
+    result = _result(parts, total)
+    if text_only:
+        result["textLayer"] = "\n\n".join(texts) if texts else False
+    return result
 
 
 async def parse_image(image_bytes: bytes) -> dict:
@@ -162,7 +183,11 @@ async def parse_text(text: str) -> dict:
     return _result([_page_result(result, 1, "TEXT")], 1)
 
 
-async def parse_dispatch(data: bytes, filename: str, page: int | None = None) -> dict:
+async def parse_dispatch(data: bytes, filename: str, page: int | None = None, mode: str | None = None) -> dict:
+    if mode == "text":
+        if filename.lower().endswith(".pdf"):
+            return await parse_pdf(data, page, text_only=True)
+        return {**_result([{"page": 1, "mode": "IMAGE_OCR", "status": "DONE", "items": [], "warnings": []}], 1), "textLayer": False}
     if filename.lower().endswith(".pdf"):
         return await parse_pdf(data, page)
     if filename.lower().endswith(".txt"):

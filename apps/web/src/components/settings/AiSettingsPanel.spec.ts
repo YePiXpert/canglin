@@ -10,7 +10,7 @@ vi.mock('@/api/client', () => ({ apiError: (e: unknown) => (e instanceof Error ?
 
 const view: AiConfigView = {
   enabled: true, baseUrl: 'https://provider.example/v1', model: 'synthetic-gpt', semanticSearch: true,
-  apiKeySet: true, autoImport: false, reasoningEffort: 'off',
+  apiKeySet: true, autoImport: false, reasoningEffort: 'off', reviewTextPdf: false,
 };
 
 beforeEach(() => {
@@ -30,6 +30,6 @@ describe('AiSettingsPanel', () => {
     expect(wrapper.text()).toContain('高级配置');
     await wrapper.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
-    expect(vi.mocked(aiApi.updateConfig).mock.calls[0][0]).toMatchObject({ reasoningEffort: 'off', model: 'synthetic-gpt' });
+    expect(vi.mocked(aiApi.updateConfig).mock.calls[0][0]).toMatchObject({ reasoningEffort: 'off', reviewTextPdf: false, model: 'synthetic-gpt' });
   });
 });

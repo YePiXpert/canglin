@@ -127,3 +127,10 @@ def test_cells_keep_name_verbatim_and_merge_specs():
     assert item["_warnings"] == []
     long = item_from_cells({"name": "纸", "qty": "1", "note": "https://a.example/" + "x" * 600}, "第 2 行")
     assert len(long["purchaseLink"]) == 500 and long["_warnings"] == ["第 2 行链接超过 500 字符，已截断，请对照原件"]
+
+
+def test_cells_keep_note_text_besides_the_link_for_review():
+    linked = item_from_cells({"name": "文件袋", "qty": "20.0", "note": "https://www.cemall.com.cn/goods/1 买两包"}, "第 3 行")
+    assert (linked["purchaseLink"], linked["note"]) == ("https://www.cemall.com.cn/goods/1", "买两包")
+    assert item_from_cells({"name": "光盘", "qty": "50.0", "note": "50张"}, "第 1 行")["note"] == "50张"
+    assert item_from_cells({"name": "纸", "qty": "1"}, "第 2 行")["note"] is None

@@ -1,8 +1,14 @@
+import copy
 import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+VARIANTS = ('fixed_old', 'grid_v1', 'ai_review_v1')
 
 
 def load(name):
@@ -12,41 +18,64 @@ def load(name):
     return module
 
 
+def samples_for(row, variants=VARIANTS, final_edits=1):
+    return [{'documentId': str(i), 'split': 'holdout' if i < 10 else 'development',
+             'gold': [copy.deepcopy(row)],
+             'runs': {v: {'rows': [copy.deepcopy(row)], 'humanEdits': final_edits if v == variants[-1] else 2,
+                          'reviewSeconds': None} for v in variants}} for i in range(30)]
+
+
 class EvaluateImportsTests(unittest.TestCase):
     def test_missing_and_unknown_numbers_cannot_pass_effect_gate(self):
         evaluator = load('evaluate-imports')
-        samples = []
-        for i in range(30):
-            samples.append({'documentId': str(i), 'split': 'holdout' if i < 10 else 'development',
-                            'gold': [{'sourceRowId': 'row1', 'itemName': '签字笔', 'unit': '支', 'quantity': None, 'unitPrice': None}],
-                            'runs': {v: {'rows': [{'sourceRowId': 'row1', 'itemName': '签字笔', 'unit': '支', 'quantity': None, 'unitPrice': None}],
-                                         'humanEdits': 1 if v == 'new_ocr_gpt' else 2, 'reviewSeconds': None} for v in evaluator.VARIANTS}})
-        self.assertTrue(evaluator.evaluate(samples, 'holdout')['effectAccepted'])
-        samples[0]['runs']['new_ocr_gpt']['rows'][0]['quantity'] = 1
-        self.assertFalse(evaluator.evaluate(samples, 'holdout')['effectAccepted'])
-        del samples[0]['runs']['new_ocr_gpt']
-        self.assertFalse(evaluator.evaluate(samples, 'holdout')['effectAccepted'])
+        samples = samples_for({'sourceRowId': 'row1', 'itemName': '签字笔', 'unit': '支', 'quantity': None, 'unitPrice': None})
+        self.assertTrue(evaluator.evaluate(samples, 'holdout', VARIANTS)['effectAccepted'])
+        samples[0]['runs']['ai_review_v1']['rows'][0]['quantity'] = 1
+        self.assertFalse(evaluator.evaluate(samples, 'holdout', VARIANTS)['effectAccepted'])
+        del samples[0]['runs']['ai_review_v1']
+        self.assertFalse(evaluator.evaluate(samples, 'holdout', VARIANTS)['effectAccepted'])
 
     def test_phantom_rows_name_unit_and_spec_errors_fail_effect_gate(self):
-        import copy
         evaluator = load('evaluate-imports')
         row = {'sourceRowId': 'physical-1', 'itemName': '复印纸', 'unit': '包', 'spec': 'A4', 'quantity': 5, 'unitPrice': 18}
-        samples = [{'documentId': str(i), 'split': 'holdout' if i < 10 else 'development',
-                    'gold': [copy.deepcopy(row)],
-                    'runs': {variant: {'rows': [copy.deepcopy(row)], 'humanEdits': 1 if variant == 'new_ocr_gpt' else 2}
-                             for variant in evaluator.VARIANTS}} for i in range(30)]
-        self.assertTrue(evaluator.evaluate(samples, 'holdout')['effectAccepted'])
+        samples = samples_for(row)
+        self.assertTrue(evaluator.evaluate(samples, 'holdout', VARIANTS)['effectAccepted'])
         for field, value, metric in [('itemName', '胶带', 'nameErrorRate'), ('unit', '箱', 'unitErrorRate'), ('spec', 'A3', 'specErrorRate')]:
             changed = copy.deepcopy(samples)
-            changed[0]['runs']['new_ocr_gpt']['rows'][0][field] = value
-            report = evaluator.evaluate(changed, 'holdout')
-            self.assertGreater(report['variants']['new_ocr_gpt'][metric], 0)
+            changed[0]['runs']['grid_v1']['rows'][0][field] = value
+            report = evaluator.evaluate(changed, 'holdout', VARIANTS)
+            self.assertGreater(report['variants']['grid_v1'][metric], 0)
             self.assertFalse(report['effectAccepted'])
         changed = copy.deepcopy(samples)
-        changed[0]['runs']['new_ocr_gpt']['rows'].append({**row, 'sourceRowId': 'phantom'})
-        self.assertFalse(evaluator.evaluate(changed, 'holdout')['effectAccepted'])
+        changed[0]['runs']['ai_review_v1']['rows'].append({**row, 'sourceRowId': 'phantom'})
+        self.assertFalse(evaluator.evaluate(changed, 'holdout', VARIANTS)['effectAccepted'])
         del changed[0]['gold'][0]['itemName']
-        self.assertFalse(evaluator.evaluate(changed, 'holdout')['effectAccepted'])
+        self.assertFalse(evaluator.evaluate(changed, 'holdout', VARIANTS)['effectAccepted'])
+
+    def test_variants_and_baseline_are_parameters(self):
+        evaluator = load('evaluate-imports')
+        row = {'sourceRowId': 'r1', 'itemName': '文件袋', 'unit': '个', 'spec': None, 'quantity': 20, 'unitPrice': None}
+        samples = samples_for(row, ('old_parser', 'grid_v1'))
+        report = evaluator.evaluate(samples, 'holdout', baseline='old_parser')
+        self.assertEqual((report['baseline'], report['final']), ('old_parser', 'grid_v1'))
+        self.assertTrue(report['effectAccepted'])
+        with self.assertRaises(ValueError):
+            evaluator.evaluate(samples, 'holdout')  # 默认基线 fixed_old 不在这份清单里
+        # 只有基线、没有新变体时不能算效果成立
+        self.assertFalse(evaluator.evaluate(samples, 'holdout', ['old_parser'], 'old_parser')['accuracyGate'])
+
+    def test_command_line_reads_object_manifest_and_overrides(self):
+        row = {'sourceRowId': 'r1', 'itemName': '文件袋', 'unit': '个', 'spec': None, 'quantity': 20, 'unitPrice': None}
+        manifest = {'variants': list(VARIANTS), 'baseline': 'fixed_old', 'samples': samples_for(row)}
+        with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as file:
+            json.dump(manifest, file, ensure_ascii=False)
+        script = str(ROOT / 'evaluate-imports.py')
+        report = json.loads(subprocess.run([sys.executable, script, file.name], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual((report['final'], report['effectAccepted']), ('ai_review_v1', True))
+        override = subprocess.run([sys.executable, script, file.name, '--variants', 'fixed_old,grid_v1', '--split', 'development'],
+                                  capture_output=True, text=True, check=True)
+        self.assertEqual(list(json.loads(override.stdout)['variants']), ['fixed_old', 'grid_v1'])
+        Path(file.name).unlink()
 
 
 if __name__ == '__main__': unittest.main()

@@ -216,6 +216,7 @@ def item_from_cells(cells: dict[str, str], label: str) -> dict:
         if found and not link:
             link = found.group(0).rstrip(".,;、")
     note = URL_RE.sub("", cells.get("note") or "").strip()
+    remark = note[:1000] or None  # 备注里链接以外的原文，供 AI 审核判断单位与拆行
     noted = parse_unit_note(note, quantity) if note else None
     if noted:
         unit, note = unit or noted, ""
@@ -242,7 +243,7 @@ def item_from_cells(cells: dict[str, str], label: str) -> dict:
     if not name:
         warnings.append(f"{label}未识别到物品名称，请对照原件")
     return {"itemName": name, "quantity": quantity, "unit": unit, "spec": spec, "unitPrice": price,
-            "amount": amount, "purchaseLink": link, "_label": label, "_warnings": warnings}
+            "amount": amount, "purchaseLink": link, "note": remark, "_label": label, "_warnings": warnings}
 
 
 TEMPLATES = (("办公用品领用单", "OFFICE_SUPPLY"), ("固定资产购买申请单", "FIXED_ASSET"))

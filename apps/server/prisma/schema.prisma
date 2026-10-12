@@ -122,6 +122,9 @@ model AiCall {
   cost Float?
   requestId String?
   durationMs Int?
+  // RECOGNITION | REVIEW 与提示词版本（apps/server/src/ai/prompts.ts），评测按版本归因
+  promptVersion String?
+  mode String?
   createdAt DateTime @default(now())
   @@index([taskId, createdAt])
 }

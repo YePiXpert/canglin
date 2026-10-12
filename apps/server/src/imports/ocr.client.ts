@@ -1,7 +1,10 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import axios from 'axios';
 import { config } from '../config';
+import { z } from 'zod';
 import { parseResultSchema } from '@canglin/shared';
+
+const textModeSchema = parseResultSchema.extend({ textLayer: z.union([z.string(), z.literal(false)]) });
 @Injectable()
 export class OcrClient {
   private form(file: Buffer, filename: string) {
@@ -36,6 +39,12 @@ export class OcrClient {
     return parseResultSchema.parse(
       await this.request(`parse${page ? `?page=${page}` : ''}`, file, filename),
     );
+  }
+  /** 只读文本层与网格重建（mode=text），不渲染、不 OCR；textLayer 为本页正文，没有文本层时为 null */
+  async textLayer(file: Buffer, filename: string, page: number) {
+    const value = textModeSchema.parse(await this.request(`parse?page=${page}&mode=text`, file, filename));
+    const { textLayer, ...result } = value;
+    return { result: parseResultSchema.parse(result), textLayer: textLayer || null };
   }
   async inspect(file: Buffer, filename: string): Promise<{ pageCount: number }> {
     const value = await this.request('inspect', file, filename);

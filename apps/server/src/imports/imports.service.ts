@@ -54,6 +54,8 @@ export interface ImportTaskView {
     outputTokens: number | null;
     cost: number | null;
     durationMs: number | null;
+    mode: string | null;
+    promptVersion: string | null;
   }[];
 }
 /** 导入任务列表的一行：只给找回 / 继续处理用，不含原件路径、识别结果、草稿与确认快照 */
@@ -346,6 +348,8 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
         outputTokens: true,
         cost: true,
         durationMs: true,
+        mode: true,
+        promptVersion: true,
       },
       orderBy: { createdAt: 'asc' },
     });

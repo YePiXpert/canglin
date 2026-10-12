@@ -31,6 +31,8 @@ const ocr = {
   inspect: async () => ({ pageCount: 1 }),
   health: async () => true,
   page: async () => ({ bytes: Buffer.from(capabilityImage().split(',')[1], 'base64'), mime: 'image/png' }),
+  // The synthetic originals have no text layer: AI pages use recognition mode.
+  textLayer: async () => ({ result: { mode: 'PDF_TEXT', items: [], warnings: [] }, textLayer: null }),
   parse: async () => ({
     schemaVersion: 2,
     parserVersion: 'browser-fixture',

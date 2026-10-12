@@ -5,6 +5,7 @@ import { config } from '../src/config';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AiSearchService } from '../src/ai/ai-search.service';
 import { AiConfigService } from '../src/ai/ai-config.service';
+import { compactToolResult } from '../src/ai/ai.service';
 import type { WorkflowDocumentRow, WorkflowPage, WorkflowPriceRow, WorkflowRequestRow, WorkflowStockEntryRow, WorkflowStockRow } from '@canglin/shared';
 
 /**
@@ -124,7 +125,7 @@ describe('AI 配置', () => {
     }
   });
 
-  it('未启用时 ask / ocr-review 返回 400', async () => {
+  it('未启用时 ask 返回 400；OCR 校对接口已删除', async () => {
     const ask = await ctx.inject({
       method: 'POST',
       url: '/api/ai/ask',
@@ -136,7 +137,7 @@ describe('AI 配置', () => {
       url: '/api/ai/ocr-review',
       ...auth({ payload: { taskId: 'whatever' } }),
     });
-    expect(review.statusCode).toBe(400);
+    expect(review.statusCode).toBe(404);
   });
 
   it('没有 Key 不允许启用', async () => {
@@ -289,6 +290,38 @@ describe('AI 问答', () => {
     expect(res.json().steps).toEqual([]);
     expect(fake.calls.at(-1)).toMatchObject({ reasoningEffort: 'medium' });
     expect(fake.calls.at(-1)?.temperature).toBeUndefined();
+  });
+});
+
+describe('工具结果压缩', () => {
+  const document = (id: number, lines: number) => ({
+    id, kind: 'PURCHASE', status: 'POSTED', supplierName: null, note: '', totalAmount: null, createdAt: '2026-09-01T00:00:00Z',
+    attachments: [{ id: 9, kind: 'INVOICE', filename: '发票.pdf' }],
+    lines: Array.from({ length: lines }, (_, i) => ({ id: i, itemName: `物品${i}`, unitPrice: null, quantity: '1', spec: '' })),
+  });
+
+  it('去掉空值和时间戳，保留表示「未知」的金额与价格，附件只留类型和文件名，每张单据最多 20 行', () => {
+    const value = JSON.parse(compactToolResult({ items: [document(1, 25)], total: 1 }));
+    const doc = value.items[0];
+    expect(doc).not.toHaveProperty('createdAt');
+    expect(doc).not.toHaveProperty('supplierName');
+    expect(doc).not.toHaveProperty('note');
+    expect(doc.totalAmount).toBeNull();
+    expect(doc.attachments).toEqual(['INVOICE:发票.pdf']);
+    expect(doc.lines).toHaveLength(20);
+    expect(doc.linesTruncated).toBe(true);
+    expect(doc.lines[0]).toEqual({ id: 0, itemName: '物品0', unitPrice: null, quantity: '1' });
+  });
+
+  it('仍超过上限时从末尾删条目，标记 truncated 与 hint，结果始终是合法 JSON', () => {
+    const json = compactToolResult({ items: Array.from({ length: 60 }, (_, i) => document(i, 20)), total: 60 });
+    expect(json.length).toBeLessThanOrEqual(16_000);
+    const value = JSON.parse(json);
+    expect(value).toMatchObject({ truncated: true, hint: '缩小日期范围或减少 pageSize', total: 60 });
+    expect(value.items.length).toBeGreaterThan(0);
+    expect(value.items.length).toBeLessThan(60);
+    expect(JSON.parse(compactToolResult({ blob: 'x'.repeat(20_000) }))).toEqual({
+      truncated: true, hint: '结果过大，请缩小日期范围或指定物品、供应商后再查' });
   });
 });
 
@@ -493,55 +526,5 @@ describe('AI 语义搜索', () => {
     expect(priceNames(literal.prices)).toEqual(new Set(['黑色中性笔', '替换笔芯']));
     expect(fake.calls.length).toBe(before);
     expect((await semanticSearch(true)).statusCode).toBe(200);
-  });
-});
-
-describe('AI OCR 校对', () => {
-  it('返回与当前值不同的建议；无解析结果的任务报 400', async () => {
-    const prisma = ctx.app.get(PrismaService);
-    await prisma.importTask.create({
-      data: {
-        id: 'task-ai-ok',
-        filename: 'oa.pdf',
-        status: 'DONE',
-        result: JSON.stringify({
-          serialNumber: 'OA-2026-AI',
-          department: '财政部门',
-          handler: '刘洋',
-          requestDate: '2026-08-01',
-          items: [{ itemName: 'a4复印纸', quantity: 2, unitPrice: 15 }],
-          warnings: [],
-          mode: 'PDF_TEXT',
-        }),
-      },
-    });
-    await prisma.importTask.create({
-      data: { id: 'task-ai-failed', filename: 'bad.pdf', status: 'FAILED', error: 'x' },
-    });
-
-    fake.json = JSON.stringify({
-      department: '行政部',
-      handler: '刘洋', // 与当前值相同 → 应被差集剔除
-      lines: [{ lineId: 'legacy-0', itemName: 'A4复印纸', reason: '对齐已有品名' }],
-      warnings: ['流水号格式看起来正常'],
-    });
-    const res = await ctx.inject({
-      method: 'POST',
-      url: '/api/ai/ocr-review',
-      ...auth({ payload: { taskId: 'task-ai-ok' } }),
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.department).toBe('行政部');
-    expect(body.handler).toBeUndefined();
-    expect(body.lines).toHaveLength(1);
-    expect(body.lines[0]).toMatchObject({ index: 0, itemName: 'A4复印纸' });
-
-    const failed = await ctx.inject({
-      method: 'POST',
-      url: '/api/ai/ocr-review',
-      ...auth({ payload: { taskId: 'task-ai-failed' } }),
-    });
-    expect(failed.statusCode).toBe(400);
   });
 });

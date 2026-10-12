@@ -18,6 +18,7 @@ export interface StoredAiConfig {
   outputPrice: number | null;
   monthlyBudget: number | null;
   reasoningEffort: ReasoningSetting;
+  reviewTextPdf: boolean;
 }
 /** 调用用途：决定「自动」推理强度。识别与审核 low，问答 medium，搜索与能力检测不发 */
 export type CallPurpose = 'import' | 'ask' | 'search';
@@ -40,6 +41,7 @@ export class AiConfigService {
       outputPrice: null,
       monthlyBudget: null,
       reasoningEffort: 'auto',
+      reviewTextPdf: true,
     };
   }
   async getConfig(): Promise<StoredAiConfig> {

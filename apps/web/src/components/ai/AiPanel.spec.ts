@@ -8,7 +8,6 @@ vi.mock('@/api', () => ({
   aiApi: {
     config: vi.fn(),
     ask: vi.fn(),
-    ocrReview: vi.fn(),
   },
   apiError: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));

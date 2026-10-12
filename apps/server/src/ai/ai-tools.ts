@@ -29,6 +29,8 @@ const queryRequestsArgs = z.object({
 const queryDocumentsArgs = z.object({
   ...workflowDates,
   ...workflowPaging,
+  // 单据带多行明细，单页条数少一些，避免结果超过回传上限
+  pageSize: z.number().int().min(1).max(50).default(10),
   kind: z.enum(WORKFLOW_DOCUMENT_KINDS).optional(),
   productId: z.number().int().positive().optional(),
   supplierId: z.number().int().positive().optional(),
@@ -36,7 +38,7 @@ const queryDocumentsArgs = z.object({
 const queryStockArgs = z.object({
   search: z.string().trim().max(100).optional(),
   productId: z.number().int().positive().optional(),
-  limit: z.number().int().min(1).max(100).default(50),
+  limit: z.number().int().min(1).max(100).default(30),
 }).strict();
 const queryWorkflowReportsArgs = z.object({
   ...workflowDates,
@@ -67,23 +69,24 @@ export class AiToolsService {
     });
     return [
       tool('query_requests', '查询 OA 审批后申请及每条物理明细的进度、待采购/到货/处理数量。日期按申请日期过滤，同名不同规格/单位分别保留。', {
-        search: { type: 'string', description: '流水号/品名/部门/经办人关键字' },
+        search: { type: 'string', description: '流水号/品名/部门/经办人关键字；只支持单个关键字，如『签字笔』或『综合管理部』，不支持多个关键字' },
         ...paging, ...dates,
         productId: { type: 'integer', description: '筛选包含该物品 ID 的申请；整份申请仍返回所有物理行，按品名/规格/单位区分' },
         stage: { type: 'string', enum: [...WORKFLOW_STAGES], description: '申请包含此阶段明细；一个申请可同时包含多个阶段' },
         pending: { type: 'boolean', description: 'true 只看有待办明细的申请' },
       }),
       tool('query_documents', '查询分次采购、收货、入库、直发/库存领用、供应商退货、员工归还、取消、库存调整单据。日期按单据业务日期过滤；注意 POSTED 有效、VOIDED 已撤销。供应商成交价、付款/报销状态、发票及来源 ID 在单据中。', {
-        search: { type: 'string', description: '供应商/品名/领用人关键字' },
+        search: { type: 'string', description: '供应商/品名/领用人关键字；只支持单个关键字，如『签字笔』，不支持多个关键字' },
         ...paging, ...dates,
+        pageSize: { type: 'integer', minimum: 1, maximum: 50, description: '默认 10；返回 total 可判断是否还有下一页' },
         kind: { type: 'string', enum: [...WORKFLOW_DOCUMENT_KINDS] },
         productId: { type: 'integer', description: '筛选包含该物品 ID 的单据；整张单据仍返回所有行，按品名/规格/单位区分' },
         supplierId: { type: 'integer', description: '供应商 ID，来自 query_suppliers' },
       }),
       tool('query_stock', '查询按品名+规格+单位区分的当前待处理量和库存量，以及采购/收货来源和来源单价。不同物品单位不能相加。', {
-        search: { type: 'string', description: '品名/规格关键字' },
+        search: { type: 'string', description: '品名/规格关键字；只支持单个关键字，如『签字笔』，不支持多个关键字' },
         productId: { type: 'integer', description: '物品 ID，精确匹配' },
-        limit: { type: 'integer', minimum: 1, maximum: 100, description: '默认 50，truncated 表示还有结果；可按物品进一步查询' },
+        limit: { type: 'integer', minimum: 1, maximum: 100, description: '默认 30，truncated 表示还有结果；可按物品进一步查询' },
       }),
       tool('query_workflow_reports', '查询有效单据的成交额、撤单额、退款额、净成交额、收货额及退货后的净收货额，并按月份/部门/供应商分组；领用与员工归还按领用人+物品身份分别统计。日期按各业务事件发生日期，统计问题优先用此工具。', {
         ...dates,
@@ -167,12 +170,17 @@ export class AiToolsService {
       '回答规则：',
       '1. 申请与待办查询用 query_requests，供应商/价格/付款报销/发票/领用/退回明细用 query_documents，当前待处理量和库存用 query_stock，统计优先用 query_workflow_reports。',
       '2. 所有数字、状态和来源 ID 必须来自工具结果；没有数据就明确说明。总条数用 total，页内明细不能代表全量；truncated 时说明结果截断或进一步查询。',
+      '2a. 相对日期按今天日期换算：本周为周一至今天；本月为 1 日至今天；上月为上月 1 日至月末；本季度、今年同理。回答时写出实际使用的日期区间。',
+      '2b. 最多 6 轮工具调用。统计类问题先用 query_workflow_reports 取汇总，再按需要用其他工具钻取；一次只调用回答所需的工具，不重复查询相同参数。',
+      '2c. 品名关键字命中多个物品（品名、规格或单位不同）时，先列出候选并询问用户要哪一个，不要自行选择。',
       '3. 数量和单价是精确小数字符串，保留原值。不同品名、规格或单位的数量分别列出，不能合计成一个数量，也不能将待处理量当库存量。',
       '4. 申请数量不等于成交额。成交价以采购单据行 unitPrice/amount 为准，缺失价格表示未知，不按零估算；totalAmount 为 null 的领用等单据没有成交额。',
       '5. 金额统计引用工具 grossPurchaseAmount/取消额/退款额/netPurchaseAmount 或 grossReceiptAmount/退货额/netReceiptAmount，说明口径和日期范围；采购额与收货额反映不同环节，不能相加。退款扣净成交额，换货不扣；撤销单据不计入汇总。',
       '6. 付款/报销状态和 invoiceIssued 只是记录状态，不能推算实付额或报销额；发票附件仅按实际返回附件说明。',
       '7. 用简体中文简洁回答，金额展示两位小数。涉及具体业务时引用申请流水号、申请 ID、单据 ID 或来源行 ID，并使用工具返回的 requestUrl/stockUrl/reportUrl 链接，禁止编造链接。',
       '8. 你只能查询，不能新增、修改、撤销、删除或确认入账。用户提出操作时引导打开相应业务页面。',
+      '9. 列表用 Markdown 表格，最多 20 行；超出时说明总数并提示到对应页面查看。金额两位小数，数量和单价保留工具返回的原值字符串。',
+      '10. 工具结果带 truncated 为 true 时，说明结果被截断，并建议缩小日期范围、指定物品或供应商后再查。',
     ].join('\n');
   }
 }

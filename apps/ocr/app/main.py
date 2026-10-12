@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import asyncio
+from typing import Literal
 from fastapi.responses import Response
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
@@ -32,7 +33,8 @@ async def health():
 
 
 @app.post("/parse", dependencies=[Depends(verify_api_key)])
-async def parse(file: UploadFile = File(...), page: int | None = None):
+async def parse(file: UploadFile = File(...), page: int | None = None, mode: Literal["text"] | None = None):
+    """mode=text：只读文本层并做网格重建，不渲染、不 OCR；返回 textLayer（本页正文，或 False 表示没有文本层）。"""
     filename = file.filename or ""
     ext = os.path.splitext(filename)[1].lower()
     if ext not in ALLOWED_EXTS:
@@ -46,7 +48,7 @@ async def parse(file: UploadFile = File(...), page: int | None = None):
 
     try:
         async with _parse_lock:
-            result = await parse_dispatch(data, filename, page)
+            result = await parse_dispatch(data, filename, page, mode)
     except Exception as e:  # noqa: BLE001 — 顶层兜底，给调用方明确错误
         raise HTTPException(status_code=422, detail=f"解析失败：{e}") from e
     return result

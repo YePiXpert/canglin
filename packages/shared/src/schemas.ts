@@ -61,6 +61,8 @@ export const parsedItemSchema = z.object({
   /** 原件上的金额（预计总价）；只用于与数量×单价交叉校验，不入账 */
   amount: z.number().finite().nonnegative().nullish(),
   purchaseLink: z.string().trim().max(500).nullish(),
+  /** 原件备注里链接以外的原文（如「50张」「三种型号各两个」），供 AI 审核判断单位与拆行 */
+  note: z.string().trim().max(1000).nullish(),
   source: sourceSchema.optional(),
 });
 /** 已识别的 OA 表单模板；GENERIC 为其他版式 */
@@ -84,7 +86,8 @@ export const parseResultSchema = z.object({
   warnings: z.array(z.string()),
   pages: z.array(parsePageSchema).optional(),
   pageCount: z.number().int().positive().optional(),
-  mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT', 'AI_IMAGE']),
+  /** AI_REVIEW：文本层 PDF 的物理行由网格重建得出，AI 只拆分品名与规格、判断单位 */
+  mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT', 'AI_IMAGE', 'AI_REVIEW']),
 });
 export type ParseResult = z.infer<typeof parseResultSchema>;
 /** 确认导入的明细只记申请事实（品名、规格、数量、单位）；成交价与链接在登记采购时填写。 */
@@ -162,6 +165,8 @@ export const aiConfigSchema = z.object({
   monthlyBudget: z.number().positive().nullish(),
   /** 推理强度：auto 按用途（识别 low、问答 medium），off 不发送 reasoning 与 temperature */
   reasoningEffort: z.enum(['auto', 'off', 'minimal', 'low', 'medium', 'high']).optional(),
+  /** 文本层 PDF 也调用模型核对品名拆分与单位（审核模式）；关闭后文本层页面同截图一样走识别模式 */
+  reviewTextPdf: z.boolean().optional(),
 });
 export type AiConfigInput = z.infer<typeof aiConfigSchema>;
 export type ReasoningSetting = NonNullable<AiConfigInput['reasoningEffort']>;
@@ -179,6 +184,7 @@ export interface AiConfigView {
   outputPrice?: number | null;
   monthlyBudget?: number | null;
   reasoningEffort?: ReasoningSetting;
+  reviewTextPdf?: boolean;
   capabilities?: {
     checkedAt: string;
     text: boolean;
@@ -217,29 +223,3 @@ export interface AiAskResponse {
   model: string;
 }
 
-export const aiOcrReviewSchema = z.object({
-  taskId: z.string().trim().min(1).max(64),
-});
-export type AiOcrReviewInput = z.infer<typeof aiOcrReviewSchema>;
-
-/** OCR 校对建议：只包含与当前值不同的字段，前端逐项应用 */
-export const aiOcrReviewResultSchema = z.object({
-  serialNumber: z.string().optional(),
-  department: z.string().optional(),
-  handler: z.string().optional(),
-  requestDate: dateString.optional(),
-  lines: z
-    .array(
-      z.object({
-        index: z.number().int().min(0).optional(),
-        lineId: z.string(),
-        itemName: z.string().optional(),
-        quantity: z.number().positive().optional(),
-        unitPrice: z.number().nonnegative().optional(),
-        reason: z.string().max(200).optional(),
-      }),
-    )
-    .max(100),
-  warnings: z.array(z.string()).max(20),
-});
-export type AiOcrReviewResult = z.infer<typeof aiOcrReviewResultSchema>;

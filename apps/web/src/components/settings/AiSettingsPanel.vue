@@ -32,6 +32,7 @@ const aiForm = reactive({
   semanticSearch: true,
   autoImport: false,
   reasoningEffort: 'auto' as ReasoningSetting,
+  reviewTextPdf: true,
 });
 /** 推理强度：「自动」按用途取值；服务拒绝的参数会自动去掉重发，之后不再发送 */
 const reasoningOptions: { label: string; value: ReasoningSetting }[] = [
@@ -112,6 +113,7 @@ watch(
       aiForm.semanticSearch = ai.semanticSearch;
       aiForm.autoImport = ai.autoImport ?? false;
       aiForm.reasoningEffort = ai.reasoningEffort ?? 'auto';
+      aiForm.reviewTextPdf = ai.reviewTextPdf ?? true;
       applyAiView(ai);
     }
   },
@@ -135,6 +137,7 @@ function aiPayload() {
     protocol: 'responses' as const,
     autoImport: aiForm.autoImport,
     reasoningEffort: aiForm.reasoningEffort,
+    reviewTextPdf: aiForm.reviewTextPdf,
     // 留空 = 保留已保存的 Key（服务端语义）
     ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
   };
@@ -294,6 +297,14 @@ async function testAi(): Promise<void> {
         >
           <Select v-model="aiForm.reasoningEffort" :options="reasoningOptions" size="sm" class="w-52" />
         </SettingRow>
+        <Switch
+          v-model="aiForm.reviewTextPdf"
+          label-position="left"
+          description="带文本层的 PDF 先按表格边框读出明细，再请模型拆分品名与规格、判断单位；数量与链接以文本层为准。每页会多一次模型调用。"
+          class="w-full justify-between px-5 py-3.5 [&_.text-meta]:text-[12.5px] [&_.text-meta]:text-muted"
+        >
+          <span class="text-[13.5px] font-medium text-ink">文本层 PDF 也请模型核对</span>
+        </Switch>
       </Disclosure>
 
       <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">

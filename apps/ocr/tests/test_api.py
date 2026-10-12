@@ -91,6 +91,25 @@ def test_parse_text_layer_pdf_returns_template_and_amount(client, auth_headers):
     assert body["warnings"] == []
 
 
+def test_text_mode_reads_text_layer_and_grid_without_rendering_or_ocr(client, auth_headers, monkeypatch):
+    from pdfgen import asset_request_pdf, make_pdf
+
+    async def no_ocr(*_):
+        raise AssertionError("mode=text 不应渲染或 OCR")
+    monkeypatch.setattr(pipeline, "ocr_pdf_page", no_ocr)
+    monkeypatch.setattr(pipeline, "run_ocr", no_ocr)
+    res = client.post("/parse?page=1&mode=text", files={"file": ("a.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers)
+    body = res.json()
+    assert res.status_code == 200 and body["templateType"] == "FIXED_ASSET"
+    assert [i["itemName"] for i in body["items"]] == ["办公椅"]
+    assert body["textLayer"].startswith("固定资产购买申请单\n申请单位部门 行政部（党委办公室）")
+    blank = client.post("/parse?page=1&mode=text", files={"file": ("b.pdf", make_pdf([[]]), "application/pdf")}, headers=auth_headers)
+    assert (blank.json()["textLayer"], blank.json()["items"]) == (False, [])
+    image = client.post("/parse?mode=text", files={"file": ("c.png", _image((10, 10), "PNG"), "image/png")}, headers=auth_headers)
+    assert (image.json()["textLayer"], image.json()["items"]) == (False, [])
+    assert client.post("/parse?mode=ocr", files={"file": ("a.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers).status_code == 422
+
+
 def _image(size, fmt, exif=None) -> bytes:
     from PIL import Image
     buf = io.BytesIO()

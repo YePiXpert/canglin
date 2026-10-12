@@ -13,10 +13,8 @@ import type { FastifyRequest } from 'fastify';
 import {
   aiAskSchema,
   aiConfigSchema,
-  aiOcrReviewSchema,
   type AiAskInput,
   type AiConfigInput,
-  type AiOcrReviewInput,
 } from '@canglin/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
@@ -155,12 +153,4 @@ export class AiController {
     return this.ai.ask(body, clientIp(req));
   }
 
-  @Post('ocr-review')
-  @HttpCode(200)
-  ocrReview(
-    @Body(new ZodValidationPipe(aiOcrReviewSchema)) body: AiOcrReviewInput,
-    @Req() req: FastifyRequest,
-  ) {
-    return this.ai.ocrReview(body, clientIp(req));
-  }
 }

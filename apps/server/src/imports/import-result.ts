@@ -47,7 +47,10 @@ export const aiPageSchema = z.object({
     .max(100),
   warnings: z.array(z.string()).max(20),
 });
-export type AiPage = z.infer<typeof aiPageSchema> & { page: number };
+export type AiPage = z.infer<typeof aiPageSchema> & { page: number; mode?: 'RECOGNITION' | 'REVIEW' };
+/** AI 返回的内容不符合本次调用的约定（如审核模式增删了物理行）：按契约错误处理，该页回退本地结果 */
+export class AiContractError extends Error {}
+const HEADER_FIELDS = ['serialNumber', 'department', 'handler', 'requestDate'] as const;
 
 /** 服务端校验 AI 单页结果（原地修改）：日期不合法置空、空品名的行丢弃、rawText 回填、数量×单价与金额不符提示 */
 export function checkAiPage(parsed: z.infer<typeof aiPageSchema>) {
@@ -116,6 +119,47 @@ export function mergePage(result: ParseResult, page: number, part: ParseResult) 
     : p);
 }
 const FIELD_LABELS = { serialNumber: '流水号', department: '申领部门', handler: '经办人', requestDate: '申请日期' } as const;
+
+/**
+ * 审核模式（原地修改）：AI 必须逐条返回文本层的物理行（lineId 集合一致，不增删、不合并），按文本层的顺序排列；
+ * 数量、单价、金额、链接与已有的单据头一律以文本层为准，模型读数不同只写提示。
+ */
+export function checkReview(page: number, parsed: z.infer<typeof aiPageSchema>, rows: ParseResult['items'], header: Partial<ParseResult>) {
+  const ids = rows.map((row) => row.lineId);
+  const got = parsed.items.map((item) => item.lineId);
+  if (got.length !== ids.length || new Set(got).size !== got.length || got.some((id) => !id || !ids.includes(id)))
+    throw new AiContractError('REVIEW_MISMATCH：AI 返回的行与文本层的物理行不一致');
+  const warnings: string[] = [];
+  parsed.items = rows.map((row, index) => {
+    const item = parsed.items.find((candidate) => candidate.lineId === row.lineId)!;
+    const label = `第 ${page} 页第 ${index + 1} 行`;
+    for (const [field, name] of [['quantity', '数量'], ['unitPrice', '单价'], ['amount', '金额']] as const)
+      if ((item[field] ?? null) !== (row[field] ?? null))
+        warnings.push(`AI 读到${label}${name}为 ${item[field] ?? '空白'}，已保留文本层的 ${row[field] ?? '空白'}`);
+    if ((item.purchaseLink ?? null) !== (row.purchaseLink ?? null))
+      warnings.push(`AI 读到的${label}链接与文本层不同，已保留文本层的链接`);
+    return { ...item, rawText: row.source?.rawText ?? item.rawText, quantity: row.quantity,
+      unitPrice: row.unitPrice ?? null, amount: row.amount ?? null, purchaseLink: row.purchaseLink ?? null };
+  });
+  for (const field of HEADER_FIELDS) {
+    const kept = header[field];
+    if (!kept) continue;
+    if (parsed[field] && parsed[field] !== kept)
+      warnings.push(`AI 读到的${FIELD_LABELS[field]}为「${parsed[field]}」，已保留文本层的「${kept}」`);
+    parsed[field] = kept;
+  }
+  parsed.warnings.push(...warnings);
+}
+
+/** 识别模式附带了文本层时（原地修改）：链接必须逐字出现在文本层里（去掉空白后比较），否则置空并提示，不猜测替换 */
+export function checkLinks(parsed: z.infer<typeof aiPageSchema>, textLayer: string) {
+  const flat = textLayer.replace(/\s+/g, '');
+  for (const item of parsed.items) {
+    if (!item.purchaseLink || flat.includes(item.purchaseLink.replace(/\s+/g, ''))) continue;
+    parsed.warnings.push(`「${item.itemName}」的链接不在本页文本层中，已置空，请对照原件`);
+    item.purchaseLink = null;
+  }
+}
 /** 收尾（原地修改）：明细按页码排序、警告去重，并按各页模式汇总整份结果的 mode */
 export function finishResult(result: ParseResult) {
   result.items.sort((a, b) => (a.source?.page ?? 0) - (b.source?.page ?? 0));
@@ -126,6 +170,6 @@ export function finishResult(result: ParseResult) {
   result.warnings = [...new Set(result.warnings)].filter((w) => !found.has(w));
   const modes = new Set(result.pages?.map((page) => page.mode));
   if (modes.size > 1) result.mode = 'PDF_MIXED';
-  else for (const mode of ['AI_IMAGE', 'IMAGE_OCR', 'PDF_TEXT', 'PDF_OCR'] as const)
+  else for (const mode of ['AI_IMAGE', 'AI_REVIEW', 'IMAGE_OCR', 'PDF_TEXT', 'PDF_OCR'] as const)
     if (modes.has(mode)) result.mode = mode;
 }

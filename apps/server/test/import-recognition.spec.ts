@@ -14,7 +14,7 @@ import { ImportsService } from '../src/imports/imports.service';
 import { OcrClient } from '../src/imports/ocr.client';
 import { config } from '../src/config';
 
-const ocr = { inspect: vi.fn(), parse: vi.fn(), page: vi.fn() };
+const ocr = { inspect: vi.fn(), parse: vi.fn(), page: vi.fn(), textLayer: vi.fn() };
 const llm = { chat: vi.fn() };
 let enabled = true;
 let cfg = { enabled: true, autoImport: true, baseUrl: 'https://example.com/v1', apiKey: 'fixture-key',
@@ -46,6 +46,7 @@ beforeEach(async () => {
   cfg = { ...cfg, monthlyBudget: null };
   ocr.inspect.mockReset().mockResolvedValue({ pageCount: 2 });
   ocr.page.mockReset().mockResolvedValue({ bytes: Buffer.from('rendered-page'), mime: 'image/jpeg' });
+  ocr.textLayer.mockReset().mockResolvedValue({ result: { mode: 'PDF_TEXT', items: [], warnings: [] }, textLayer: null });
   ocr.parse.mockReset().mockImplementation(async (_bytes: Buffer, _filename: string, page = 1) => ({
     mode: 'PDF_OCR', serialNumber: 'OA-LOCAL', department: '行政部', handler: '李四', requestDate: '2026-09-30',
     items: [{ lineId: `p${page}-r1`, itemName: `本地物品${page}`, quantity: 2, unit: '个',
@@ -69,6 +70,100 @@ async function settle(id: string) {
   }
   throw new Error('Recognition did not settle');
 }
+
+/** 文本层网格重建出的两行（第 1 页） */
+function gridPage() {
+  const source = (n: number, rawText: string) => ({ page: 1, method: 'PDF_TEXT', rawText, confidence: null, rotation: 0,
+    box: [[0.2, 0.2 + n / 10], [0.8, 0.2 + n / 10], [0.8, 0.25 + n / 10], [0.2, 0.25 + n / 10]] });
+  return {
+    result: {
+      mode: 'PDF_TEXT' as const, parserVersion: '4', templateType: 'OFFICE_SUPPLY' as const, serialNumber: '2026090101',
+      department: '行政管理部（党委办公室）', handler: '十一层前台', requestDate: '2026-09-01',
+      items: [
+        { lineId: 'p1-r1', itemName: 'A4打印纸(规格：80g)--（5包/箱）', quantity: 10, purchaseLink: 'https://www.cemall.com.cn/goods/1',
+          source: source(1, 'A4打印纸(规格：80g)--（5包/箱）') },
+        { lineId: 'p1-r2', itemName: '光盘', quantity: 50, unit: '张', note: '50张', source: source(2, '光盘') },
+      ],
+      warnings: [], pages: [{ page: 1, status: 'DONE' as const, mode: 'PDF_TEXT' }],
+    },
+    textLayer: '办公用品领用单\n流水号： 2026090101\n1 A4打印纸(规格：80g)--（5包/箱） 10.0 https://www.cemall.com.cn/goods/1',
+  };
+}
+function reviewed(overrides: Record<string, unknown>[] = []) {
+  const items = [
+    { lineId: 'p1-r1', rawText: 'A4打印纸(规格：80g)--（5包/箱）', itemName: 'A4打印纸', spec: '80g；5包/箱', quantity: 10, unit: null,
+      unitPrice: null, amount: null, purchaseLink: 'https://www.cemall.com.cn/goods/1' },
+    { lineId: 'p1-r2', rawText: '光盘', itemName: '光盘', spec: null, quantity: 50, unit: '张', unitPrice: null, amount: null, purchaseLink: null },
+  ].map((item, i) => ({ ...item, ...overrides[i] }));
+  return { content: JSON.stringify({ templateType: 'OFFICE_SUPPLY', serialNumber: '2026090101', department: '行政管理部（党委办公室）',
+    handler: '十一层前台', requestDate: '2026-09-01', items, warnings: [] }), usage: { input: 20, output: 30 } };
+}
+
+describe('AI review of text-layer PDF pages', () => {
+  beforeEach(() => {
+    ocr.inspect.mockResolvedValue({ pageCount: 1 });
+    ocr.textLayer.mockResolvedValue(gridPage());
+  });
+
+  it('keeps the text-layer rows and numbers while the model splits names and specs', async () => {
+    llm.chat.mockResolvedValueOnce(reviewed([{ quantity: 9, purchaseLink: 'https://www.cemall.com.cn/goods/2' }]));
+    const task = await settle(await upload('office.pdf'));
+    const sent = llm.chat.mock.calls[0][0];
+    expect(sent.messages[0].content).toContain('你是采购申请单据的审核器');
+    const message = JSON.parse(sent.messages[1].content);
+    expect(message.header).toEqual({ serialNumber: '2026090101', department: '行政管理部（党委办公室）', handler: '十一层前台', requestDate: '2026-09-01' });
+    expect(message.rows.map((row: { lineId: string; note: string | null }) => [row.lineId, row.note])).toEqual([['p1-r1', null], ['p1-r2', '50张']]);
+    expect(ocr.parse).not.toHaveBeenCalled();
+    expect(task.result).toMatchObject({ mode: 'AI_REVIEW', templateType: 'OFFICE_SUPPLY' });
+    expect(task.draft?.items.map((i) => [i.lineId, i.itemName, i.spec, i.quantity, i.purchaseLink])).toEqual([
+      ['p1-r1', 'A4打印纸', '80g；5包/箱', 10, 'https://www.cemall.com.cn/goods/1'],
+      ['p1-r2', '光盘', null, 50, null],
+    ]);
+    expect(task.result?.items[0].source).toMatchObject({ method: 'AI', rawText: 'A4打印纸(规格：80g)--（5包/箱）', box: gridPage().result.items[0].source.box });
+    expect(task.aiResult[0]).toMatchObject({ mode: 'REVIEW' });
+    expect(task.aiResult[0].warnings).toEqual([
+      'AI 读到第 1 页第 1 行数量为 9，已保留文本层的 10',
+      'AI 读到的第 1 页第 1 行链接与文本层不同，已保留文本层的链接',
+    ]);
+    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v1' });
+  });
+
+  it('treats added or dropped rows as a contract error and keeps the text-layer rows', async () => {
+    const extra = JSON.parse(reviewed().content);
+    extra.items.push({ ...extra.items[1], lineId: null, itemName: '凭空多出的行' });
+    llm.chat.mockResolvedValueOnce({ ...reviewed(), content: JSON.stringify(extra) });
+    const task = await settle(await upload('office.pdf'));
+    expect(task.calls[0]).toMatchObject({ status: 'FAILED', mode: 'REVIEW', error: 'REVIEW_MISMATCH：AI 返回的行与文本层的物理行不一致' });
+    expect(ocr.parse).not.toHaveBeenCalled();
+    expect(task.draft?.items.map((i) => i.itemName)).toEqual(['A4打印纸(规格：80g)--（5包/箱）', '光盘']);
+    expect(task.result?.warnings).toContain('第 1 页 AI 未完成，已使用文本层重建的明细，请核对原件');
+  });
+
+  it('keeps the text-layer draft without rendering when the budget blocks the call', async () => {
+    cfg.monthlyBudget = 0;
+    const task = await settle(await upload('office.pdf'));
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(ocr.parse).not.toHaveBeenCalled();
+    expect(task.calls[0]).toMatchObject({ status: 'NOT_SENT', mode: 'REVIEW' });
+    expect(task.draft?.items.map((i) => i.quantity)).toEqual([10, 50]);
+  });
+
+  it('switching review off sends text-layer pages to recognition with the text attached', async () => {
+    cfg = { ...cfg, reviewTextPdf: false } as typeof cfg;
+    const recognized = JSON.parse(response().content);
+    recognized.items[0].purchaseLink = 'https://www.cemall.com.cn/goods/999';
+    llm.chat.mockResolvedValueOnce({ ...response(), content: JSON.stringify(recognized) });
+    const task = await settle(await upload('office.pdf'));
+    const sent = llm.chat.mock.calls[0][0];
+    expect(sent.messages[0].content).toContain('你是采购申请单据的识别器');
+    const message = JSON.parse(sent.messages[1].content);
+    expect(message).toMatchObject({ page: 1, pageCount: 1, templateHint: 'OFFICE_SUPPLY', textLayer: gridPage().textLayer });
+    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v2' });
+    expect(task.result?.items[0].purchaseLink).toBeNull();
+    expect(task.aiResult[0].warnings).toContain('「原件物品1」的链接不在本页文本层中，已置空，请对照原件');
+    cfg = { ...cfg, reviewTextPdf: undefined } as typeof cfg;
+  });
+});
 
 describe('AI primary original recognition', () => {
   it('populates a draft from the preprocessed image without local parsing or items', async () => {

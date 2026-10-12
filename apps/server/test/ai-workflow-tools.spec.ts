@@ -60,6 +60,11 @@ describe('新业务 AI 只读查询', () => {
     expect(prompt).toContain('缺失价格表示未知');
     expect(prompt).toContain('不能相加');
     expect(prompt).toContain('不能新增、修改、撤销');
+    expect(prompt).toContain('相对日期');
+    expect(prompt).toContain('最多 6 轮');
+    expect(prompt).toContain('先列出候选');
+    const documents = tools.definitions().find((tool) => tool.function.name === 'query_documents')!;
+    expect(JSON.stringify(documents.function.parameters)).toContain('默认 10');
   });
 
   it('申请查询保留同名物理行和单位身份，传递待办筛选并返回申请来源链接', async () => {

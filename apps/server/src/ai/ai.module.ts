@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { SuppliersModule } from '../suppliers/suppliers.module';
 import { WorkflowModule } from '../workflow/workflow.module';
-import { ImportsModule } from '../imports/imports.module';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { AiToolsService } from './ai-tools';
 
 @Module({
-  imports: [SuppliersModule, ImportsModule, WorkflowModule],
+  imports: [SuppliersModule, WorkflowModule],
   controllers: [AiController],
   providers: [AiService, AiToolsService],
 })
