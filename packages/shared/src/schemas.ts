@@ -148,6 +148,12 @@ export type AutoBackupConfig = z.infer<typeof autoBackupConfigSchema>;
 
 /* ----------------------------------- AI ----------------------------------- */
 
+export const AI_MODELS = [
+  { id: 'gemini-3.8-flash-high', label: 'gemini-3.8-flash-high' },
+  { id: 'gpt-6.1-sol', label: 'gpt-6.1-sol（中等思考）' },
+  { id: 'grok-4.7', label: 'grok-4.7' },
+] as const;
+
 /** OpenAI 兼容 LLM 服务配置（存 Setting 表，设置页可随时改） */
 export const aiConfigSchema = z.object({
   enabled: z.boolean(),
@@ -155,7 +161,8 @@ export const aiConfigSchema = z.object({
   baseUrl: z.string().trim().url('接口地址应为合法 URL').max(200),
   /** 留空 = 保留已保存的 Key */
   apiKey: z.string().trim().max(200).optional(),
-  model: z.string().trim().min(1, '模型名不能为空').max(100),
+  model: z.string().trim().min(1, '模型名不能为空').max(100)
+    .refine((id) => AI_MODELS.some((m) => m.id === id), '请选择 Gemini Flash High、GPT 6.1 Sol 或 Grok 4.7'),
   /** 申请单、单据与库存按品名搜索时启用 AI 同义词扩展（关闭则退回普通关键字匹配） */
   semanticSearch: z.boolean(),
   protocol: z.literal('responses').optional(),

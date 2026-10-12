@@ -130,6 +130,7 @@ export const importsApi = {
   retry: (id: string, stage: 'local' | 'ai', pages?: number[]) =>
     http.post(`/imports/tasks/${id}/retry`, { stage, pages }),
   cancel: (id: string) => http.post(`/imports/tasks/${id}/cancel`),
+  discard: (id: string, version: number) => mutation<{ ok: true }>(`/imports/tasks/${id}/discard`, { version }),
   confirmRequest: (body: WorkflowImportConfirmInput) =>
     mutation<{ requestId: number; created: number; merged: number; skipped: number; attached: number }>('/workflow/imports/confirm', body),
 };

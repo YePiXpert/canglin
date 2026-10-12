@@ -6,7 +6,7 @@ const imageFile = (marker: string) => Buffer.concat([Buffer.from(capabilityImage
 /** 合成原件上的申请日期；后续采购、到货、发放都用同一天 */
 const businessDate = '2026-09-27';
 
-test('服务器已配置密钥时可直接选择模型，列表故障保留手工入口', async ({ page, request }) => {
+test('服务器已配置密钥时可直接选择三个模型，列表故障仍可选择', async ({ page, request }) => {
   const password = 'browser-test-password';
   await request.post('/api/auth/setup', { data: { password } });
   await page.goto('/login');
@@ -18,7 +18,7 @@ test('服务器已配置密钥时可直接选择模型，列表故障保留手�
       enabled: false,
       baseUrl: 'https://example.invalid/v1',
       apiKey: 'synthetic',
-      model: 'saved-gpt',
+      model: 'gemini-3.8-flash-high',
       semanticSearch: false,
       autoImport: false,
     },
@@ -40,17 +40,49 @@ test('服务器已配置密钥时可直接选择模型，列表故障保留手�
   await page.getByText('服务已配置 · 修改连接', { exact: true }).click();
   await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0);
   const model = page.getByRole('combobox', { name: '模型', exact: true });
-  await expect(model).toContainText('saved-gpt（当前配置）');
+  await expect(model).toContainText('gemini-3.8-flash-high');
   await model.click();
-  await page.getByRole('option', { name: 'listed-gpt', exact: true }).click();
-  await expect(model).toContainText('listed-gpt');
-  // Retrieval failure must keep the selected value and manual editing usable.
+  await expect(page.getByRole('option')).toHaveCount(3);
+  await page.getByRole('option', { name: 'gpt-6.1-sol（中等思考）', exact: true }).click();
+  await expect(model).toContainText('gpt-6.1-sol（中等思考）');
+  await expect(page.getByRole('button', { name: '手动填写', exact: true })).toHaveCount(0);
+  // Retrieval failure must keep the three configured choices usable.
   await page.route('**/api/ai/models', (route) =>
     route.fulfill({ status: 503, json: { message: '无法获取模型列表' } }),
   );
   await page.getByRole('button', { name: '获取模型列表', exact: true }).click();
   await expect(page.getByText('无法获取模型列表', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('模型', { exact: true })).toHaveValue('listed-gpt');
+  await expect(model).toContainText('gpt-6.1-sol（中等思考）');
+});
+
+test('放弃草稿会删除原件并退出任务，保存失败也可以主动放弃', async ({ page, request }) => {
+  const password = 'browser-test-password';
+  await request.post('/api/auth/setup', { data: { password } });
+  await page.goto('/login');
+  await page.locator('input[type=password]').fill(password);
+  await page.getByRole('button', { name: /^登\s*录$/ }).click();
+  await expect(page).toHaveURL(/workbench/);
+  await page.request.put('/api/ai/config', { data: { enabled: false, baseUrl: 'https://example.invalid/v1', model: 'gemini-3.8-flash-high', semanticSearch: false, autoImport: false } });
+  await page.goto('/import');
+  await page.locator('input[type=file]').setInputFiles({ name: 'discard-draft.png', mimeType: 'image/png', buffer: imageFile('discard-draft') });
+  await expect(page).toHaveURL(/task=/);
+  const id = new URL(page.url()).searchParams.get('task')!;
+  await expect.poll(async () => (await (await page.request.get(`/api/imports/tasks/${id}`)).json()).status).toBe('DONE');
+  await expect(page.getByRole('button', { name: '放弃草稿', exact: true })).toBeVisible();
+  await page.route(`**/api/imports/tasks/${id}/draft`, (route) => route.fulfill({ status: 503, json: { message: '合成保存失败' } }));
+  await page.getByRole('textbox', { name: '申领部门', exact: true }).fill('未保存的修改');
+  await expect(page.getByText(/草稿保存失败/)).toBeVisible();
+  await page.getByRole('button', { name: '放弃草稿', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '放弃草稿？' });
+  await expect(dialog).toContainText('discard-draft.png');
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  expect((await page.request.get(`/api/imports/tasks/${id}`)).status()).toBe(200);
+  await page.getByRole('button', { name: '放弃草稿', exact: true }).click();
+  await dialog.getByRole('button', { name: '放弃草稿', exact: true }).click();
+  await expect(page).toHaveURL(/\/import$/);
+  expect((await page.request.get(`/api/imports/tasks/${id}`)).status()).toBe(404);
+  expect((await page.request.get(`/api/imports/tasks/${id}/original`)).status()).toBe(404);
+  await expect(page.getByText('discard-draft.png', { exact: true })).toHaveCount(0);
 });
 
 for (const scenario of ['local', 'gpt', 'timeout']) {
@@ -69,8 +101,8 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     const cfg = {
       enabled: ai,
       apiKey: 'synthetic',
-      baseUrl: 'https://example.invalid/v1',
-      model: timeout ? 'synthetic-timeout' : 'synthetic',
+      baseUrl: timeout ? 'https://example.invalid/timeout/v1' : 'https://example.invalid/v1',
+      model: 'gemini-3.8-flash-high',
       semanticSearch: false,
       autoImport: false,
     };
@@ -197,7 +229,7 @@ async function loginWithoutAi(page: Page, request: APIRequestContext) {
     enabled: false,
     apiKey: 'synthetic',
     baseUrl: 'https://example.invalid/v1',
-    model: 'synthetic',
+    model: 'gemini-3.8-flash-high',
     semanticSearch: false,
     autoImport: false,
   };

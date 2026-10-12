@@ -109,4 +109,13 @@ export class ImportsController {
   cancel(@Param('id') id: string) {
     return this.imports.cancel(id);
   }
+
+  @Post('tasks/:id/discard')
+  discard(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(z.object({ version: z.number().int().nonnegative() }))) body: { version: number },
+    @Req() req: FastifyRequest,
+  ) {
+    return this.imports.discard(id, body.version, clientIp(req));
+  }
 }

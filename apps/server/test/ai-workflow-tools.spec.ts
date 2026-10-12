@@ -133,7 +133,7 @@ describe('新业务 AI 只读查询', () => {
   it('完整问答工具循环读取新申请，工具来源和模型声明一起传递', async () => {
     const headers = { cookie: ctx.cookie, 'idempotency-key': randomUUID() };
     const configured = await ctx.inject({ method: 'PUT', url: '/api/ai/config', headers, payload: {
-      enabled: true, apiKey: 'synthetic-secret', baseUrl: 'https://llm.invalid/v1', model: 'synthetic-model', semanticSearch: false,
+      enabled: true, apiKey: 'synthetic-secret', baseUrl: 'https://llm.invalid/v1', model: 'gemini-3.8-flash-high', semanticSearch: false,
     } });
     expect(configured.statusCode).toBe(200);
     llm.chat.mockImplementation(async (options: ChatCallOptions) => {

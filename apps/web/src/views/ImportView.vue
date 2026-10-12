@@ -2,6 +2,7 @@
 import { provide } from 'vue';
 import { useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import Icon from '@/components/ui/Icon.vue';
 import ImportDraftEditor from '@/components/import/ImportDraftEditor.vue';
 import ImportHistoryPanel from '@/components/import/ImportHistoryPanel.vue';
@@ -29,6 +30,7 @@ const router = useRouter();
 // rootEl、taskList 要绑定模板里的 ref="rootEl" / ref="taskList"，所以解构成顶层绑定
 const { task, taskId, busy, error, saveError, loaded, finished, missing, mobileTab, rootEl, taskList } = ctx;
 const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
+const { discardOpen, discarding, discard } = ctx;
 </script>
 
 <template>
@@ -115,6 +117,7 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
           </Notice>
           <Notice v-if="error" variant="inline" role="alert">{{ error }}</Notice>
         </template>
+        <Button v-if="!task.confirmed" variant="danger-ghost" class="max-sm:basis-full" :disabled="busy || discarding" @click="discardOpen = true">放弃草稿</Button>
         <Button
           variant="secondary"
           class="max-sm:flex-1"
@@ -156,5 +159,10 @@ const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
       <ImportUploadSection />
       <ImportTaskList ref="taskList" :current-task-id="taskId" :current-task="task" @current="scrollToTask" />
     </div>
+    <ConfirmDialog v-model:open="discardOpen" title="放弃草稿？"
+      :message="`将删除「${task?.filename ?? ''}」的草稿和原件，并停止识别。不会创建申请；需要时可重新上传原件。`"
+      confirm-text="放弃草稿" danger :loading="discarding" @confirm="discard">
+      <Notice v-if="error" tone="red" role="alert">{{ error }}</Notice>
+    </ConfirmDialog>
   </div>
 </template>

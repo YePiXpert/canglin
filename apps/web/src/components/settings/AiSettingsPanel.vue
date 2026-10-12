@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import ModelSelect from '@/components/ai/ModelSelect.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Disclosure from '@/components/ui/Disclosure.vue';
@@ -16,6 +15,7 @@ import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
 import type { AiConfigView, ReasoningSetting } from '@canglin/shared';
+import { AI_MODELS } from '@canglin/shared';
 
 const props = defineProps<{
   /** 设置页 load() 读到的配置（读取失败为 null）；每次 load 都是新对象，非空时覆盖表单 */
@@ -67,7 +67,10 @@ let aiConfigRevision = 0;
 const aiConnectionDirty = computed(
   () => aiForm.baseUrl.trim() !== aiSavedBaseUrl.value || !!aiForm.apiKey.trim(),
 );
-const availableModels = computed(() => (aiConnectionDirty.value ? [] : aiModels.value));
+const modelOptions = AI_MODELS.map((m) => ({ value: m.id, label: m.label }));
+watch(() => aiForm.model, (model) => {
+  if (model === 'gpt-6.1-sol') aiForm.reasoningEffort = 'medium';
+});
 
 function applyAiView(view: AiConfigView): void {
   aiKeySet.value = view.apiKeySet;
@@ -92,7 +95,7 @@ async function loadAiModels(): Promise<void> {
     const result = await aiApi.models();
     if (revision !== aiConfigRevision) return;
     aiModels.value = result.models;
-    if (!result.models.length) aiModelsError.value = '服务商没有返回模型，可手动填写模型名。';
+    if (!result.models.length) aiModelsError.value = '服务商没有返回所选的三个模型，请检查接口配置。';
   } catch (e) {
     if (revision === aiConfigRevision) {
       aiModels.value = [];
@@ -235,11 +238,11 @@ async function testAi(): Promise<void> {
 
       <div class="space-y-2 px-5 py-4">
         <div class="flex items-start gap-3">
-          <ModelSelect
+          <Select
             class="flex-1 min-w-0"
             v-model="aiForm.model"
             label="模型"
-            :models="availableModels"
+            :options="modelOptions"
             :error="aiErrors.model"
           />
           <Button
@@ -295,7 +298,7 @@ async function testAi(): Promise<void> {
           description="识别与问答请求附带的推理强度；服务不接受时会自动去掉该参数重发，之后不再发送。「不发送」时也不带温度。"
           class="pt-0"
         >
-          <Select v-model="aiForm.reasoningEffort" :options="reasoningOptions" size="sm" class="w-52" />
+          <Select v-model="aiForm.reasoningEffort" :options="reasoningOptions" :disabled="aiForm.model === 'gpt-6.1-sol'" size="sm" class="w-52" />
         </SettingRow>
         <Switch
           v-model="aiForm.reviewTextPdf"

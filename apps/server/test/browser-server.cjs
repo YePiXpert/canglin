@@ -86,7 +86,7 @@ const llm = {
     if (last.role === 'tool') return { content: 'CAPABILITY_OK', toolCalls: [] };
     if (last.content.includes('RED_BLUE')) return { content: 'RED_BLUE', toolCalls: [] };
     if (last.content.includes('Return value 7')) return { content: '{"value":7}', toolCalls: [] };
-    if (opts.model === 'synthetic-timeout')
+    if (opts.baseUrl.includes('/timeout/'))
       throw new AiResponseError('合成超时，结果未知', 'UNKNOWN');
     const { existingRows = [], local = existingRows } = JSON.parse(last.content);
     // The original-image provider fixture works independently of local OCR output.

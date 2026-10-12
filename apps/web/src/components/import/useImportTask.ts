@@ -55,6 +55,7 @@ export function useImportTask() {
     disposed = false;
   /** 草稿已从任务载入：载入前的改动不算编辑、不自动保存，明细区显示骨架；模板与子组件也要读，所以是 ref */
   const loaded = ref(false);
+  const discardOpen = ref(false), discarding = ref(false);
   const active = computed(
     () =>
       task.value &&
@@ -109,6 +110,7 @@ export function useImportTask() {
   }
   /** 离开本页、或在本页切换任务（地址里的 task 变了）之前先保存；保存不了就拦下，并说明原因 */
   async function guardUnsaved() {
+    if (discarding.value) return false;
     await persist();
     if (saved.value || !loaded.value) return true;
     if (!saveError.value) error.value = '草稿尚未保存，请先保存或重试保存';
@@ -195,6 +197,7 @@ export function useImportTask() {
     };
   }
   function changed() {
+    if (discarding.value) return;
     if (hydrating || !loaded.value || finished.value || task.value?.confirmed) return;
     revision++;
     saved.value = false;
@@ -320,6 +323,33 @@ export function useImportTask() {
       error.value = apiError(e);
     }
   }
+  async function discard() {
+    const id = taskId.value;
+    if (!task.value || task.value.confirmed || discarding.value) return;
+    discarding.value = true;
+    clearTimeout(saveTimer);
+    try {
+      await saveChain;
+      if (stale(id) || !task.value) return;
+      await importsApi.discard(id, task.value.version);
+      if (stale(id)) return;
+      clearTimeout(timer);
+      loaded.value = false;
+      saved.value = true;
+      saveError.value = '';
+      task.value = null;
+      discardOpen.value = false;
+      discarding.value = false;
+      const query = { ...route.query };
+      delete query.task;
+      await router.replace({ query });
+      await taskList.value?.refresh();
+    } catch (e) {
+      if (!stale(id)) error.value = apiError(e);
+    } finally {
+      discarding.value = false;
+    }
+  }
   async function retry(stage: 'local' | 'ai', pages?: number[]) {
     const id = taskId.value;
     await persist();
@@ -436,6 +466,7 @@ export function useImportTask() {
       clearTimeout(timer);
       clearTimeout(saveTimer);
       loaded.value = false; // 先关掉自动保存：下面清空表单不算编辑
+      discardOpen.value = false;
       hydrating = false;
       revision = 0;
       taskId.value = typeof value === 'string' ? value : '';
@@ -473,11 +504,13 @@ export function useImportTask() {
   return {
     // 状态；rootEl、taskList 由 ImportView 绑定为模板 ref
     task, taskId, busy, error, saveError, saved, loaded, form, reviewedAi, lines, reviewedPages, page, selected,
+    discardOpen, discarding,
     finished, duplicateFile, duplicateTaskId, missing, previewFailed, mobileTab, rootEl, taskList, revisions,
     // 派生值与常量
     active, box, pageCount, issuePages, suggestions, localState, aiState, fields, labels, stateDot, stackedLabel,
     // 动作
     loadHistory, reloadDraft, revisionRows, needsReview, line, persist, upload, uploadFile, openDuplicate, cancel,
+    discard,
     retry, focusLine, suggestion, acknowledge, apply, catalogMatch, applyCatalog, addSuggestion, localValue, applyLocal,
     reviewed, confirm,
     scrollToTask,

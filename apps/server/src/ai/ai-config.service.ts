@@ -57,6 +57,7 @@ export class AiConfigService {
     for (const key of ['importModel', 'askModel', 'searchModel'])
       Reflect.deleteProperty(result, key);
     if (config.llmDefaults.apiKey) result.apiKey = config.llmDefaults.apiKey;
+    if (result.model === 'gpt-6.1-sol') result.reasoningEffort = 'medium';
     return result;
   }
   fingerprint(cfg: StoredAiConfig) {
@@ -124,6 +125,8 @@ export class AiConfigService {
       ...input,
       protocol: 'responses',
       apiKey: config.llmDefaults.apiKey || input.apiKey || current.apiKey,
+      reasoningEffort: input.model === 'gpt-6.1-sol' ? 'medium'
+        : input.reasoningEffort ?? (input.model === current.model ? current.reasoningEffort : 'auto'),
     };
     if (stored.enabled && !stored.apiKey) throw new BadRequestException('请先配置 API Key');
     if (stored.enabled && stored.autoImport) {

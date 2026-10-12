@@ -28,7 +28,7 @@ class FakeLlm {
   modelCalls: { baseUrl: string; apiKey: string }[] = [];
   async listModels(baseUrl: string, apiKey: string): Promise<string[]> {
     this.modelCalls.push({ baseUrl, apiKey });
-    return ['synthetic-gpt'];
+    return ['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7', 'other-model'];
   }
 
   async ping(): Promise<boolean> {
@@ -69,6 +69,20 @@ async function seedRequest(itemName: string, quantity = '10'): Promise<void> {
 }
 
 describe('AI 配置', () => {
+  it('只接受三个模型，GPT 保存和恢复加载均使用中等思考', async () => {
+    const service = ctx.app.get(AiConfigService);
+    const current = await service.getConfig();
+    const input = { enabled: false, baseUrl: current.baseUrl, model: 'gpt-6.1-sol', semanticSearch: true, reasoningEffort: 'high' };
+    const rejected = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...input, model: 'arbitrary-model' } }) });
+    expect(rejected.statusCode).toBe(400);
+    const saved = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: input }) });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'medium' });
+    await ctx.app.get(PrismaService).setting.update({ where: { key: 'aiConfig' }, data: { value: JSON.stringify({ ...await service.getConfig(), reasoningEffort: 'high' }) } });
+    expect((await service.getConfig()).reasoningEffort).toBe('medium');
+    await service.updateConfig({ ...current, model: 'gemini-3.8-flash-high', reasoningEffort: 'auto' });
+  });
+
   it('默认未启用且不回传 Key', async () => {
     const res = await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() });
     expect(res.statusCode).toBe(200);
@@ -99,7 +113,7 @@ describe('AI 配置', () => {
       });
       expect(current.body).not.toContain('server-only-secret');
       const models = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
-      expect(models.json()).toEqual({ models: ['synthetic-gpt'] });
+      expect(models.json()).toEqual({ models: ['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7'] });
       expect(fake.modelCalls.at(-1)?.apiKey).toBe('server-only-secret');
       const save = await ctx.inject({
         method: 'PUT',
@@ -108,7 +122,7 @@ describe('AI 配置', () => {
           payload: {
             enabled: false,
             baseUrl: config.llmDefaults.baseUrl,
-            model: 'synthetic-gpt',
+            model: 'gemini-3.8-flash-high',
             semanticSearch: true,
           },
         }),
@@ -148,7 +162,7 @@ describe('AI 配置', () => {
         payload: {
           enabled: true,
           baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-          model: 'glm-4.6',
+          model: 'gemini-3.8-flash-high',
           semanticSearch: true,
         },
       }),
@@ -164,14 +178,14 @@ describe('AI 配置', () => {
         payload: {
           enabled: true,
           baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-          model: 'glm-4.6',
+          model: 'gemini-3.8-flash-high',
           semanticSearch: true,
           apiKey: 'sk-test-123',
         },
       }),
     });
     expect(put.statusCode).toBe(200);
-    expect(put.json()).toMatchObject({ enabled: true, apiKeySet: true, model: 'glm-4.6' });
+    expect(put.json()).toMatchObject({ enabled: true, apiKeySet: true, model: 'gemini-3.8-flash-high' });
 
     // 改模型不填 Key
     const put2 = await ctx.inject({
@@ -181,14 +195,14 @@ describe('AI 配置', () => {
         payload: {
           enabled: true,
           baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-          model: 'glm-4.7',
+          model: 'grok-4.7',
           semanticSearch: false,
           apiKey: '',
         },
       }),
     });
     expect(put2.statusCode).toBe(200);
-    expect(put2.json()).toMatchObject({ apiKeySet: true, model: 'glm-4.7', semanticSearch: false });
+    expect(put2.json()).toMatchObject({ apiKeySet: true, model: 'grok-4.7', semanticSearch: false });
 
     // 恢复 semanticSearch，后续用例要用
     await ctx.inject({
@@ -198,7 +212,7 @@ describe('AI 配置', () => {
         payload: {
           enabled: true,
           baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-          model: 'glm-4.6',
+          model: 'gemini-3.8-flash-high',
           semanticSearch: true,
         },
       }),
@@ -270,7 +284,7 @@ describe('AI 问答', () => {
     expect(body.answer).toBe('共 1 条签字笔记录。');
     expect(body.steps).toHaveLength(1);
     expect(body.steps[0]).toMatchObject({ name: 'query_requests', count: 1 });
-    expect(body.model).toBe('glm-4.6');
+    expect(body.model).toBe('gemini-3.8-flash-high');
 
     // 第二轮请求里应带有工具结果消息
     const second = fake.calls.find((c) => c.messages.some((m) => m.role === 'tool'));
@@ -404,7 +418,7 @@ describe('AI 语义搜索', () => {
       method: 'PUT',
       url: '/api/ai/config',
       ...auth({
-        payload: { enabled: true, baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', semanticSearch: enabled },
+        payload: { enabled: true, baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'gemini-3.8-flash-high', semanticSearch: enabled },
       }),
     });
 

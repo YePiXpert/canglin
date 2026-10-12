@@ -121,6 +121,59 @@ async function completeDraft(id: string) {
 }
 
 describe('import task list', () => {
+  it('discards an unconfirmed draft, its original and revisions, while retaining billable AI calls', async () => {
+    const id = await seedTask();
+    const { body } = await completeDraft(id);
+    const storagePath = (await prisma.importTask.findUniqueOrThrow({ where: { id } })).storagePath!;
+    const callId = randomUUID();
+    await prisma.aiCall.create({ data: { id: callId, taskId: id, model: 'gemini-3.8-flash-high', status: 'DONE', cost: 1.25 } });
+    expect((await ctx.inject({ method: 'POST', url: `/api/imports/tasks/${id}/discard`, payload: { version: body.version } })).statusCode).toBe(401);
+    expect((await post(`/api/imports/tasks/${id}/discard`, { version: 0 })).statusCode).toBe(409);
+    expect(fs.existsSync(path.join(config.uploadsDir, storagePath))).toBe(true);
+    expect((await post(`/api/imports/tasks/${id}/discard`, { version: body.version })).statusCode).toBe(201);
+    expect((await allIds(false)).ids).not.toContain(id);
+    expect((await get(`/api/imports/tasks/${id}`)).statusCode).toBe(404);
+    expect((await get(`/api/imports/tasks/${id}/original`)).statusCode).toBe(404);
+    expect(await prisma.importRevision.count({ where: { taskId: id } })).toBe(0);
+    expect(fs.existsSync(path.join(config.uploadsDir, storagePath))).toBe(false);
+    expect((await prisma.aiCall.findUniqueOrThrow({ where: { id: callId } })).cost).toBe(1.25);
+    expect((await post(`/api/imports/tasks/${id}/discard`, { version: body.version })).statusCode).toBe(201);
+    const buffer = Buffer.from(`original-${id}`);
+    const replacement = await imports.upload({ buffer, filename: 'replacement.png', size: buffer.length });
+    expect(replacement.taskId).toBeTruthy();
+    expect(replacement.duplicateTaskId).toBeUndefined();
+    await settle(replacement.taskId!);
+  });
+
+  it('cannot discard a confirmed task or an original referenced by an attachment', async () => {
+    const id = await seedTask();
+    const { body } = await completeDraft(id);
+    expect((await post('/api/workflow/imports/confirm', body)).statusCode).toBe(201);
+    expect((await post(`/api/imports/tasks/${id}/discard`, { version: body.version })).statusCode).toBe(409);
+    expect((await imports.task(id)).confirmed).toBe(true);
+    const pending = await seedTask();
+    const row = await prisma.importTask.findUniqueOrThrow({ where: { id: pending } });
+    await prisma.attachment.create({ data: { kind: 'ORIGINAL', filename: row.filename, storagePath: row.storagePath!, mimeType: 'image/png', sizeBytes: 1 } });
+    expect((await post(`/api/imports/tasks/${pending}/discard`, { version: row.version })).statusCode).toBe(409);
+    expect(fs.existsSync(path.join(config.uploadsDir, row.storagePath!))).toBe(true);
+  });
+
+  it('a late recognition result cannot recreate a discarded task', async () => {
+    const id = await seedTask();
+    let release!: (result: typeof local) => void;
+    const held = new Promise<typeof local>((resolve) => { release = resolve; });
+    ocr.parse.mockImplementationOnce(() => held);
+    const before = ocr.parse.mock.calls.length;
+    await imports.retry(id, 'local', [1]);
+    try {
+      await expect.poll(() => ocr.parse.mock.calls.length).toBeGreaterThan(before);
+      expect((await post(`/api/imports/tasks/${id}/discard`, { version: 0 })).statusCode).toBe(201);
+    } finally { release(local); }
+    await settle((await imports.upload({ buffer: Buffer.from(`after-${id}`), filename: 'after.png', size: 1 })).taskId!);
+    expect(await prisma.importTask.findUnique({ where: { id } })).toBeNull();
+    expect(await prisma.importRevision.count({ where: { taskId: id } })).toBe(0);
+  });
+
   it('requires a session', async () => {
     expect((await ctx.inject({ method: 'GET', url: '/api/imports/tasks' })).statusCode).toBe(401);
   });

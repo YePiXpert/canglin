@@ -13,6 +13,7 @@ import type { FastifyRequest } from 'fastify';
 import {
   aiAskSchema,
   aiConfigSchema,
+  AI_MODELS,
   type AiAskInput,
   type AiConfigInput,
 } from '@canglin/shared';
@@ -56,7 +57,8 @@ export class AiController {
   async models() {
     const cfg = await this.aiConfig.getConfig();
     if (!cfg.apiKey) throw new BadRequestException('请先配置服务密钥，再获取模型列表');
-    return { models: await this.llm.listModels(cfg.baseUrl, cfg.apiKey) };
+    const available = await this.llm.listModels(cfg.baseUrl, cfg.apiKey);
+    return { models: AI_MODELS.map((m) => m.id).filter((id) => available.includes(id)) };
   }
 
   @Post('capabilities')

@@ -171,7 +171,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
             </span>
             <p class="mt-4 text-sm font-semibold text-ink">AI 助手尚未启用</p>
             <p class="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted">
-              配置一个 OpenAI 兼容的大模型接口（默认 DeepSeek，也支持智谱 GLM 等）后，即可用自然语言查询申请、采购与领用单据和库存。
+              在系统设置选择 Gemini、GPT 或 Grok 并配置接口后，即可用自然语言查询申请、采购与领用单据和库存。
             </p>
             <router-link
               to="/settings#ai"

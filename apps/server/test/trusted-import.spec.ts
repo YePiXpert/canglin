@@ -212,7 +212,7 @@ describe('trusted import', () => {
     const cfg = await cfgService.updateConfig({
       enabled: true,
       baseUrl: 'https://example.com/v1',
-      model: 'test-gpt',
+      model: 'gemini-3.8-flash-high',
       apiKey: 'test-key',
       semanticSearch: false,
       autoImport: false,
@@ -324,7 +324,7 @@ describe('trusted import', () => {
         taskId: id,
         page: 1,
         generation: 0,
-        model: 'test-gpt',
+        model: 'gemini-3.8-flash-high',
         status: 'RUNNING',
       },
     });
@@ -351,7 +351,7 @@ async function enableImport(budget: number | null = null) {
   const cfg = await service.updateConfig({
     enabled: true,
     baseUrl: 'https://example.com/v1',
-    model: 'test-gpt',
+    model: 'gemini-3.8-flash-high',
     apiKey: 'test-key',
     semanticSearch: false,
     autoImport: false,

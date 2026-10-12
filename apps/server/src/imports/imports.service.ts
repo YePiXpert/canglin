@@ -463,6 +463,30 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     });
     return { ok: true };
   }
+  /** Discard only unconfirmed tasks. Keep AI usage records for budget accounting. */
+  async discard(id: string, version: number, ip?: string) {
+    const source = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.importTask.findUnique({ where: { id } });
+      if (!row) return null;
+      if (row.confirmedAt) throw new ConflictException('已入账的任务不能放弃');
+      if (row.version !== version) throw new ConflictException('草稿已更新，请重新载入后再放弃');
+      if (row.storagePath && await tx.attachment.count({ where: { storagePath: row.storagePath } }))
+        throw new ConflictException('原件已关联业务单据，不能放弃');
+      const full = row.storagePath ? path.resolve(config.uploadsDir, row.storagePath) : null;
+      if (full && !full.startsWith(path.resolve(config.uploadsDir) + path.sep))
+        throw new BadRequestException('原件路径无效');
+      const removed = await tx.importTask.deleteMany({ where: { id, version, generation: row.generation, confirmedAt: null } });
+      if (!removed.count) throw new ConflictException('任务状态已变化，请重新载入');
+      await tx.importRevision.deleteMany({ where: { taskId: id } });
+      return { filename: row.filename, full };
+    });
+    this.recognition.abort(id);
+    if (source) {
+      if (source.full) fs.rmSync(source.full, { force: true });
+      await this.audit.log('IMPORT_DISCARD', { detail: { id, filename: source.filename }, ip });
+    }
+    return { ok: true };
+  }
   /** Shared source-task checks for the workflow import confirmation (draft version, AI review, page review, original file). */
   async validateConfirmation(tx: Prisma.TransactionClient, input: { taskId?: string; version?: number }) {
     const task = input.taskId
