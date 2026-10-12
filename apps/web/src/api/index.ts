@@ -12,6 +12,7 @@ import type {
   ParseResult,
   ImportDraft,
   SupplierUpsertInput,
+  TemplateType,
 } from '@canglin/shared';
 
 /* ------------------------------- 通用分页结构 ------------------------------ */
@@ -22,21 +23,24 @@ export interface Paged {
 }
 
 /* ---------------------------------- 导入 ---------------------------------- */
+/** AI 单页识别结果（服务端 aiPageSchema v2）；旧任务里保存的结果没有 rawText、amount、templateType */
 export interface AiImportPage {
   page: number;
+  templateType?: TemplateType | null;
   serialNumber: string | null;
   department: string | null;
   handler: string | null;
   requestDate: string | null;
   items: {
     lineId: string | null;
+    rawText?: string;
     itemName: string;
     spec?: string | null;
     quantity: number | null;
     unit: string | null;
     unitPrice: number | null;
+    amount?: number | null;
     purchaseLink: string | null;
-    reason: string;
   }[];
   warnings: string[];
 }

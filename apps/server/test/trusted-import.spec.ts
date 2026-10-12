@@ -35,11 +35,12 @@ const local = {
 const ocr = {
   inspect: vi.fn(async () => ({ pageCount: 1 })),
   parse: vi.fn(async () => local),
-  page: vi.fn(async () => Buffer.from('image')),
+  page: vi.fn(async () => ({ bytes: Buffer.from('image'), mime: 'image/png' })),
 };
 const llm = {
   chat: vi.fn(async (_input: unknown) => ({
     content: JSON.stringify({
+      templateType: 'GENERIC',
       serialNumber: 'OA-AI',
       department: '行政部',
       handler: '张三',
@@ -47,12 +48,14 @@ const llm = {
       items: [
         {
           lineId: 'p1-r1',
+          rawText: '笔',
           itemName: '笔',
+          spec: null,
           quantity: 8,
           unit: '支',
           unitPrice: null,
+          amount: null,
           purchaseLink: null,
-          reason: '原件数量为8',
         },
       ],
       warnings: [],
@@ -237,8 +240,9 @@ describe('trusted import', () => {
     expect(t.result!.mode).toBe('AI_IMAGE');
     expect(ocr.parse.mock.calls.length).toBe(localCalls);
     expect(ocr.inspect.mock.calls.length).toBe(inspectCalls);
-    const sent = llm.chat.mock.calls.at(-1)?.[0] as { messages: { image?: string; content: string }[] };
-    expect(sent.messages[1].image).toBe('data:image/png;base64,aW1n');
+    const sent = llm.chat.mock.calls.at(-1)?.[0] as { messages: { images?: string[]; content: string }[] };
+    // 页图来自 OCR 服务的预处理（照片转正、缩放），不再直接透传上传的原始字节
+    expect(sent.messages[1].images).toEqual([`data:image/png;base64,${Buffer.from('image').toString('base64')}`]);
     expect(JSON.parse(sent.messages[1].content).existingRows).toEqual([]);
     const changed = { ...t.draft!, items: [{ ...t.draft!.items[0], quantity: 11 }] };
     await imports.saveDraft(taskId, 0, changed);

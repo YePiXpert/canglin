@@ -87,6 +87,7 @@ export class AiSearchService {
     if (vocab.length === 0) return [];
 
     const res = await this.llm.chat({
+      ...(await this.aiConfig.params(cfg, 'search', 0)),
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
       model: cfg.model,
@@ -111,7 +112,6 @@ export class AiSearchService {
         required: ['terms'],
         additionalProperties: false,
       },
-      temperature: 0,
       maxTokens: 512,
       timeoutMs: 20_000,
     });

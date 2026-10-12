@@ -12,6 +12,7 @@ import { parsedItemSchema, type ParseResult } from '@canglin/shared';
 import {
   MIME,
   aiPageSchema,
+  checkAiPage,
   draftFrom,
   finishResult,
   mergePage,
@@ -72,13 +73,17 @@ export class ImportRecognitionService {
       ? this.ocr.inspect(bytes, filename)
       : { pageCount: 1 };
   }
+  /** 页图统一由 OCR 服务渲染或预处理（照片转正、缩放、转 JPEG）；OCR 服务不可用时图片仍按原图发送，PDF 无法渲染 */
   private async pageInput(bytes: Buffer, filename: string, page: number) {
     const ext = path.extname(filename).toLowerCase();
-    if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
-      if (page !== 1) throw new BadRequestException('页码超出范围');
+    const image = ['.png', '.jpg', '.jpeg', '.webp'].includes(ext);
+    if (ext !== '.pdf' && page !== 1) throw new BadRequestException('页码超出范围');
+    try {
+      return await this.ocr.page(bytes, filename, page);
+    } catch (error) {
+      if (!image) throw error;
       return { bytes, mime: MIME[ext] };
     }
-    return { bytes: await this.ocr.page(bytes, filename, page), mime: 'image/png' };
   }
   async runLocal(id: string, generation: number, requested?: number[]) {
     const row = await this.live(id, generation);
@@ -116,6 +121,7 @@ export class ImportRecognitionService {
         const part = await this.ocr.parse(bytes, source.filename, page);
         if (!(await this.live(id, generation))) return;
         mergePage(result, page, part);
+        if (part.parserVersion) result.parserVersion = part.parserVersion;
       } catch (error) {
         result.pages = result.pages!.map((p) =>
           p.page === page
@@ -173,7 +179,7 @@ export class ImportRecognitionService {
     const result: ParseResult = {
       ...local,
       schemaVersion: 2,
-      parserVersion: 'ai-primary-1',
+      parserVersion: 'ai-primary-2',
       mode: local?.mode ?? 'AI_IMAGE',
       items: local?.items ?? [],
       warnings: local?.warnings ?? [],
@@ -235,7 +241,9 @@ export class ImportRecognitionService {
         await this.prisma.aiCall.create({
           data: { id: callId, taskId: id, page, generation, model, status: 'NOT_SENT' },
         });
-        let metadata: { usage?: { input: number; output: number }; requestId?: string } | undefined;
+        let metadata:
+          | { usage?: { input: number; output: number }; requestId?: string; incompleteReason?: string }
+          | undefined;
         let callStatus = 'NOT_SENT';
         let parsed: z.infer<typeof aiPageSchema> | undefined;
         let detail: string | undefined;
@@ -248,11 +256,13 @@ export class ImportRecognitionService {
           await this.prisma.aiCall.update({ where: { id: callId }, data: { status: 'RUNNING' } });
           callStatus = 'RUNNING';
           const response = await this.llm.chat({
+            ...(await this.aiConfig.params(cfg, 'import')),
             baseUrl: cfg.baseUrl,
             apiKey: cfg.apiKey,
             model,
             schema: z.toJSONSchema(aiPageSchema),
-            maxTokens: 4096,
+            // 约每行 80 token，100 行上限再加单据头与警告；推理 token 也计入这个额度
+            maxTokens: 12_000,
             timeoutMs: 120_000,
             signal: controller.signal,
             messages: [
@@ -265,14 +275,18 @@ export class ImportRecognitionService {
                 role: 'user',
                 content: JSON.stringify({
                   page,
-                  existingRows: result.items.filter((i) => i.source?.page === page),
+                  // 只给定位所需的字段：坐标、置信度与来源对模型是噪音
+                  existingRows: result.items
+                    .filter((i) => i.source?.page === page)
+                    .map((i) => ({ lineId: i.lineId, itemName: i.itemName, spec: i.spec ?? null, quantity: i.quantity, unit: i.unit ?? null })),
                 }),
-                image: `data:${image.mime};base64,${image.bytes.toString('base64')}`,
+                images: [`data:${image.mime};base64,${image.bytes.toString('base64')}`],
               },
             ],
           });
           metadata = response;
           parsed = aiPageSchema.parse(JSON.parse(response.content ?? ''));
+          checkAiPage(parsed);
           const validIds = new Set(
             result.items.filter((i) => i.source?.page === page).map((i) => i.lineId),
           );
@@ -315,7 +329,9 @@ export class ImportRecognitionService {
             where: { id: callId },
             data: {
               status: callStatus,
-              response: JSON.stringify(detail ? { error: detail } : parsed),
+              response: JSON.stringify(
+                detail ? { error: detail, ...(metadata?.incompleteReason ? { reason: metadata.incompleteReason } : {}) } : parsed,
+              ),
               requestId: metadata?.requestId,
               inputTokens: usage?.input,
               outputTokens: usage?.output,
@@ -330,8 +346,9 @@ export class ImportRecognitionService {
           if (initial) {
             mergePage(result, page, {
               mode: 'AI_IMAGE',
+              ...(parsed.templateType ? { templateType: parsed.templateType } : {}),
               items: parsed.items.map((item) => parsedItemSchema.parse({
-                ...item, source: { page, method: 'AI' },
+                ...item, source: { page, method: 'AI', rawText: item.rawText },
               })),
               warnings: parsed.warnings,
               pages: [{ page, status: 'DONE', mode: 'AI_IMAGE' }],

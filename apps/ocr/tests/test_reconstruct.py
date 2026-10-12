@@ -1,4 +1,4 @@
-from app.reconstruct import is_header_row, is_ui_noise, rebuild_from_lines
+from app.reconstruct import extract_fields, fields_from_words, is_header_row, is_ui_noise, item_from_cells, rebuild_from_lines
 
 
 class TestNoiseFilter:
@@ -82,3 +82,48 @@ def test_duplicate_names_preserve_source_rows():
 def test_price_is_not_unknown_quantity():
     result = rebuild_from_lines(["荧光笔 ¥2.50"])
     assert result["items"][0]["quantity"] is None
+
+
+def test_oa_print_and_approval_noise():
+    for text in ["print", "Page 1 of 2", "print Page 1 of 2", "http://10.0.0.1:8088/seeyon/common/print/print.jsp?jsessionid=0",
+                 "2026/8/31", "插入项", "总金额 0.00 元", "归属月份：", "合计 1220.00", "附件", "单位：元", "【同意】",
+                 "[张某 2026-08-20 20:30]", "部门领导意见：", "申请单位部门", "分管领导意见", "（仅限电子类设备采购）"]:
+        assert is_ui_noise(text), text
+    assert not is_ui_noise("A4打印纸(规格：80g)--（5包/箱）")
+
+
+def test_labels_without_colon_and_handler_positions():
+    fields = extract_fields(["申领部门 综合管理部（董事会办公室） 经办人 十一层前台 申领日期 2026-08-13"])
+    assert fields["department"] == "综合管理部（董事会办公室）"
+    assert fields["handler"] == "十一层前台"
+    assert extract_fields(["经办人：张某（资产经营）"])["handler"] == "张某（资产经营）"
+    assert "department" not in extract_fields(["部门领导意见：同意"])
+
+
+def word(text, x0, top, height=7.5):
+    return {"text": text, "x0": x0, "x1": x0 + 7.47 * len(text), "top": top, "bottom": top + height}
+
+
+def test_fields_from_words_stop_at_next_label_and_join_wrapped_values():
+    words = [word("流水号：", 373, 131.9, 10), word("2026090101", 422.9, 130.5),
+             word("申领部门", 94.3, 159.5, 10), word("长城开拓-综合管理", 155, 153.3), word("部", 155, 163.3),
+             word("经办人", 237.5, 159.5, 10), word("张某（资产经营）", 290.8, 158.4),
+             word("申领日期", 373.2, 159.5, 10), word("2026/9/1", 431.4, 158.4)]
+    assert fields_from_words(words) == {"serialNumber": "2026090101", "department": "长城开拓-综合管理部",
+                                        "handler": "张某（资产经营）", "requestDate": "2026-09-01"}
+
+
+def test_fields_from_words_inline_labels_and_serial_followed_by_unit():
+    words = [word("编号", 122, 170), word("202600015", 183, 170), word("单位：元", 489, 170),
+             word("申请部门：行政部", 100, 200), word("日期", 342, 660), word("2026年9月2日", 408, 660)]
+    assert fields_from_words(words) == {"serialNumber": "202600015", "department": "行政部", "requestDate": "2026-09-02"}
+
+
+def test_cells_keep_name_verbatim_and_merge_specs():
+    item = item_from_cells({"idx": "1", "name": "办公椅", "cat": "非电子类", "spec": "SF-CH-2306A黑框", "brand": "京顺发",
+                            "spec2": "SF-CH-2306A黑框", "qty": "4.0", "price": "610.00", "amount": "2440.00"}, "第 1 行")
+    assert (item["itemName"], item["spec"], item["quantity"], item["unitPrice"], item["amount"]) == (
+        "办公椅", "SF-CH-2306A黑框；京顺发", 4, 610, 2440)
+    assert item["_warnings"] == []
+    long = item_from_cells({"name": "纸", "qty": "1", "note": "https://a.example/" + "x" * 600}, "第 2 行")
+    assert len(long["purchaseLink"]) == 500 and long["_warnings"] == ["第 2 行链接超过 500 字符，已截断，请对照原件"]

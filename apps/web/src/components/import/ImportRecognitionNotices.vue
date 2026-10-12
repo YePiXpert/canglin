@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, type Ref } from 'vue';
+import { computed, inject, type Ref } from 'vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import Icon from '@/components/ui/Icon.vue';
 import type { ImportTaskView } from '@/api';
@@ -10,6 +10,18 @@ if (!ctx) throw new Error('ImportRecognitionNotices 只能放在 ImportView 里�
 const { issuePages, reviewedPages, reviewed } = ctx;
 /** 只在 ImportView 的 v-else-if="task" 里渲染：task 变回 null 时父组件先更新、卸载本组件，所以收窄为非空 */
 const task = ctx.task as Ref<ImportTaskView>;
+
+/** 本地识别的警告：整单提示在前；「第 N 行……」按行号归并成一条，同一行的多个疑点放在一起 */
+const localWarnings = computed(() => {
+  const rows = new Map<number, string[]>();
+  const general: string[] = [];
+  for (const w of task.value.result?.warnings ?? []) {
+    const m = /^第 (\d+) 行(.+)$/.exec(w);
+    if (m) rows.set(Number(m[1]), [...(rows.get(Number(m[1])) ?? []), m[2]]);
+    else general.push(w);
+  }
+  return [...general, ...[...rows].sort(([a], [b]) => a - b).map(([row, parts]) => `第 ${row} 行：${parts.join('；')}`)];
+});
 </script>
 
 <template>
@@ -21,7 +33,7 @@ const task = ctx.task as Ref<ImportTaskView>;
     v-if="task.result?.warnings.length || task.aiResult.some((p) => p.warnings.length)"
     class="space-y-1.5 rounded-(--radius-card) bg-amber-soft px-4 py-3 text-[13px] leading-5 text-amber"
   >
-    <li v-for="w in task.result?.warnings ?? []" :key="w" class="flex items-start gap-2">
+    <li v-for="w in localWarnings" :key="w" class="flex items-start gap-2">
       <Icon name="alert" :size="14" class="mt-[3px] shrink-0" /><span class="min-w-0">{{
         w
       }}</span>

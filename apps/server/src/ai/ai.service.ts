@@ -65,6 +65,7 @@ export class AiService {
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const res = await this.llm.chat({
+        ...(await this.aiConfig.params(cfg, 'ask')),
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
         model: cfg.model,
@@ -123,6 +124,7 @@ export class AiService {
     }
 
     const final = await this.llm.chat({
+      ...(await this.aiConfig.params(cfg, 'ask')),
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
       model: cfg.model,
@@ -158,6 +160,7 @@ export class AiService {
     let parsed: AiOcrReviewResult | null = null;
     for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
       const res = await this.llm.chat({
+        ...(await this.aiConfig.params(cfg, 'import', 0)),
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
         model: cfg.model,
@@ -172,7 +175,6 @@ export class AiService {
           },
         ],
         schema: z.toJSONSchema(aiOcrReviewResultSchema),
-        temperature: 0,
         maxTokens: 2048,
       });
       try {

@@ -92,6 +92,7 @@ const task = ctx.task as Ref<ImportTaskView>;
                 v-model="l.itemName"
                 size="sm"
                 placeholder="品名（同名不同规格请明确区分）"
+                :title="l.source?.rawText && l.source.rawText !== l.itemName ? `原文：${l.source.rawText}` : undefined"
               />
               <Input v-model="l.spec" size="sm" label="规格" hide-label placeholder="规格（可空）" class="mt-1.5" />
             </td>
@@ -159,10 +160,13 @@ const task = ctx.task as Ref<ImportTaskView>;
                   </div>
                   <div v-if="suggestion(l)" class="space-y-2 border-t border-line pt-3">
                     <p>
-                      AI：<span class="text-text">{{ suggestion(l)!.itemName }}</span>，数量
-                      {{ suggestion(l)!.quantity ?? '未知' }}
+                      AI：<span class="text-text">{{ suggestion(l)!.itemName }}</span
+                      ><template v-if="suggestion(l)!.spec">（{{ suggestion(l)!.spec }}）</template>，数量
+                      {{ suggestion(l)!.quantity ?? '未知' }}{{ suggestion(l)!.unit ?? '' }}
                     </p>
-                    <p>{{ suggestion(l)!.reason }}</p>
+                    <p v-if="suggestion(l)!.rawText && suggestion(l)!.rawText !== suggestion(l)!.itemName" class="break-all">
+                      AI 读到的原文：{{ suggestion(l)!.rawText }}
+                    </p>
                     <p
                       v-if="!reviewedAi.includes(aiSuggestionKey(suggestion(l)!))"
                       class="text-amber"

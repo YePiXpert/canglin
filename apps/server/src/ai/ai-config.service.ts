@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
-import type { AiConfigInput, AiConfigView } from '@canglin/shared';
+import type { AiConfigInput, AiConfigView, ReasoningSetting } from '@canglin/shared';
+import type { ChatCallOptions, RejectableParam } from './llm.client';
 
 export interface StoredAiConfig {
   enabled: boolean;
@@ -16,7 +17,11 @@ export interface StoredAiConfig {
   inputPrice: number | null;
   outputPrice: number | null;
   monthlyBudget: number | null;
+  reasoningEffort: ReasoningSetting;
 }
+/** 调用用途：决定「自动」推理强度。识别与审核 low，问答 medium，搜索与能力检测不发 */
+export type CallPurpose = 'import' | 'ask' | 'search';
+const AUTO_EFFORT: Record<CallPurpose, ChatCallOptions['reasoningEffort']> = { import: 'low', ask: 'medium', search: undefined };
 export type Capabilities = NonNullable<AiConfigView['capabilities']> & { fingerprint: string };
 @Injectable()
 export class AiConfigService {
@@ -34,6 +39,7 @@ export class AiConfigService {
       inputPrice: null,
       outputPrice: null,
       monthlyBudget: null,
+      reasoningEffort: 'auto',
     };
   }
   async getConfig(): Promise<StoredAiConfig> {
@@ -63,7 +69,32 @@ export class AiConfigService {
     const value = JSON.parse(row.value) as Capabilities;
     return value.fingerprint === this.fingerprint(cfg) ? value : undefined;
   }
+  /**
+   * 本次调用可发送的 temperature / reasoning：按设置与用途取值，跳过当前服务（按配置指纹）拒绝过的参数；
+   * onRejected 记下新被拒的参数，之后不再发送。
+   */
+  async params(cfg: StoredAiConfig, purpose: CallPurpose, temperature?: number): Promise<Partial<ChatCallOptions>> {
+    if (cfg.reasoningEffort === 'off') return {};
+    const row = await this.prisma.setting.findUnique({ where: { key: 'aiParamSupport' } });
+    const stored = row ? (JSON.parse(row.value) as { fingerprint: string; rejected: RejectableParam[] }) : undefined;
+    const rejected = stored?.fingerprint === this.fingerprint(cfg) ? stored.rejected : [];
+    const effort = cfg.reasoningEffort === 'auto' || !cfg.reasoningEffort ? AUTO_EFFORT[purpose] : cfg.reasoningEffort;
+    return {
+      ...(effort && !rejected.includes('reasoning') ? { reasoningEffort: effort } : {}),
+      ...(temperature != null && !rejected.includes('temperature') ? { temperature } : {}),
+      onRejected: async (params) => {
+        const value = { fingerprint: this.fingerprint(cfg), rejected: [...new Set([...rejected, ...params])] };
+        await this.prisma.setting.upsert({
+          where: { key: 'aiParamSupport' },
+          create: { key: 'aiParamSupport', value: JSON.stringify(value) },
+          update: { value: JSON.stringify(value) },
+        });
+      },
+    };
+  }
   async saveCapabilities(cfg: StoredAiConfig, values: Omit<Capabilities, 'fingerprint'>) {
+    // A fresh capability check also re-learns which request parameters the service accepts.
+    await this.prisma.setting.deleteMany({ where: { key: 'aiParamSupport' } });
     const result = {
       ...values,
       fingerprint: this.fingerprint(cfg),

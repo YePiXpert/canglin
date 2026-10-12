@@ -77,6 +77,55 @@ def test_parse_text_mode(client, auth_headers):
     assert body["items"][0]["quantity"] == 12
 
 
+def test_parse_text_layer_pdf_returns_template_and_amount(client, auth_headers):
+    from pdfgen import asset_request_pdf
+    res = client.post("/parse", files={"file": ("asset.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert (body["mode"], body["parserVersion"], body["templateType"]) == ("PDF_TEXT", "4", "FIXED_ASSET")
+    assert {k: body[k] for k in ("serialNumber", "department", "handler", "requestDate")} == {
+        "serialNumber": "202600101", "department": "行政部（党委办公室）", "handler": "张某", "requestDate": "2026-09-01"}
+    item = body["items"][0]
+    assert (item["itemName"], item["spec"], item["quantity"], item["unitPrice"], item["amount"]) == ("办公椅", "SF-01黑框", 2, 610, 1220)
+    assert item["source"]["method"] == "PDF_TEXT" and item["source"]["box"]
+    assert body["warnings"] == []
+
+
+def _image(size, fmt, exif=None) -> bytes:
+    from PIL import Image
+    buf = io.BytesIO()
+    image = Image.new("RGB", size, "white")
+    image.save(buf, format=fmt, **({"exif": exif} if exif is not None else {}))
+    return buf.getvalue()
+
+
+def test_page_turns_photos_upright_scales_and_sends_jpeg(client, auth_headers):
+    from PIL import Image
+    exif = Image.Exif()
+    exif[0x0112] = 6  # 拍摄时手机横置：需顺时针转 90°
+    exif[0x010F] = "PhoneMaker"
+    res = client.post("/page?page=1", files={"file": ("photo.jpg", _image((4000, 100), "JPEG", exif), "image/jpeg")}, headers=auth_headers)
+    assert res.status_code == 200 and res.headers["content-type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(res.content)).size == (64, 2560)
+
+
+def test_page_keeps_screenshots_png_and_pdf_pages_render(client, auth_headers):
+    from PIL import Image
+    from pdfgen import asset_request_pdf
+    res = client.post("/page?page=1", files={"file": ("shot.png", _image((3000, 20), "PNG"), "image/png")}, headers=auth_headers)
+    assert res.headers["content-type"] == "image/png"
+    assert Image.open(io.BytesIO(res.content)).size == (2560, 17)
+    res = client.post("/page?page=1", files={"file": ("a.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers)
+    assert res.headers["content-type"] == "image/png" and Image.open(io.BytesIO(res.content)).size == (1190, 1684)
+    assert client.post("/page?page=2", files={"file": ("a.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers).status_code == 422
+
+
+def test_page_preprocess_switch_keeps_png(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(pipeline, "PAGE_PREPROCESS", False)
+    res = client.post("/page?page=1", files={"file": ("photo.jpg", _image((300, 200), "JPEG"), "image/jpeg")}, headers=auth_headers)
+    assert res.headers["content-type"] == "image/png"
+
+
 def _tiny_png() -> bytes:
     from PIL import Image
 

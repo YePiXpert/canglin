@@ -81,7 +81,7 @@ async def inspect(file: UploadFile = File(...)):
 async def page_image(page: int, file: UploadFile = File(...)):
     try:
         async with _render_lock:
-            image = await asyncio.to_thread(render_page, await uploaded(file), file.filename or "", page)
-        return Response(image, media_type="image/png")
+            image, mime = await asyncio.to_thread(render_page, await uploaded(file), file.filename or "", page)
+        return Response(image, media_type=mime)
     except Exception as error:
         raise HTTPException(422, detail=str(error)) from error

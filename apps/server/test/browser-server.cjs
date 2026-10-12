@@ -30,7 +30,7 @@ let sequence = 0;
 const ocr = {
   inspect: async () => ({ pageCount: 1 }),
   health: async () => true,
-  page: async () => Buffer.from(capabilityImage().split(',')[1], 'base64'),
+  page: async () => ({ bytes: Buffer.from(capabilityImage().split(',')[1], 'base64'), mime: 'image/png' }),
   parse: async () => ({
     schemaVersion: 2,
     parserVersion: 'browser-fixture',
@@ -93,19 +93,21 @@ const llm = {
     }];
     return {
       content: JSON.stringify({
+        templateType: null,
         serialNumber: `OA-BROWSER-${sequence}`,
         department: '行政部',
         handler: '张三',
         requestDate: '2026-09-27',
         items: rows.map((i) => ({
           lineId: i.lineId,
+          rawText: i.itemName,
           itemName: i.itemName,
           spec: i.spec ?? null,
           quantity: 8,
           unit: i.unit,
           unitPrice: 5,
+          amount: null,
           purchaseLink: null,
-          reason: '合成原件数量为8',
         })),
         warnings: [],
       }),

@@ -287,8 +287,60 @@ describe('AI 问答', () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().steps).toEqual([]);
+    expect(fake.calls.at(-1)).toMatchObject({ reasoningEffort: 'medium' });
+    expect(fake.calls.at(-1)?.temperature).toBeUndefined();
   });
 });
+
+describe('AI 调用参数', () => {
+  it('按用途发送推理强度；服务拒绝过的参数按配置指纹记住，之后不再发送', async () => {
+    const service = ctx.app.get(AiConfigService);
+    const cfg = await service.getConfig();
+    expect(await service.params(cfg, 'import')).toMatchObject({ reasoningEffort: 'low' });
+    expect(await service.params(cfg, 'search', 0)).toMatchObject({ temperature: 0 });
+    expect((await service.params(cfg, 'search', 0)).reasoningEffort).toBeUndefined();
+    await (await service.params(cfg, 'import', 0)).onRejected!(['temperature']);
+    const after = await service.params(cfg, 'import', 0);
+    expect(after.temperature).toBeUndefined();
+    expect(after.reasoningEffort).toBe('low');
+    // 换模型（指纹变化）后重新尝试
+    expect(await service.params({ ...cfg, model: 'another-model' }, 'import', 0)).toMatchObject({ temperature: 0 });
+    // 「不发送」：两者都不带；固定强度对所有用途生效
+    expect(await service.params({ ...cfg, reasoningEffort: 'off' }, 'ask', 0)).toEqual({});
+    expect(await service.params({ ...cfg, reasoningEffort: 'high' }, 'search')).toMatchObject({ reasoningEffort: 'high' });
+    await prisma().setting.deleteMany({ where: { key: 'aiParamSupport' } });
+  });
+
+  it('能力检测不发送推理强度与温度，并重新学习服务接受的参数', async () => {
+    const service = ctx.app.get(AiConfigService);
+    const cfg = await service.getConfig();
+    await (await service.params(cfg, 'ask')).onRejected!(['reasoning']);
+    const before = fake.calls.length;
+    const res = await ctx.inject({ method: 'POST', url: '/api/ai/capabilities', ...auth() });
+    expect(res.statusCode).toBe(201);
+    const calls = fake.calls.slice(before);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((c) => c.reasoningEffort === undefined && c.temperature === undefined)).toBe(true);
+    expect(calls.some((c) => c.messages.some((m) => m.images?.length === 1))).toBe(true);
+    expect(await service.params(cfg, 'ask')).toMatchObject({ reasoningEffort: 'medium' });
+  });
+
+  it('设置页可保存推理强度，并拒绝未知取值', async () => {
+    const current = (await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() })).json();
+    expect(current.reasoningEffort).toBe('auto');
+    const payload = { enabled: current.enabled, baseUrl: current.baseUrl, model: current.model, semanticSearch: current.semanticSearch };
+    const saved = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...payload, reasoningEffort: 'off' } }) });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().reasoningEffort).toBe('off');
+    const bad = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...payload, reasoningEffort: 'turbo' } }) });
+    expect(bad.statusCode).toBe(400);
+    await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...payload, reasoningEffort: 'auto' } }) });
+  });
+});
+
+function prisma() {
+  return ctx.app.get(PrismaService);
+}
 
 async function get<T>(url: string, query: Record<string, string>): Promise<T> {
   const res = await ctx.inject({ method: 'GET', url, ...auth({ query }) });

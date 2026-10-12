@@ -5,12 +5,18 @@ from __future__ import annotations
 import re
 
 from .normalize import (
+    UNIT_RE,
+    URL_RE,
     clean_item_name,
     extract_url,
+    parse_date,
+    parse_number,
     parse_price,
     parse_quantity,
     parse_unit,
+    parse_unit_note,
     to_halfwidth,
+    unit_in_name,
 )
 
 # OA 审批流的界面按钮/流程文字（这些行的坐标往往混在单据正文旁）
@@ -28,6 +34,11 @@ UI_NOISE_PATTERNS = [
     r"^申领明细$", r"^物品清单$", r"^采购明细$", r"^申请内容$", r"^基本信息$",
     r"^当前环节.*", r"^处理人[:：]?\s*$", r"^开始时间[:：]?", r"^结束时间[:：]?",
     r"^耗时.*", r"^流程编号.*流程状态.*",
+    # 浏览器打印页眉页脚与致远 OA 表单的表外栏目、审批链
+    r"^print$", r"^(print\s+)?Page\s*\d+\s*of\s*\d+$", r"^https?://\S*print\.jsp", r"^\d{4}/\d{1,2}/\d{1,2}$",
+    r"^插入项$", r"^总金额", r"^归属月份", r"^合计", r"^附件$", r"^单位[:：]\s*元$", r"^使用范围", r"^资金来源",
+    r"^【[^】]{1,6}】$", r"^\[.{1,12}\s+\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}\]$", r"^.{0,12}意\s*见[:：]?$",
+    r"^(申请|申领)单位?部门$", r"^(负责人|分管领导)意见$", r"^[（(]仅限.{0,20}[)）]$",
 ]
 
 UI_NOISE_RE = re.compile("|".join(UI_NOISE_PATTERNS))
@@ -58,14 +69,18 @@ def is_header_row(line: str) -> bool:
 
 
 SERIAL_RE = re.compile(r"(?:流水号|申请编号|单号|编号|流水号[:：])[:：]?\s*([A-Za-z0-9][A-Za-z0-9\-_/]{3,31})")
+# 冒号可有可无；没有冒号时标签与值之间须有空白，避免把「部门领导意见」读成部门
 DEPARTMENT_LABEL_RE = re.compile(
-    r"(?:申领部门|申请部门|需求部门|使用部门|部门)[:：]\s*([\u4e00-\u9fa5A-Za-z0-9（）()]{2,24})"
+    r"(?:申领部门|申请单位部门|申请部门|需求部门|使用部门|部门)(?:[:：]\s*|\s+)"
+    r"(?!领导|负责人|意见)([\u4e00-\u9fa5A-Za-z0-9（）()\-]{2,24})"
 )
 DEPARTMENT_SUFFIX_RE = re.compile(r"([\u4e00-\u9fa5A-Za-z0-9]{2,10}(?:部|处|科|室|中心|组|所|局))")
 # 标题/栏目行不参与部门启发式
 TITLE_NOISE_RE = re.compile(r"(申请|申领|清单|明细|审批|流程|单据|表单)")
+# 经办人可以是岗位名或带括号的说明，如「十一层前台」「张某（资产经营）」
 HANDLER_RE = re.compile(
-    r"(?:经办人|申请人|提出人|需求人|填报人|发起人|申领人|领取人)[:：]?\s*([\u4e00-\u9fa5·]{2,10})"
+    r"(?:经办人|申请人|提出人|需求人|填报人|发起人|申领人|领取人)[:：]?\s*"
+    r"((?:(?!申领日期|申请日期|日期|部门)[\u4e00-\u9fa5A-Za-z0-9·（）()]){2,16})"
 )
 DATE_LABEL_RE = re.compile(
     r"(?:申请日期|提交日期|申领日期|填报日期|单据日期|日期)[:：]?\s*(\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)"
@@ -155,10 +170,154 @@ def finalize_items(items: list[dict]) -> tuple[list[dict], list[str]]:
     warnings: list[str] = []
     cleaned: list[dict] = []
     for it in items:
+        label = it.pop("_label", None)
         if it["quantity"] is None:
-            warnings.append(f"「{it['itemName']}」未识别到数量，请对照原件确认")
+            name = f"「{it['itemName']}」" if it["itemName"] else ""
+            warnings.append(f"{label or ''}{name}未识别到数量，请对照原件确认")
+        warnings.extend(it.pop("_warnings", []))
         cleaned.append({k: v for k, v in it.items() if v is not None or k == "quantity"})
     return cleaned, warnings
+
+
+# 表头文字 → 列键；文本层表格按整词匹配（去掉冒号与括号里的单位说明）
+HEADER_KEYS = {
+    "物品名称": "name", "资产名称": "name", "品名": "name", "名称": "name",
+    "序号": "idx", "数量": "qty", "申领数量": "qty", "单价": "price", "预计单价": "price",
+    "预计总价": "amount", "金额": "amount", "总价": "amount", "备注": "note",
+    "规格": "spec", "型号": "spec", "规格型号": "spec", "主要技术指标": "spec2",
+    "生产": "brand", "厂家": "brand", "生产厂家": "brand", "品牌": "brand",
+    "类别": "cat", "单位": "unit", "链接": "url", "网址": "url",
+}
+EMPTY_SPECS = {"无", "-", "/", "—", "－"}
+
+
+def header_key(text: str) -> str | None:
+    text = re.sub(r"[(（][^()（）]*[)）]$", "", to_halfwidth(text).replace(" ", "")).rstrip(":")
+    return HEADER_KEYS.get(text)
+
+
+def item_from_cells(cells: dict[str, str], label: str) -> dict:
+    """按列键把一行映射为明细：数量、单价、金额只认数字；备注能解释为单位才取单位，链接取原文，其余文字并入规格并提示。
+
+    疑点放在 _warnings，未识别的数量由 finalize_items 统一提示。"""
+    name = (cells.get("name") or "").strip()
+    warnings: list[str] = []
+    qty_text = to_halfwidth(cells.get("qty") or "").strip()
+    quantity = parse_number(qty_text)
+    unit = (cells.get("unit") or "").strip() or None
+    m = None if quantity is not None else re.fullmatch(rf"(\d+(?:\.\d+)?)\s*{UNIT_RE}", qty_text)
+    if m:
+        quantity, unit = float(m.group(1)), unit or m.group(2)
+    price = parse_number(cells.get("price")) or None  # 空白、0、0.00 都不是单价
+    amount = parse_number(cells.get("amount")) or None
+    link = None
+    for text in (cells.get("url") or "", cells.get("note") or ""):
+        found = URL_RE.search(text)
+        if found and not link:
+            link = found.group(0).rstrip(".,;、")
+    note = URL_RE.sub("", cells.get("note") or "").strip()
+    noted = parse_unit_note(note, quantity) if note else None
+    if noted:
+        unit, note = unit or noted, ""
+    unit = unit or unit_in_name(name)
+    specs: list[str] = []
+    for key in ("spec", "spec2", "brand"):
+        value = (cells.get(key) or "").strip()
+        if value and value not in EMPTY_SPECS and value not in specs:
+            specs.append(value)
+    if note:
+        specs.append(note)
+        warnings.append(f"{label}备注「{note}」未能解释为单位，请核对是否需要拆行")
+    spec = "；".join(specs) or None
+    if spec and len(spec) > 200:
+        spec = spec[:200]
+        warnings.append(f"{label}规格超过 200 字，已截断，请对照原件")
+    if link and len(link) > 500:
+        link = link[:500]
+        warnings.append(f"{label}链接超过 500 字符，已截断，请对照原件")
+    if unit and len(unit) > 16:
+        unit = None
+    if quantity is not None and price is not None and amount is not None and abs(quantity * price - amount) > .01:
+        warnings.append(f"{label}数量×单价与金额不符，请对照原件")
+    if not name:
+        warnings.append(f"{label}未识别到物品名称，请对照原件")
+    return {"itemName": name, "quantity": quantity, "unit": unit, "spec": spec, "unitPrice": price,
+            "amount": amount, "purchaseLink": link, "_label": label, "_warnings": warnings}
+
+
+TEMPLATES = (("办公用品领用单", "OFFICE_SUPPLY"), ("固定资产购买申请单", "FIXED_ASSET"))
+
+
+def template_type(text: str) -> str | None:
+    return next((key for title, key in TEMPLATES if title in text.replace(" ", "")), None)
+
+
+FIELD_LABELS = {
+    "serialNumber": ("流水号", "编号", "申请编号", "单号"),
+    "department": ("申领部门", "申请单位部门", "申请部门", "需求部门", "使用部门", "部门"),
+    "handler": ("经办人", "申请人", "申领人", "填报人", "发起人", "领取人"),
+    "requestDate": ("申领日期", "申请日期", "提交日期", "填报日期", "单据日期", "日期"),
+}
+# 表单里其他「标签 | 值」的标签，只作为取值的右边界
+BOUNDARY_LABELS = ("使用范围", "资金来源", "单位", "合计", "总金额", "附件", "类别")
+_LABELS = "|".join(sorted({x for xs in FIELD_LABELS.values() for x in xs} | set(BOUNDARY_LABELS), key=len, reverse=True))
+LABEL_ONLY_RE = re.compile(rf"({_LABELS})\s*[:：]?")
+LABEL_INLINE_RE = re.compile(rf"({_LABELS})\s*[:：]\s*(.+)")
+LABELED_DATE_RE = re.compile(r"(\d{4})\s*[-/年]\s*(\d{1,2})\s*[-/月]\s*(\d{1,2})\s*日?")
+
+
+def _field_value(field: str, value: str) -> str | None:
+    value = value.strip()
+    if not value or LABEL_ONLY_RE.fullmatch(value):
+        return None
+    if field == "serialNumber":
+        m = re.match(r"([A-Za-z0-9][A-Za-z0-9\-_/]{3,31})(?![A-Za-z0-9\-_/])", to_halfwidth(value))
+        return m.group(1) if m else None
+    if field == "requestDate":
+        m = LABELED_DATE_RE.match(to_halfwidth(value))
+        return parse_date("-".join(m.groups())) if m else None
+    if field == "handler":
+        value = re.sub(r"\s+", " ", value)
+        return value if re.fullmatch(r"[\u4e00-\u9fa5A-Za-z0-9·（）() ]{2,16}", value) else None
+    return value if 2 <= len(value) <= 40 and not re.search(r"[\[\]【】]|\d{4}-\d{1,2}-\d{1,2}|意见", value) else None
+
+
+def fields_from_words(words: list[dict]) -> dict:
+    """按「标签词右侧、同一行带」取单据头：值止于右侧下一个标签；格内换行的值逐行拼接。
+
+    标签按优先级逐个尝试，同一标签按自上而下的顺序，取第一个合法值（审批意见里的「申请部门」等不会通过校验）。"""
+    labels = []
+    for w in words:
+        text = w["text"].strip()
+        m = LABEL_ONLY_RE.fullmatch(text)
+        inline = None if m else LABEL_INLINE_RE.fullmatch(text)
+        if m or inline:
+            labels.append((w, (m or inline).group(1), inline.group(2) if inline else None))
+    label_ids = {id(w) for w, _, _ in labels}
+    result: dict = {}
+    for field, names in FIELD_LABELS.items():
+        for name in names:
+            for word, _, inline in sorted((x for x in labels if x[1] == name), key=lambda x: (x[0]["top"], x[0]["x0"])):
+                middle = (word["top"] + word["bottom"]) / 2
+                band = max(word["bottom"] - word["top"], 6) * 1.3
+                in_band = [w for w in words if abs((w["top"] + w["bottom"]) / 2 - middle) <= band]
+                right = min((w["x0"] for w in in_band if id(w) in label_ids and w["x0"] > word["x1"]), default=float("inf"))
+                values = sorted((w for w in in_band if id(w) not in label_ids and w["x0"] >= word["x1"] - 1 and w["x1"] <= right + 1),
+                                key=lambda w: (w["top"], w["x0"]))
+                lines: list[list] = []
+                for w in values:
+                    if lines and abs(lines[-1][0] - w["top"]) <= 3:
+                        lines[-1][1].append(w["text"])
+                    else:
+                        lines.append([w["top"], [w["text"]]])
+                text = "".join(" ".join(parts) for _, parts in lines)
+                value = _field_value(field, (inline + text) if inline else text)
+                if value:
+                    result[field] = value
+                    break
+            if field in result:
+                break
+    return result
 
 
 def rebuild_from_lines(lines: list[str]) -> dict:
@@ -170,7 +329,8 @@ def rebuild_from_lines(lines: list[str]) -> dict:
                        ("handler", "经办人"), ("requestDate", "申请日期")):
         if not fields.get(key):
             warnings.append(f"未识别到{label}，请人工确认")
-    return {**fields, "items": items, "warnings": warnings}
+    template = template_type("".join(lines))
+    return {**fields, **({"templateType": template} if template else {}), "items": items, "warnings": warnings}
 
 
 def _positioned_rows(entries: list[dict]) -> list[dict]:
@@ -302,7 +462,7 @@ def rebuild_from_entries(entries: list[dict]) -> dict:
             [name, values.get("spec"), values.get("qty"), values.get("unit"), values.get("price"), values.get("url")],
         ])
         if item:
-            item[0].update({"rawText": text, "_source": _row_source(cells)})
+            item[0].update({"rawText": text, "_source": _row_source(cells), "_label": f"第 {len(items) + 1} 行"})
             items.extend(item)
             previous_row = row
     result = rebuild_from_lines(remaining + unpositioned)
@@ -314,7 +474,7 @@ def rebuild_from_entries(entries: list[dict]) -> dict:
 
 
 def rows_from_table(table: list[list[str | None]]) -> list[dict]:
-    """pdfplumber 表格行 → 物品行：按表头列名定位品名/数量/单价/链接列。"""
+    """pdfplumber 表格行 → 物品行：按表头列名定位各列，再按 item_from_cells 的字段规则映射。"""
     if not table:
         return []
     header_idx, col_map = find_header(table)
@@ -322,63 +482,46 @@ def rows_from_table(table: list[list[str | None]]) -> list[dict]:
         return []
 
     items: list[dict] = []
-    for row in table[header_idx + 1:]:
-        name = (row[col_map["name"]] or "").strip() if col_map["name"] < len(row) else ""
+    for number, row in enumerate(table[header_idx + 1:], 1):
+        cells = {key: str(row[i]).strip() for key, i in col_map.items() if i < len(row) and row[i]}
+        name = cells.get("name", "")
         if not name or is_ui_noise(name):
             continue
-        qty_raw = (row[col_map["qty"]] or "").strip() if col_map.get("qty") is not None and col_map["qty"] < len(row) else ""
-        qty = parse_quantity(to_halfwidth(qty_raw)) if qty_raw else None
-        unit = None
-        if col_map.get("unit") is not None and col_map["unit"] < len(row):
-            unit = (row[col_map["unit"]] or "").strip() or None
-        unit = unit or parse_unit(qty_raw)
-        spec = None
-        if col_map.get("spec") is not None and col_map["spec"] < len(row):
-            spec = (row[col_map["spec"]] or "").strip() or None
-        price = None
-        if col_map.get("price") is not None and col_map["price"] < len(row) and row[col_map["price"]]:
-            price = parse_price(to_halfwidth(str(row[col_map["price"]])))
-        link = None
-        if col_map.get("url") is not None and col_map["url"] < len(row) and row[col_map["url"]]:
-            link = extract_url(str(row[col_map["url"]]))
-        items.append(
-            {
-                "itemName": clean_item_name(to_halfwidth(name)),
-                "quantity": qty,
-                "unit": unit,
-                "spec": spec,
-                "unitPrice": price,
-                "purchaseLink": link,
-            }
-        )
-    return [it for it in items if it["itemName"]]
+        cells["name"] = clean_item_name(to_halfwidth(name))
+        idx = cells.get("idx", "")
+        item = item_from_cells(cells, f"第 {idx if idx.isdigit() else number} 行")
+        if item["itemName"]:
+            items.append({**item, "rawText": name})
+    return items
+
+
+def _table_key(cell: str) -> str | None:
+    c = to_halfwidth(cell).replace(" ", "").strip()
+    if not c:
+        return None
+    if header_key(c):
+        return header_key(c)
+    if "品名" in c or "名称" in c or c == "物品":
+        return "name"
+    for word, key in (("数量", "qty"), ("单价", "price"), ("总价", "amount"), ("金额", "amount"), ("单位", "unit"),
+                      ("技术指标", "spec2"), ("规格", "spec"), ("型号", "spec"), ("厂家", "brand"), ("品牌", "brand"),
+                      ("链接", "url"), ("网址", "url"), ("备注", "note"), ("序号", "idx")):
+        if word in c:
+            return key
+    return None
 
 
 def find_header(table: list[list[str | None]]) -> tuple[int, dict | None]:
     for i, row in enumerate(table[:6]):
         cells = [(c or "") for c in row]
         text = "".join(cells)
-        if not text.strip():
-            continue
         if not (("名称" in text or "品名" in text or "物品" in text) and "数量" in text):
             continue
-        col_map: dict[str, int | None] = {"name": None, "qty": None, "unit": None, "spec": None, "price": None, "url": None}
+        col_map: dict[str, int] = {}
         for j, cell in enumerate(cells):
-            c = cell.strip()
-            if not c:
-                continue
-            if col_map["name"] is None and ("品名" in c or "名称" in c or c == "物品"):
-                col_map["name"] = j
-            elif col_map["qty"] is None and "数量" in c:
-                col_map["qty"] = j
-            elif col_map["price"] is None and "单价" in c:
-                col_map["price"] = j
-            elif col_map["unit"] is None and "单位" in c:
-                col_map["unit"] = j
-            elif col_map["spec"] is None and ("规格" in c or "型号" in c):
-                col_map["spec"] = j
-            elif col_map["url"] is None and ("链接" in c or "网址" in c):
-                col_map["url"] = j
-        if col_map["name"] is not None and col_map["qty"] is not None:
+            key = _table_key(cell)
+            if key and key not in col_map:
+                col_map[key] = j
+        if "name" in col_map and "qty" in col_map:
             return i, col_map
     return -1, None

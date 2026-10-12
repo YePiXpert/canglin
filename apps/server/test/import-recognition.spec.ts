@@ -19,12 +19,13 @@ const llm = { chat: vi.fn() };
 let enabled = true;
 let cfg = { enabled: true, autoImport: true, baseUrl: 'https://example.com/v1', apiKey: 'fixture-key',
   model: 'fixture-model', inputPrice: 2, outputPrice: 4, monthlyBudget: null as number | null };
-const aiConfig = { getConfig: async () => cfg, canImport: async () => enabled };
+let params: Record<string, unknown> = {};
+const aiConfig = { getConfig: async () => cfg, canImport: async () => enabled, params: async () => params };
 let context: TestingModule, prisma: PrismaService, imports: ImportsService;
 function response(page = 1) {
-  return { content: JSON.stringify({ serialNumber: 'OA-AI', department: '行政部', handler: '张三',
-    requestDate: '2026-09-30', items: [{ lineId: null, itemName: `原件物品${page}`, spec: 'A4',
-      quantity: 8, unit: '包', unitPrice: 18, purchaseLink: null, reason: '原件本页' }], warnings: [] }),
+  return { content: JSON.stringify({ templateType: null, serialNumber: 'OA-AI', department: '行政部', handler: '张三',
+    requestDate: '2026-09-30', items: [{ lineId: null, rawText: `原件物品${page}（A4）`, itemName: `原件物品${page}`, spec: 'A4',
+      quantity: 8, unit: '包', unitPrice: 18, amount: null, purchaseLink: null }], warnings: [] }),
     usage: { input: 20, output: 30 } };
 }
 async function start() {
@@ -41,9 +42,10 @@ beforeAll(start);
 afterAll(() => context.close());
 beforeEach(async () => {
   enabled = true;
+  params = {};
   cfg = { ...cfg, monthlyBudget: null };
   ocr.inspect.mockReset().mockResolvedValue({ pageCount: 2 });
-  ocr.page.mockReset().mockResolvedValue(Buffer.from('rendered-page'));
+  ocr.page.mockReset().mockResolvedValue({ bytes: Buffer.from('rendered-page'), mime: 'image/jpeg' });
   ocr.parse.mockReset().mockImplementation(async (_bytes: Buffer, _filename: string, page = 1) => ({
     mode: 'PDF_OCR', serialNumber: 'OA-LOCAL', department: '行政部', handler: '李四', requestDate: '2026-09-30',
     items: [{ lineId: `p${page}-r1`, itemName: `本地物品${page}`, quantity: 2, unit: '个',
@@ -69,15 +71,56 @@ async function settle(id: string) {
 }
 
 describe('AI primary original recognition', () => {
-  it('populates a draft from the image without local parsing, rendering or items', async () => {
+  it('populates a draft from the preprocessed image without local parsing or items', async () => {
+    params = { reasoningEffort: 'low' };
     const task = await settle(await upload());
     expect(ocr.inspect).not.toHaveBeenCalled();
-    expect(ocr.page).not.toHaveBeenCalled();
+    expect(ocr.page).toHaveBeenCalledTimes(1);
     expect(ocr.parse).not.toHaveBeenCalled();
     expect(task.result?.mode).toBe('AI_IMAGE');
+    expect(task.result?.parserVersion).toBe('ai-primary-2');
     expect(task.draft?.items[0]).toMatchObject({ itemName: '原件物品1', spec: 'A4', quantity: 8, unit: '包' });
+    expect(task.result?.items[0].source).toMatchObject({ method: 'AI', rawText: '原件物品1（A4）' });
     expect(task.reviewPages).toEqual([]);
-    expect(JSON.parse(llm.chat.mock.calls[0][0].messages[1].content).existingRows).toEqual([]);
+    const sent = llm.chat.mock.calls[0][0];
+    expect(sent).toMatchObject({ maxTokens: 12_000, reasoningEffort: 'low' });
+    expect(sent.messages[1].images).toEqual([`data:image/jpeg;base64,${Buffer.from('rendered-page').toString('base64')}`]);
+    expect(JSON.parse(sent.messages[1].content).existingRows).toEqual([]);
+  });
+
+  it('sends the original image when the OCR service cannot preprocess it', async () => {
+    ocr.page.mockRejectedValueOnce(new Error('OCR offline'));
+    const id = await upload();
+    const task = await settle(id);
+    expect(task.aiStatus).toBe('DONE');
+    const original = fs.readFileSync((await imports.original(id)).full);
+    expect(llm.chat.mock.calls[0][0].messages[1].images).toEqual([`data:image/png;base64,${original.toString('base64')}`]);
+  });
+
+  it('validates AI dates, empty names and amounts on the server instead of failing the page', async () => {
+    const page = JSON.parse(response().content);
+    page.requestDate = '2026-02-30';
+    page.items = [{ ...page.items[0], rawText: '', unitPrice: 610, quantity: 4, amount: 2400 },
+      { ...page.items[0], itemName: '', rawText: '' }];
+    llm.chat.mockResolvedValueOnce({ ...response(), content: JSON.stringify(page) });
+    const task = await settle(await upload());
+    expect(task.aiStatus).toBe('DONE');
+    expect(task.result?.requestDate).toBeUndefined();
+    expect(task.result?.items.map((item) => [item.itemName, item.source?.rawText])).toEqual([['原件物品1', '原件物品1']]);
+    expect(task.aiResult[0].warnings).toEqual([
+      'AI 返回的申请日期「2026-02-30」不是有效的 YYYY-MM-DD，已置空，请对照原件',
+      'AI 第 2 行没有品名，已忽略，请对照原件核对是否漏行',
+      '「原件物品1」数量×单价与金额不符，请对照原件',
+    ]);
+  });
+
+  it('records why a response was cut off', async () => {
+    llm.chat.mockRejectedValueOnce(new AiResponseError('模型输出超过上限，请减少单页行数或拆分页面', 'INCOMPLETE',
+      { usage: { input: 20, output: 12_000 }, incompleteReason: 'max_output_tokens' }));
+    const task = await settle(await upload());
+    const call = await prisma.aiCall.findUniqueOrThrow({ where: { id: task.calls[0].id } });
+    expect(JSON.parse(call.response!)).toEqual({ error: '模型输出超过上限，请减少单页行数或拆分页面', reason: 'max_output_tokens' });
+    expect(task.draft?.items[0].itemName).toBe('本地物品1');
   });
 
   it('uses local OCR without dispatching AI when no enabled configuration is available', async () => {
@@ -87,6 +130,21 @@ describe('AI primary original recognition', () => {
     expect(ocr.parse).toHaveBeenCalledTimes(1);
     expect(task.aiStatus).toBe('DISABLED');
     expect(task.draft?.items[0].itemName).toBe('本地物品1');
+  });
+
+  it('merges local pages: parser version, template and header hints that another page answers', async () => {
+    enabled = false;
+    ocr.parse.mockImplementation(async (_bytes: Buffer, _filename: string, page = 1) => ({
+      mode: 'PDF_TEXT', parserVersion: '4', templateType: page === 1 ? 'OFFICE_SUPPLY' : 'OFFICE_SUPPLY',
+      ...(page === 1 ? { serialNumber: '2026090101', department: '行政部', handler: '十一层前台', requestDate: '2026-09-01' } : {}),
+      items: [{ lineId: `p${page}-r1`, itemName: `文件袋${page}`, quantity: 1, amount: null, source: { page, method: 'PDF_TEXT' } }],
+      warnings: page === 1 ? [] : ['未识别到流水号，请人工确认', '未识别到经办人，请人工确认', '第 12 行未识别到数量，请对照原件确认'],
+      pages: [{ page, status: 'DONE', mode: 'PDF_TEXT' }],
+    }));
+    const task = await settle(await upload('two-pages.pdf'));
+    expect(task.result).toMatchObject({ parserVersion: '4', templateType: 'OFFICE_SUPPLY', mode: 'PDF_TEXT', handler: '十一层前台' });
+    expect(task.result?.warnings).toEqual(['第 12 行未识别到数量，请对照原件确认']);
+    expect(task.draft?.items.map((item) => item.itemName)).toEqual(['文件袋1', '文件袋2']);
   });
 
   it('retains a successful PDF page and falls back only for the failed page', async () => {
@@ -160,6 +218,9 @@ describe('AI primary original recognition', () => {
     llm.chat.mockResolvedValueOnce(changed);
     await imports.retry(task.id, 'ai', [1]);
     const retried = await settle(task.id);
+    // 重试只带定位所需的字段，不带来源、坐标与置信度
+    expect(JSON.parse(llm.chat.mock.calls.at(-1)![0].messages[1].content).existingRows).toEqual([
+      { lineId, itemName: '原件物品1', spec: 'A4', quantity: 8, unit: '包' }]);
     expect(retried.draft?.items[0]).toMatchObject({ quantity: 11, spec: '人工规格' });
     expect(retried.result?.items[0].quantity).toBe(8);
     await expect(prisma.$transaction((tx) => imports.validateConfirmation(tx, {

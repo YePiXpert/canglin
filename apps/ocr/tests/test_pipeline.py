@@ -9,8 +9,12 @@ class Page:
     width = 600
     height = 800
     images = []
+    edges = []
     def __init__(self, text='', rows=None): self.text, self.rows = text, rows
     def extract_text(self): return self.text
+    def extract_words(self, **_):
+        return [{'text': t, 'x0': 50 * j, 'x1': 50 * j + 40, 'top': 100 + 12 * i, 'bottom': 110 + 12 * i}
+                for i, line in enumerate(self.text.splitlines()) for j, t in enumerate(line.split())]
     def find_tables(self):
         return [SimpleNamespace(bbox=(0,100,600,400),extract=lambda:self.rows)] if self.rows else []
     def filter(self, predicate): return Page('流水号：OA-1234')

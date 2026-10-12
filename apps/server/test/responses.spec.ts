@@ -4,7 +4,7 @@ const opts = {
   apiKey: 'test-secret',
   baseUrl: 'https://provider.example/v1',
   model: 'test-gpt',
-  messages: [{ role: 'user' as const, content: 'extract', image: 'data:image/png;base64,AA==' }],
+  messages: [{ role: 'user' as const, content: 'extract', images: ['data:image/png;base64,AA=='] }],
 };
 afterEach(() => vi.unstubAllGlobals());
 function result(
@@ -49,6 +49,61 @@ it('uses Responses image input, strict schema and no remote storage', async () =
   expect(body.input[0].content[1].type).toBe('input_image');
   expect(response.content).toBe('{"quantity":null}');
   expect(response.usage).toEqual({ input: 10, output: 20 });
+});
+function failure(status: number, message: string, param: string | null = null) {
+  return new Response(JSON.stringify({ error: { message, type: 'invalid_request_error', param, code: null } }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+function bodies(fetch: ReturnType<typeof vi.fn>) {
+  return fetch.mock.calls.map((call) => JSON.parse((call as unknown as [string, RequestInit])[1].body as string));
+}
+it('sends several images of one page in order within one user message', async () => {
+  const fetch = vi.fn(async () => result());
+  vi.stubGlobal('fetch', fetch);
+  await new LlmClient().chat({ ...opts, messages: [{ role: 'user', content: 'page', images: ['data:a', 'data:b'] }] });
+  expect(bodies(fetch)[0].input[0].content.map((c: { type: string; image_url?: string }) => c.image_url ?? c.type)).toEqual([
+    'input_text', 'data:a', 'data:b',
+  ]);
+});
+it('writes temperature and reasoning effort into the request', async () => {
+  const fetch = vi.fn(async () => result());
+  vi.stubGlobal('fetch', fetch);
+  await new LlmClient().chat({ ...opts, temperature: 0, reasoningEffort: 'low' });
+  expect(bodies(fetch)[0]).toMatchObject({ temperature: 0, reasoning: { effort: 'low' } });
+});
+it.each([
+  ['temperature', "Unsupported parameter: 'temperature' is not supported with this model.", 'temperature'],
+  ['reasoning', '当前模型不支持 reasoning.effort 参数', null],
+])('drops a rejected %s once, resends and reports it', async (param, message, field) => {
+  const fetch = vi.fn().mockResolvedValueOnce(failure(400, message, field)).mockResolvedValue(result());
+  vi.stubGlobal('fetch', fetch);
+  const onRejected = vi.fn();
+  const response = await new LlmClient().chat({ ...opts, temperature: 0, reasoningEffort: 'low', onRejected });
+  expect(response.content).toBe('{"quantity":null}');
+  const [first, second] = bodies(fetch);
+  expect(param in first && !(param in second)).toBe(true);
+  expect(onRejected).toHaveBeenCalledWith([param]);
+});
+it('resends a rejected parameter only once and does not retry other 400 errors', async () => {
+  const twice = vi.fn(async () => failure(400, 'temperature is not supported'));
+  vi.stubGlobal('fetch', twice);
+  await expect(new LlmClient().chat({ ...opts, temperature: 0 })).rejects.toThrow('400');
+  expect(twice).toHaveBeenCalledTimes(2);
+  const other = vi.fn(async () => failure(400, 'image too large'));
+  vi.stubGlobal('fetch', other);
+  await expect(new LlmClient().chat({ ...opts, temperature: 0 })).rejects.toThrow('400');
+  expect(other).toHaveBeenCalledTimes(1);
+});
+it('explains outputs cut off by the token limit', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    id: 'resp_1', object: 'response', status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [],
+    usage: { input_tokens: 10, output_tokens: 12000, total_tokens: 12010 },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+  const error = await new LlmClient().chat(opts).catch((e) => e);
+  expect(error.message).toBe('模型输出超过上限，请减少单页行数或拆分页面');
+  expect(error.metadata).toMatchObject({ incompleteReason: 'max_output_tokens', usage: { input: 10, output: 12000 } });
 });
 it('rejects truncated outputs instead of applying their JSON', async () => {
   vi.stubGlobal(

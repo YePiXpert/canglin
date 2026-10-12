@@ -67,4 +67,16 @@ def test_pdf_text_table_retains_units_specs_and_integer_prices():
     items = rows_from_table([['物品名称', '物品规格', '申请数量', '物品单位', '成交单价'],
                             ['签字笔', '黑色', '2', '支', '3'],
                             ['签字笔', '蓝色', '4', '支', '0']])
-    assert [(item['spec'], item['unit'], item['unitPrice']) for item in items] == [('黑色', '支', 3), ('蓝色', '支', 0)]
+    # 0 与 0.00 是未填写，不是单价
+    assert [(item['spec'], item['unit'], item['unitPrice']) for item in items] == [('黑色', '支', 3), ('蓝色', '支', None)]
+
+
+def test_pdf_text_table_reads_notes_amounts_and_quantities_with_units():
+    items = rows_from_table([['序号', '物品名称', '数量', '单价', '金额', '备注'],
+                            ['1', '光盘', '50', '', '', '50张'],
+                            ['2', '文件夹', '3个', '2.50', '7.50', 'https://item.jd.com/1.html'],
+                            ['3', '墨盒', '6', '', '', '三种型号各两个']])
+    assert [(i['quantity'], i['unit'], i['unitPrice'], i['amount'], i['purchaseLink'], i['spec']) for i in items] == [
+        (50, '张', None, None, None, None), (3, '个', 2.5, 7.5, 'https://item.jd.com/1.html', None),
+        (6, None, None, None, None, '三种型号各两个')]
+    assert items[2]['_warnings'] == ['第 3 行备注「三种型号各两个」未能解释为单位，请核对是否需要拆行']

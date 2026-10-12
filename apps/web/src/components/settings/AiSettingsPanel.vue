@@ -8,13 +8,14 @@ import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Panel from '@/components/ui/Panel.vue';
+import Select from '@/components/ui/Select.vue';
 import Switch from '@/components/ui/Switch.vue';
 import SettingRow from './SettingRow.vue';
 import { aiApi } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
-import type { AiConfigView } from '@canglin/shared';
+import type { AiConfigView, ReasoningSetting } from '@canglin/shared';
 
 const props = defineProps<{
   /** 设置页 load() 读到的配置（读取失败为 null）；每次 load 都是新对象，非空时覆盖表单 */
@@ -30,7 +31,17 @@ const aiForm = reactive({
   model: '',
   semanticSearch: true,
   autoImport: false,
+  reasoningEffort: 'auto' as ReasoningSetting,
 });
+/** 推理强度：「自动」按用途取值；服务拒绝的参数会自动去掉重发，之后不再发送 */
+const reasoningOptions: { label: string; value: ReasoningSetting }[] = [
+  { label: '自动（识别低、问答中）', value: 'auto' },
+  { label: '不发送', value: 'off' },
+  { label: '最低', value: 'minimal' },
+  { label: '低', value: 'low' },
+  { label: '中', value: 'medium' },
+  { label: '高', value: 'high' },
+];
 const aiCapabilities = ref<AiConfigView['capabilities']>();
 /** 识别检测通过 = 图片输入与结构化输出都可用 */
 const aiCapabilitiesOk = computed(() => !!aiCapabilities.value?.image && !!aiCapabilities.value?.structured);
@@ -100,6 +111,7 @@ watch(
       aiForm.model = ai.model;
       aiForm.semanticSearch = ai.semanticSearch;
       aiForm.autoImport = ai.autoImport ?? false;
+      aiForm.reasoningEffort = ai.reasoningEffort ?? 'auto';
       applyAiView(ai);
     }
   },
@@ -122,6 +134,7 @@ function aiPayload() {
     semanticSearch: aiForm.semanticSearch,
     protocol: 'responses' as const,
     autoImport: aiForm.autoImport,
+    reasoningEffort: aiForm.reasoningEffort,
     // 留空 = 保留已保存的 Key（服务端语义）
     ...(aiForm.apiKey.trim() ? { apiKey: aiForm.apiKey.trim() } : {}),
   };
@@ -272,6 +285,16 @@ async function testAi(): Promise<void> {
           >检测连接</Button
         >
       </SettingRow>
+
+      <Disclosure chevron="end" :chevron-size="16" summary="高级配置" summary-class="px-5 py-3.5 text-[13.5px] font-medium text-ink hover:bg-surface-2/40">
+        <SettingRow
+          label="推理强度"
+          description="识别与问答请求附带的推理强度；服务不接受时会自动去掉该参数重发，之后不再发送。「不发送」时也不带温度。"
+          class="pt-0"
+        >
+          <Select v-model="aiForm.reasoningEffort" :options="reasoningOptions" size="sm" class="w-52" />
+        </SettingRow>
+      </Disclosure>
 
       <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
         <p class="text-meta">修改连接、模型或开关后，保存才会生效。</p>

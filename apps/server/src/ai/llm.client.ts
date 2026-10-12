@@ -10,7 +10,8 @@ import type {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
-  image?: string;
+  /** data URL；同一条用户消息里的多张图按顺序发送（长截图分段） */
+  images?: string[];
   responseItems?: ResponseOutputItem[];
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
@@ -28,10 +29,15 @@ export interface ChatCallOptions {
   jsonMode?: boolean;
   schema?: Record<string, unknown>;
   temperature?: number;
+  reasoningEffort?: ReasoningEffort;
+  /** 服务以 400 拒绝 temperature / reasoning 时，去掉后重发一次，并把被拒的参数告诉调用方 */
+  onRejected?: (params: RejectableParam[]) => Promise<void> | void;
   maxTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type RejectableParam = 'temperature' | 'reasoning';
 export interface ChatCompletionResult {
   content: string | null;
   toolCalls: { id: string; name: string; args: unknown }[];
@@ -39,14 +45,19 @@ export interface ChatCompletionResult {
   usage?: { input: number; output: number };
   requestId?: string;
 }
+type CallMetadata = Pick<ChatCompletionResult, 'usage' | 'requestId'> & { incompleteReason?: string };
 export class AiResponseError extends ServiceUnavailableException {
   constructor(
     message: string,
     readonly kind: string,
-    readonly metadata?: Pick<ChatCompletionResult, 'usage' | 'requestId'>,
+    readonly metadata?: CallMetadata,
   ) {
     super(message);
   }
+}
+/** 400 的报错里点名了这个参数（OpenAI 写在 param 与 message，第三方服务多半只写在 message） */
+function mentions(error: InstanceType<typeof OpenAI.APIError>, param: RejectableParam) {
+  return [error.message, error.param, JSON.stringify(error.error ?? '')].join(' ').toLowerCase().includes(param);
 }
 /** Strict output contracts require all properties; formerly optional fields become nullable. */
 export function strictSchema(raw: Record<string, unknown>): Record<string, unknown> {
@@ -135,12 +146,12 @@ export class LlmClient {
           });
         continue;
       }
-      if (message.image)
+      if (message.images?.length)
         input.push({
           role: 'user',
           content: [
             { type: 'input_text', text: message.content ?? '' },
-            { type: 'input_image', image_url: message.image, detail: 'high' },
+            ...message.images.map((url) => ({ type: 'input_image' as const, image_url: url, detail: 'high' as const })),
           ],
         });
       else input.push({ role: message.role, content: message.content ?? '' });
@@ -150,6 +161,8 @@ export class LlmClient {
       input,
       store: false,
       max_output_tokens: opts.maxTokens ?? 4096,
+      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+      ...(opts.reasoningEffort ? { reasoning: { effort: opts.reasoningEffort } } : {}),
       ...(opts.tools?.length
         ? {
             tools: opts.tools.map((t) => ({
@@ -176,8 +189,17 @@ export class LlmClient {
           ? { text: { format: { type: 'json_object' as const } } }
           : {}),
     };
-    for (let attempt = 0; ; attempt++) {
-      let metadata: Pick<ChatCompletionResult, 'usage' | 'requestId'> | undefined;
+    const rejected: RejectableParam[] = [];
+    let transientRetried = false;
+    const report = async () => {
+      try {
+        if (rejected.length) await opts.onRejected?.(rejected);
+      } catch {
+        /* remembering a rejected parameter is best effort; the call result matters more */
+      }
+    };
+    for (;;) {
+      let metadata: CallMetadata | undefined;
       try {
         const response = await client.responses.create(body, { signal: opts.signal });
         metadata = {
@@ -191,14 +213,18 @@ export class LlmClient {
               : undefined,
           requestId: response._request_id ?? response.id,
         };
-        if (response.status !== 'completed')
+        if (response.status !== 'completed') {
+          const reason = response.incomplete_details?.reason;
           throw new AiResponseError(
-            response.status === 'incomplete'
-              ? '模型输出被截断，请重试或减少单页内容'
-              : '模型未完成响应',
+            response.status !== 'incomplete'
+              ? '模型未完成响应'
+              : reason === 'max_output_tokens'
+                ? '模型输出超过上限，请减少单页行数或拆分页面'
+                : '模型输出被截断，请重试或减少单页内容',
             'INCOMPLETE',
-            metadata,
+            { ...metadata, incompleteReason: reason },
           );
+        }
         if (
           response.output.some(
             (i) => i.type === 'message' && i.content.some((c) => c.type === 'refusal'),
@@ -208,6 +234,7 @@ export class LlmClient {
         const toolCalls = response.output
           .filter((i) => i.type === 'function_call')
           .map((i) => ({ id: i.call_id, name: i.name, args: JSON.parse(i.arguments) as unknown }));
+        await report();
         return {
           content: response.output_text || null,
           toolCalls,
@@ -216,15 +243,30 @@ export class LlmClient {
           requestId: response._request_id ?? response.id,
         };
       } catch (error) {
-        if (error instanceof AiResponseError) throw error;
+        if (error instanceof AiResponseError) {
+          await report();
+          throw error;
+        }
+        if (!rejected.length && error instanceof OpenAI.APIError && error.status === 400) {
+          const unsupported = (['temperature', 'reasoning'] as const).filter(
+            (param) => param in body && mentions(error, param),
+          );
+          if (unsupported.length) {
+            for (const param of unsupported) delete body[param];
+            rejected.push(...unsupported);
+            continue;
+          }
+        }
         if (
-          attempt === 0 &&
+          !transientRetried &&
           error instanceof OpenAI.APIError &&
           [429, 500, 502, 503].includes(error.status ?? 0)
         ) {
+          transientRetried = true;
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
         }
+        await report();
         const reason =
           error instanceof OpenAI.APIError
             ? `服务返回 ${error.status ?? '连接错误'}（未自动重发不确定请求）`

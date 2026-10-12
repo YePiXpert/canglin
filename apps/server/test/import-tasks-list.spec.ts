@@ -35,7 +35,7 @@ const local = {
 const ocr = {
   inspect: vi.fn(async () => ({ pageCount: 1 })),
   parse: vi.fn(async () => local),
-  page: vi.fn(async () => Buffer.from('image')),
+  page: vi.fn(async () => ({ bytes: Buffer.from('image'), mime: 'image/png' })),
 };
 const llm = {
   chat: vi.fn(async () => ({ content: '{}', toolCalls: [] })),

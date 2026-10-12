@@ -58,9 +58,14 @@ export const parsedItemSchema = z.object({
   quantity: z.number().finite().nullable(),
   unit: z.string().max(16).nullish(),
   unitPrice: z.number().finite().nonnegative().nullish(),
+  /** 原件上的金额（预计总价）；只用于与数量×单价交叉校验，不入账 */
+  amount: z.number().finite().nonnegative().nullish(),
   purchaseLink: z.string().trim().max(500).nullish(),
   source: sourceSchema.optional(),
 });
+/** 已识别的 OA 表单模板；GENERIC 为其他版式 */
+export const templateTypeSchema = z.enum(['OFFICE_SUPPLY', 'FIXED_ASSET', 'GENERIC']);
+export type TemplateType = z.infer<typeof templateTypeSchema>;
 export const parsePageSchema = z.object({
   page: z.number().int().positive(),
   status: z.enum(['PENDING', 'RUNNING', 'DONE', 'FAILED']),
@@ -74,6 +79,7 @@ export const parseResultSchema = z.object({
   department: z.string().optional(),
   handler: z.string().optional(),
   requestDate: z.string().optional(),
+  templateType: templateTypeSchema.optional(),
   items: z.array(parsedItemSchema),
   warnings: z.array(z.string()),
   pages: z.array(parsePageSchema).optional(),
@@ -154,8 +160,11 @@ export const aiConfigSchema = z.object({
   inputPrice: z.number().nonnegative().nullish(),
   outputPrice: z.number().nonnegative().nullish(),
   monthlyBudget: z.number().positive().nullish(),
+  /** 推理强度：auto 按用途（识别 low、问答 medium），off 不发送 reasoning 与 temperature */
+  reasoningEffort: z.enum(['auto', 'off', 'minimal', 'low', 'medium', 'high']).optional(),
 });
 export type AiConfigInput = z.infer<typeof aiConfigSchema>;
+export type ReasoningSetting = NonNullable<AiConfigInput['reasoningEffort']>;
 
 /** GET 返回的配置视图：不回传 apiKey 明文 */
 export interface AiConfigView {
@@ -169,6 +178,7 @@ export interface AiConfigView {
   inputPrice?: number | null;
   outputPrice?: number | null;
   monthlyBudget?: number | null;
+  reasoningEffort?: ReasoningSetting;
   capabilities?: {
     checkedAt: string;
     text: boolean;

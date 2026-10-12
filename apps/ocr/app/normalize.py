@@ -36,7 +36,8 @@ def parse_date(text: str) -> str | None:
 
 
 # 常见计数单位（用于「5个」「3盒」这类写法）
-UNIT_RE = r"(个|只|支|把|盒|包|箱|本|册|瓶|罐|提|刀|件|套|台|张|条|根|块|卷|桶|袋|叠|令|贴|枚|副|对|双|打|捆|匝|盒装|筒|颗|粒|份|册数)"
+UNIT_RE = r"(个|只|支|把|盒|包|箱|本|册|瓶|罐|提|刀|件|套|台|张|条|根|块|卷|桶|袋|叠|令|贴|枚|副|对|双|打|捆|匝|盒装|筒|颗|粒|份|册数|盘)"
+CN_DIGITS = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
 
 QTY_TOKEN_RE = re.compile(rf"(?<![A-Za-z\d.])(\d+(?:\.\d+)?)(?:\s*{UNIT_RE})?(?![%\d])")
 PRICE_LABELED_RE = re.compile(r"(?:单价|价格|金额)[:：]?\s*[¥￥]?\s*(\d+(?:\.\d{1,4})?)")
@@ -80,6 +81,32 @@ def parse_price(text: str) -> float | None:
         value = float(text.strip().removesuffix("元").strip())
         return value if 0 <= value <= 1_000_000 else None
     return None
+
+
+def parse_number(text: str | None) -> float | None:
+    """单元格里的数字（数量、单价、金额）：全角转半角、去千分位与「¥」「元」，"10.0" 记 10；不是纯数字返回 None。"""
+    value = re.sub(r"\s+", "", to_halfwidth(text or "")).replace(",", "").strip("¥￥元")
+    return float(value) if re.fullmatch(r"\d+(?:\.\d+)?", value) else None
+
+
+def parse_unit_note(note: str, quantity: float | None) -> str | None:
+    """备注写成「50张」「一个」且数字等于数量时，取其中的单位。"""
+    text = to_halfwidth(note).strip()
+    if quantity is None:
+        return None
+    m = re.fullmatch(rf"(\d+(?:\.\d+)?)\s*{UNIT_RE}", text)
+    if m and float(m.group(1)) == quantity:
+        return m.group(2)
+    m = re.fullmatch(rf"([一二两三四五六七八九十]){UNIT_RE}", text)
+    if m and CN_DIGITS[m.group(1)] == quantity:
+        return m.group(2)
+    return None
+
+
+def unit_in_name(name: str) -> str | None:
+    """名称末尾的「(单位：包)」「（单位:个）」。"""
+    m = re.search(r"[(（]\s*单位\s*[:：]\s*([^()（）\s]{1,4})\s*[)）]\s*$", name)
+    return m.group(1) if m else None
 
 
 def extract_url(text: str) -> str | None:

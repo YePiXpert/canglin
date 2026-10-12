@@ -87,7 +87,7 @@ export class AiController {
             role: 'user',
             content:
               'Name the left and right colors. Reply RED_BLUE if left is red and right is blue.',
-            image: capabilityImage(),
+            images: [capabilityImage()],
           },
         ],
       });

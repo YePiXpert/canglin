@@ -2,10 +2,13 @@ from app.normalize import (
     clean_item_name,
     extract_url,
     parse_date,
+    parse_number,
     parse_price,
     parse_quantity,
     parse_unit,
+    parse_unit_note,
     to_halfwidth,
+    unit_in_name,
 )
 
 
@@ -96,3 +99,34 @@ class TestCleanItemName:
 
     def test_strips_index_prefix(self):
         assert clean_item_name("1. 订书机") == "订书机"
+
+
+class TestCellNumbers:
+    def test_decimal_quantity_and_separators(self):
+        assert parse_number("10.0") == 10
+        assert parse_number("１，２２０．００") == 1220
+        assert parse_number("¥610.00") == 610
+        assert parse_number("12.5元") == 12.5
+
+    def test_not_a_number(self):
+        for text in ("", None, "若干", "10个", "1O"):
+            assert parse_number(text) is None
+
+
+class TestUnitNotes:
+    def test_note_matching_quantity(self):
+        assert parse_unit_note("50张", 50) == "张"
+        assert parse_unit_note("5 盒", 5) == "盒"
+        assert parse_unit_note("一个", 1) == "个"
+        assert parse_unit_note("两盒", 2) == "盒"
+
+    def test_note_not_matching_quantity_is_not_a_unit(self):
+        assert parse_unit_note("10个", 5) is None
+        assert parse_unit_note("一个", 2) is None
+        assert parse_unit_note("50张", None) is None
+        assert parse_unit_note("三种型号各两个", 6) is None
+
+    def test_unit_written_in_name(self):
+        assert unit_in_name("牛皮纸袋 大号(单位：包)") == "包"
+        assert unit_in_name("档案盒（单位:个）") == "个"
+        assert unit_in_name("曲别针（10盒）") is None
