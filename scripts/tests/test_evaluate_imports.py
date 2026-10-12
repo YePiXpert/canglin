@@ -64,6 +64,17 @@ class EvaluateImportsTests(unittest.TestCase):
         # 只有基线、没有新变体时不能算效果成立
         self.assertFalse(evaluator.evaluate(samples, 'holdout', ['old_parser'], 'old_parser')['accuracyGate'])
 
+    def test_legacy_array_manifests_keep_their_variant_roles(self):
+        evaluator = load('evaluate-imports')
+        row = {'sourceRowId': 'r1', 'itemName': '文件袋', 'unit': '个', 'spec': None, 'quantity': 20, 'unitPrice': None}
+        samples = samples_for(row, ('new_ocr_gpt', 'old', 'new_ocr', 'fixed_old'))  # 清单里的顺序与历史顺序不同
+        for sample in samples:
+            sample['runs']['new_ocr_gpt']['humanEdits'], sample['runs']['fixed_old']['humanEdits'] = 1, 2
+            sample['runs']['old']['rows'][0]['itemName'] = '旧解析器读错的品名'  # 参照变体可以比基线差
+        report = evaluator.evaluate(samples, 'holdout')
+        self.assertEqual((report['baseline'], report['final']), ('fixed_old', 'new_ocr_gpt'))
+        self.assertTrue(report['effectAccepted'])
+
     def test_command_line_reads_object_manifest_and_overrides(self):
         row = {'sourceRowId': 'r1', 'itemName': '文件袋', 'unit': '个', 'spec': None, 'quantity': 20, 'unitPrice': None}
         manifest = {'variants': list(VARIANTS), 'baseline': 'fixed_old', 'samples': samples_for(row)}

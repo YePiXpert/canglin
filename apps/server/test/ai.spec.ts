@@ -323,6 +323,15 @@ describe('工具结果压缩', () => {
     expect(JSON.parse(compactToolResult({ blob: 'x'.repeat(20_000) }))).toEqual({
       truncated: true, hint: '结果过大，请缩小日期范围或指定物品、供应商后再查' });
   });
+
+  it('报表结果超限时删分组明细、保留汇总金额', () => {
+    const report = { grossPurchaseAmount: '12345.67', netPurchaseAmount: '12000.00',
+      recipients: Array.from({ length: 400 }, (_, i) => ({ recipient: `领用人${i}`, department: '行政部', itemName: `物品${i}`, quantity: '1' })) };
+    const value = JSON.parse(compactToolResult(report));
+    expect(value).toMatchObject({ grossPurchaseAmount: '12345.67', netPurchaseAmount: '12000.00', truncated: true });
+    expect(value.recipients.length).toBeGreaterThan(0);
+    expect(value.recipients.length).toBeLessThan(400);
+  });
 });
 
 describe('AI 调用参数', () => {
@@ -340,7 +349,9 @@ describe('AI 调用参数', () => {
     expect(await service.params({ ...cfg, model: 'another-model' }, 'import', 0)).toMatchObject({ temperature: 0 });
     // 「不发送」：两者都不带；固定强度对所有用途生效
     expect(await service.params({ ...cfg, reasoningEffort: 'off' }, 'ask', 0)).toEqual({});
-    expect(await service.params({ ...cfg, reasoningEffort: 'high' }, 'search')).toMatchObject({ reasoningEffort: 'high' });
+    expect(await service.params({ ...cfg, reasoningEffort: 'high' }, 'ask')).toMatchObject({ reasoningEffort: 'high' });
+    // 搜索只有 512 个输出 token：固定强度也不发推理
+    expect((await service.params({ ...cfg, reasoningEffort: 'high' }, 'search')).reasoningEffort).toBeUndefined();
     await prisma().setting.deleteMany({ where: { key: 'aiParamSupport' } });
   });
 
@@ -400,6 +411,25 @@ describe('AI 语义搜索', () => {
   beforeAll(async () => {
     // 品名字面包含「打印纸」：区分原词命中与同义词命中
     await seedRequest('激光打印纸（A3）');
+  });
+
+  it('词表变化后同一搜索词重新扩展，不沿用旧的扩展结果', async () => {
+    const prisma = ctx.app.get(PrismaService);
+    const chat = { calls: 0 };
+    const llm = { chat: async (opts: ChatCallOptions) => {
+      chat.calls++;
+      expect(opts.messages[0].content).toContain('不要选择只是同类别但明显不同的物品');
+      return { content: '{"terms":[]}', toolCalls: [] };
+    } };
+    const config = { semanticSearchEnabled: async () => true, getConfig: async () => ({}), params: async () => ({}) };
+    const search = new AiSearchService(prisma, config as never, llm as never);
+    await search.synonyms('缓存测试词');
+    await search.synonyms('缓存测试词');
+    expect(chat.calls).toBe(1);
+    await prisma.catalogProduct.create({ data: { name: '词表新增品名', specification: '', unit: '个' } });
+    (search as unknown as { vocabCache: { exp: number } }).vocabCache.exp = 0; // 词表缓存到期后重新读库
+    await search.synonyms('缓存测试词');
+    expect(chat.calls).toBe(2);
   });
 
   it('词表来自申请明细与物品目录：申请品名按出现次数降序，去重', async () => {

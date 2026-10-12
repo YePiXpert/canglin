@@ -139,6 +139,36 @@ def test_page_keeps_screenshots_png_and_pdf_pages_render(client, auth_headers):
     assert client.post("/page?page=2", files={"file": ("a.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers).status_code == 422
 
 
+def _long_screenshot(width=400, rows=30, gap=30) -> bytes:
+    """白底长截图：每隔 gap 像素一行深色「文字」条，行间是空白带。"""
+    from PIL import Image, ImageDraw
+    image = Image.new("RGB", (width, rows * gap), "white")
+    draw = ImageDraw.Draw(image)
+    for i in range(rows):
+        draw.rectangle((10, i * gap + 8, width - 10, i * gap + 20), fill="black")
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_page_strips_cut_tall_screenshots_only_at_blank_bands(client, auth_headers):
+    import base64
+    from PIL import Image
+    res = client.post("/page?page=1&strips=1", files={"file": ("long.png", _long_screenshot(), "image/png")}, headers=auth_headers)
+    body = res.json()
+    assert res.status_code == 200 and body["mime"] == "image/png" and len(body["images"]) == 2
+    strips = [Image.open(io.BytesIO(base64.b64decode(i))) for i in body["images"]]
+    assert sum(s.size[1] for s in strips) == 900  # 不重叠、不丢像素
+    for strip in strips:  # 切口落在空白带：每段首尾一行都是白的
+        gray = strip.convert("L")
+        assert min(gray.getpixel((x, 0)) for x in range(400)) > 200
+        assert min(gray.getpixel((x, strip.size[1] - 1)) for x in range(400)) > 200
+    short = client.post("/page?page=1&strips=1", files={"file": ("s.png", _image((400, 500), "PNG"), "image/png")}, headers=auth_headers)
+    assert len(short.json()["images"]) == 1
+    very_long = client.post("/page?page=1&strips=1", files={"file": ("v.png", _long_screenshot(rows=80), "image/png")}, headers=auth_headers)
+    assert len(very_long.json()["images"]) == 3
+
+
 def test_page_preprocess_switch_keeps_png(client, auth_headers, monkeypatch):
     monkeypatch.setattr(pipeline, "PAGE_PREPROCESS", False)
     res = client.post("/page?page=1", files={"file": ("photo.jpg", _image((300, 200), "JPEG"), "image/jpeg")}, headers=auth_headers)

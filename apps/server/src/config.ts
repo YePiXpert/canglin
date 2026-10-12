@@ -31,6 +31,8 @@ export const config = {
     model: process.env.LLM_MODEL || 'gpt-6-sol',
   },
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 30) * 1024 * 1024,
+  /** AI_IMAGE_STRIPS=1：长截图按空白带切成最多 3 段、作为同一页的多张图识别（评测通过前默认关闭） */
+  aiImageStrips: process.env.AI_IMAGE_STRIPS === '1',
   session: {
     cookieName: 'pl_session',
     ttlSeconds: 30 * 60,

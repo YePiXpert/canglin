@@ -20,8 +20,11 @@ const ctx = inject(importTaskKey);
 if (!ctx) throw new Error('ImportDraftEditor 只能放在 ImportView 里：缺少 useImportTask() 提供的上下文（importTaskKey）');
 const { mobileTab, fields, labels, form, loaded, lines, selected, stackedLabel, suggestions, reviewedAi } = ctx;
 const { line, focusLine, needsReview, localValue, applyLocal, suggestion, apply, acknowledge, addSuggestion } = ctx;
+const { catalogMatch, applyCatalog } = ctx;
 /** 只在 ImportView 的 v-else-if="task" 里渲染：task 变回 null 时父组件先更新、卸载本组件，所以收窄为非空 */
 const task = ctx.task as Ref<ImportTaskView>;
+/** 本地 OCR 行最低置信度低于 0.6（与 OCR 服务的告警阈值一致）；文本层与 AI 行没有置信度 */
+const lowConfidence = (l: { source?: { confidence?: number | null } | null }) => (l.source?.confidence ?? 1) < 0.6;
 </script>
 
 <template>
@@ -80,7 +83,7 @@ const task = ctx.task as Ref<ImportTaskView>;
           class="transition-colors duration-150 @max-xl:block"
           :class="[
             i > 0 ? 'border-t border-line' : '',
-            selected === l.lineId ? 'bg-primary-soft' : '',
+            selected === l.lineId ? 'bg-primary-soft' : lowConfidence(l) ? 'bg-amber-soft/50' : '',
           ]"
           @focusin="focusLine(l)"
         >
@@ -130,6 +133,7 @@ const task = ctx.task as Ref<ImportTaskView>;
                     tone="amber"
                     >请核对同名明细的规格。</Badge
                   >
+                  <Badge v-if="lowConfidence(l)" tone="amber">识别置信度低，请对照原件。</Badge>
                 </div>
                 <Button
                   variant="danger-ghost"
@@ -142,6 +146,20 @@ const task = ctx.task as Ref<ImportTaskView>;
               <Notice v-if="needsReview(l)" variant="inline" size="sm" class="mt-2">
                 AI 建议的品名、规格、单位或数量与首次识别结果不同，请展开建议核对。
               </Notice>
+              <div
+                v-if="catalogMatch(l)"
+                class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs leading-5 text-muted"
+              >
+                <span class="flex min-w-0 items-start gap-1.5">
+                  <Icon name="sparkles" :size="13" class="mt-[3px] shrink-0" />
+                  <span
+                    >匹配到已有物品：<span class="text-text">{{ catalogMatch(l)!.name }}</span
+                    ><template v-if="catalogMatch(l)!.spec">（{{ catalogMatch(l)!.spec }}）</template
+                    ><template v-if="catalogMatch(l)!.unit"> · {{ catalogMatch(l)!.unit }}</template></span
+                  >
+                </span>
+                <Button size="sm" variant="secondary" @click="applyCatalog(l)">采用已有物品</Button>
+              </div>
               <Disclosure
                 class="mt-2 rounded-(--radius-control) bg-surface-2"
                 summary="识别依据与 AI 建议"

@@ -2,15 +2,18 @@
 """Compare independently annotated source-row IDs, never match by item name.
 
 The manifest is either a JSON array of samples, or an object {"variants": [...], "baseline": "...", "samples": [...]}.
-Variant names come from --variants, then the manifest's "variants", then the runs present in the samples; the
-baseline is --baseline, then the manifest's "baseline", then "fixed_old". The last variant is the final pipeline
-whose human review effort must improve on the baseline.
+Variant names come from --variants, then the manifest's "variants", then the runs present in the samples (in the
+order they first appear; the legacy names old, fixed_old, new_ocr, new_ocr_gpt keep their historical order); the
+baseline is --baseline, then the manifest's "baseline", then "fixed_old". Variants listed before the baseline are
+reference runs that only count towards completeness; variants after it are candidates that must not be worse than
+the baseline, and the last one is the final pipeline whose human review effort must improve on it.
 """
 import argparse
 import json
 from decimal import Decimal
 
 DEFAULT_BASELINE = 'fixed_old'
+LEGACY_VARIANTS = ('old', 'fixed_old', 'new_ocr', 'new_ocr_gpt')
 METRICS = ('missingRate', 'extraRate', 'numericErrorRate', 'nameErrorRate', 'unitErrorRate', 'specErrorRate')
 
 
@@ -25,8 +28,13 @@ def manifest_parts(manifest):
     return manifest['samples'], manifest.get('variants'), manifest.get('baseline')
 
 
+def inferred_variants(samples):
+    seen = list(dict.fromkeys(v for s in samples for v in s['runs']))
+    return list(LEGACY_VARIANTS) if set(seen) == set(LEGACY_VARIANTS) else seen
+
+
 def evaluate(samples, split, variants=None, baseline=DEFAULT_BASELINE):
-    variants = list(variants or sorted({v for s in samples for v in s['runs']}))
+    variants = list(variants or inferred_variants(samples))
     if baseline not in variants:
         raise ValueError(f'Baseline {baseline!r} is not one of the variants {variants}')
     selected = [s for s in samples if s['split'] == split]
@@ -68,7 +76,7 @@ def evaluate(samples, split, variants=None, baseline=DEFAULT_BASELINE):
                             'humanEdits': sum(edits) if len(edits) == len(selected) and edits else None,
                             'reviewSeconds': sum(seconds) if len(seconds) == len(selected) and seconds else None}
     base = reports[baseline]
-    candidates = [v for v in variants if v != baseline]
+    candidates = variants[variants.index(baseline) + 1:]
     final = reports[candidates[-1]] if candidates else base
     ready = all(r['complete'] for r in reports.values())
     accuracy = ready and bool(candidates) and all(

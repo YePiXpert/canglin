@@ -98,6 +98,9 @@ def test_labels_without_colon_and_handler_positions():
     assert fields["handler"] == "十一层前台"
     assert extract_fields(["经办人：张某（资产经营）"])["handler"] == "张某（资产经营）"
     assert "department" not in extract_fields(["部门领导意见：同意"])
+    # 没有冒号时，标签后面紧跟的是表格列名而不是部门
+    assert "department" not in extract_fields(["序号 品名 规格 数量 使用部门 备注"])
+    assert extract_fields(["需求部门 数量 单价"]).get("department") != "数量"
 
 
 def word(text, x0, top, height=7.5):
@@ -134,3 +137,8 @@ def test_cells_keep_note_text_besides_the_link_for_review():
     assert (linked["purchaseLink"], linked["note"]) == ("https://www.cemall.com.cn/goods/1", "买两包")
     assert item_from_cells({"name": "光盘", "qty": "50.0", "note": "50张"}, "第 1 行")["note"] == "50张"
     assert item_from_cells({"name": "纸", "qty": "1"}, "第 2 行")["note"] is None
+
+
+def test_zero_quantity_counts_as_not_filled_in():
+    item = item_from_cells({"name": "签字笔", "qty": "0"}, "第 1 行")
+    assert item["quantity"] is None

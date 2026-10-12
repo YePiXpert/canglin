@@ -56,6 +56,7 @@ const llm = {
           unitPrice: null,
           amount: null,
           purchaseLink: null,
+          catalogSuggestion: null,
         },
       ],
       warnings: [],

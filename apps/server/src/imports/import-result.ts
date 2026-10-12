@@ -42,23 +42,33 @@ export const aiPageSchema = z.object({
         unitPrice: z.number().nonnegative().nullable(),
         amount: z.number().nonnegative().nullable(),
         purchaseLink: z.string().trim().max(500).nullable(),
+        /** 与已有物品明显是同一物品时，原样给出目录里的那一条；只是建议，界面由用户决定是否采用 */
+        catalogSuggestion: z.object({ name: z.string(), spec: z.string().nullable(), unit: z.string().nullable() }).nullable(),
       }),
     )
     .max(100),
   warnings: z.array(z.string()).max(20),
 });
+export type CatalogEntry = { name: string; spec: string | null; unit: string | null };
 export type AiPage = z.infer<typeof aiPageSchema> & { page: number; mode?: 'RECOGNITION' | 'REVIEW' };
 /** AI 返回的内容不符合本次调用的约定（如审核模式增删了物理行）：按契约错误处理，该页回退本地结果 */
 export class AiContractError extends Error {}
 const HEADER_FIELDS = ['serialNumber', 'department', 'handler', 'requestDate'] as const;
 
-/** 服务端校验 AI 单页结果（原地修改）：日期不合法置空、空品名的行丢弃、rawText 回填、数量×单价与金额不符提示 */
-export function checkAiPage(parsed: z.infer<typeof aiPageSchema>) {
+/** 服务端校验 AI 单页结果（原地修改）：日期不合法置空；识别模式另外丢弃空品名的行、回填 rawText、提示数量×单价与金额不符 */
+export function checkAiPage(parsed: z.infer<typeof aiPageSchema>, review = false) {
   const warnings: string[] = [];
   const date = parsed.requestDate;
-  if (date && !(/^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().startsWith(date))) {
+  const time = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? Date.parse(`${date}T00:00:00Z`) : NaN;
+  // 13 月、0 日等无法解析，2 月 30 日之类会顺延：两种都不是原件上的日期
+  if (date && !(Number.isFinite(time) && new Date(time).toISOString().startsWith(date))) {
     warnings.push(`AI 返回的申请日期「${date}」不是有效的 YYYY-MM-DD，已置空，请对照原件`);
     parsed.requestDate = null;
+  }
+  if (review) {
+    // 审核模式的行、品名原文与数字都由 checkReview 按文本层核对，这里只校验日期
+    parsed.warnings.push(...warnings);
+    return;
   }
   parsed.items = parsed.items.filter((item, index) => {
     if (item.itemName) return true;
@@ -138,8 +148,9 @@ export function checkReview(page: number, parsed: z.infer<typeof aiPageSchema>, 
         warnings.push(`AI 读到${label}${name}为 ${item[field] ?? '空白'}，已保留文本层的 ${row[field] ?? '空白'}`);
     if ((item.purchaseLink ?? null) !== (row.purchaseLink ?? null))
       warnings.push(`AI 读到的${label}链接与文本层不同，已保留文本层的链接`);
-    return { ...item, rawText: row.source?.rawText ?? item.rawText, quantity: row.quantity,
-      unitPrice: row.unitPrice ?? null, amount: row.amount ?? null, purchaseLink: row.purchaseLink ?? null };
+    const rawText = row.source?.rawText ?? item.rawText;
+    return { ...item, rawText, itemName: item.itemName || rawText, spec: mergeSpecs(item.spec, row.spec),
+      quantity: row.quantity, unitPrice: row.unitPrice ?? null, amount: row.amount ?? null, purchaseLink: row.purchaseLink ?? null };
   });
   for (const field of HEADER_FIELDS) {
     const kept = header[field];
@@ -151,11 +162,46 @@ export function checkReview(page: number, parsed: z.infer<typeof aiPageSchema>, 
   parsed.warnings.push(...warnings);
 }
 
-/** 识别模式附带了文本层时（原地修改）：链接必须逐字出现在文本层里（去掉空白后比较），否则置空并提示，不猜测替换 */
-export function checkLinks(parsed: z.infer<typeof aiPageSchema>, textLayer: string) {
-  const flat = textLayer.replace(/\s+/g, '');
+/**
+ * 审核模式的规格：模型从品名拆出的规格在前，文本层规格列（规格型号、主要技术指标、生产厂家）的内容一律保留在后，
+ * 已经包含的片段不重复；超过 200 字截断。
+ */
+export function mergeSpecs(model: string | null | undefined, grid: string | null | undefined): string | null {
+  const parts = (value: string | null | undefined) => (value ?? '').split('；').map((p) => p.trim()).filter(Boolean);
+  const merged = parts(model);
+  for (const part of parts(grid)) if (!merged.some((m) => m.includes(part) || part.includes(m))) merged.push(part);
+  return merged.join('；').slice(0, 200) || null;
+}
+
+/** 品名归一建议（原地修改）：只接受与物品目录某一条完全相同的建议，其余置空 */
+export function checkCatalog(parsed: z.infer<typeof aiPageSchema>, catalog: CatalogEntry[]) {
+  const same = (a: string | null | undefined, b: string | null | undefined) => (a || null) === (b || null);
   for (const item of parsed.items) {
-    if (!item.purchaseLink || flat.includes(item.purchaseLink.replace(/\s+/g, ''))) continue;
+    const s = item.catalogSuggestion;
+    if (s && !catalog.some((c) => c.name === s.name && same(c.spec, s.spec) && same(c.unit, s.unit)))
+      item.catalogSuggestion = null;
+  }
+}
+
+/**
+ * 识别模式附带了文本层时（原地修改）：链接必须能由文本层里的片段按先后顺序拼出来，否则置空并提示，不猜测替换。
+ * 备注格里按字符换行的链接，片段之间夹着同一行其他格的文字，所以按片段而不是整段文字比较。
+ */
+export function checkLinks(parsed: z.infer<typeof aiPageSchema>, textLayer: string) {
+  const tokens = textLayer.split(/\s+/).filter(Boolean);
+  const present = (link: string) => {
+    const target = link.replace(/\s+/g, '');
+    return tokens.some((first, i) => {
+      if (!first.startsWith('http') || !target.startsWith(first)) return false;
+      let rest = target.slice(first.length);
+      // 同一格的续写总在下一条链接之前：遇到下一个链接开头就停，不把两条链接拼在一起
+      for (let j = i + 1; rest && j < tokens.length && !tokens[j].startsWith('http'); j++)
+        if (rest.startsWith(tokens[j]) && (tokens[j].length >= 4 || tokens[j] === rest)) rest = rest.slice(tokens[j].length);
+      return !rest;
+    });
+  };
+  for (const item of parsed.items) {
+    if (!item.purchaseLink || present(item.purchaseLink)) continue;
     parsed.warnings.push(`「${item.itemName}」的链接不在本页文本层中，已置空，请对照原件`);
     item.purchaseLink = null;
   }
@@ -168,8 +214,9 @@ export function finishResult(result: ParseResult) {
     Object.entries(FIELD_LABELS).filter(([field]) => result[field as keyof typeof FIELD_LABELS]).map(([, label]) => `未识别到${label}，请人工确认`),
   );
   result.warnings = [...new Set(result.warnings)].filter((w) => !found.has(w));
-  const modes = new Set(result.pages?.map((page) => page.mode));
+  // 审核页的页模式是 AI_REVIEW；整份结果仍按 AI_IMAGE 汇总，回退到旧版本时旧契约也能读取
+  const modes = new Set(result.pages?.map((page) => (page.mode === 'AI_REVIEW' ? 'AI_IMAGE' : page.mode)));
   if (modes.size > 1) result.mode = 'PDF_MIXED';
-  else for (const mode of ['AI_IMAGE', 'AI_REVIEW', 'IMAGE_OCR', 'PDF_TEXT', 'PDF_OCR'] as const)
+  else for (const mode of ['AI_IMAGE', 'IMAGE_OCR', 'PDF_TEXT', 'PDF_OCR'] as const)
     if (modes.has(mode)) result.mode = mode;
 }

@@ -51,11 +51,15 @@ export function compactToolResult(value: unknown, limit = TOOL_RESULT_LIMIT): st
   const compact = slim(value);
   if (JSON.stringify(compact).length <= limit) return JSON.stringify(compact);
   const result = (Array.isArray(compact) ? { items: compact } : compact) as Record<string, unknown>;
-  const key = ['items', 'products'].find((k) => Array.isArray(result[k]));
-  if (key) {
+  // 从最长的数组末尾删起（明细、库存、报表分组都适用），汇总字段保留
+  const lists = Object.values(result).filter((v): v is unknown[] => Array.isArray(v));
+  if (lists.length) {
     Object.assign(result, { truncated: true, hint: '缩小日期范围或减少 pageSize' });
-    const list = result[key] as unknown[];
-    while (list.length && JSON.stringify(result).length > limit) list.pop();
+    while (JSON.stringify(result).length > limit) {
+      const longest = lists.reduce((a, b) => (JSON.stringify(b).length > JSON.stringify(a).length ? b : a));
+      if (!longest.length) break;
+      longest.pop();
+    }
   }
   const json = JSON.stringify(result);
   return json.length <= limit

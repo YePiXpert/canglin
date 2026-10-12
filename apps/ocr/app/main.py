@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 import asyncio
+import base64
 from typing import Literal
 from fastapi.responses import Response
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 
 from .ocr import is_engine_ready, warmup, ENGINE_VERSION, MODEL_NAME
-from .pipeline import parse_dispatch, document_info, render_page
+from .pipeline import parse_dispatch, document_info, render_page, render_strips
 
 _parse_lock = asyncio.Semaphore(1)
 _render_lock = asyncio.Semaphore(1)
@@ -80,9 +81,13 @@ async def inspect(file: UploadFile = File(...)):
 
 
 @app.post("/page", dependencies=[Depends(verify_api_key)])
-async def page_image(page: int, file: UploadFile = File(...)):
+async def page_image(page: int, file: UploadFile = File(...), strips: bool = False):
+    """页图；strips=1 时把长截图在空白带处切成 1 到 3 段，返回 {"mime", "images": [base64, ...]}（自上而下）。"""
     try:
         async with _render_lock:
+            if strips:
+                images, mime = await asyncio.to_thread(render_strips, await uploaded(file), file.filename or "", page)
+                return {"mime": mime, "images": [base64.b64encode(image).decode() for image in images]}
             image, mime = await asyncio.to_thread(render_page, await uploaded(file), file.filename or "", page)
         return Response(image, media_type=mime)
     except Exception as error:

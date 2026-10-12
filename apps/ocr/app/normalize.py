@@ -43,7 +43,8 @@ QTY_TOKEN_RE = re.compile(rf"(?<![A-Za-z\d.])(\d+(?:\.\d+)?)(?:\s*{UNIT_RE})?(?!
 PRICE_LABELED_RE = re.compile(r"(?:单价|价格|金额)[:：]?\s*[¥￥]?\s*(\d+(?:\.\d{1,4})?)")
 PRICE_SYMBOL_RE = re.compile(r"[¥￥]\s*(\d+(?:\.\d{1,4})?)")
 PRICE_DECIMAL_RE = re.compile(r"(?<![\d.])(\d+\.\d{1,4})(?![\d])")
-URL_RE = re.compile(r"https?://[^\s，,；;）)、】\]]+")
+# 链接只取 ASCII 字符：格内换行直接拼接时，链接后面紧跟的「两盒」之类说明不会被并进链接
+URL_RE = re.compile(r"https?://[^\s，,；;）)、】\]\u0080-\uffff]+")
 
 
 def parse_quantity(text: str) -> float | None:

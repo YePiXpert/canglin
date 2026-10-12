@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from .reconstruct import fields_from_words, header_key, item_from_cells, template_type
+from .reconstruct import fields_from_words, item_from_cells, table_key, template_type
 
 MARGIN_TOP, MARGIN_BOTTOM = 30, 40  # 浏览器打印的页眉（print、Page x of y）与页脚（print.jsp 链接、打印日期）
 HEADER_BAND = 7  # 两行表头（规格/型号、生产/厂家）与锚点的纵向距离
@@ -44,13 +44,29 @@ def _text_lines(words: list[dict]) -> list[list[dict]]:
     return lines
 
 
+URL_TAIL_RE = re.compile(r"https?://\S*$")
+
+
 def _cell_text(words: list[dict]) -> str:
-    """同一行内的词用空格连接，行与行直接拼接：型号、链接、部门名在格内按字符换行。"""
-    return "".join(" ".join(w["text"] for w in sorted(line, key=lambda w: w["x0"])) for line in _text_lines(words))
+    """同一行内的词用空格连接，行与行直接拼接：型号、链接、部门名在格内按字符换行。
+
+    例外：上一行以链接结尾、这一行又不是链接的续写（含中文或空格，如「5盒」「两盒」）时加一个空格，不把说明并进链接。"""
+    text = ""
+    for line in _text_lines(words):
+        part = " ".join(w["text"] for w in sorted(line, key=lambda w: w["x0"]))
+        if text and URL_TAIL_RE.search(text) and re.search(r"[^\x21-\x7e]", part):
+            text += " "
+        text += part
+    return text
 
 
 def _number(text: str) -> bool:
     return bool(re.fullmatch(r"\d+(?:\.\d+)?", text.replace(",", "")))
+
+
+def _quantity_start(text: str) -> bool:
+    """数量格以数字开头（「10.0」「2箱」「2箱(24瓶)」）就是一条新物理行的起点。"""
+    return bool(re.match(r"\d+(?:\.\d+)?", text.replace(",", "")))
 
 
 def rebuild_from_grid(page, carry: dict | None = None, words: list[dict] | None = None) -> tuple[dict | None, dict | None]:
@@ -59,10 +75,12 @@ def rebuild_from_grid(page, carry: dict | None = None, words: list[dict] | None 
     结果为 None 表示网格重建不适用，由调用方走原有表格与逐行解析。状态记录模板、列定义与表格是否延续到下一页；
     已识别模板的文档里没有表格的页面（审批意见页）返回空明细，不再交给逐行解析产生假明细。"""
     words = page_words(page) if words is None else words
-    template = template_type("".join(w["text"] for w in words)) or (carry or {}).get("templateType")
+    titled = template_type("".join(w["text"] for w in words))
+    template = titled or (carry or {}).get("templateType")
     fields = fields_from_words(words)
     state: dict = {"templateType": template, "open": False}
-    keyed_words = [(w, header_key(w["text"])) for w in words]
+    # 表头先按整词认（物品名称、预计单价），认不出再按包含关系（商品名称、领用数量）
+    keyed_words = [(w, table_key(w["text"])) for w in words]
     anchor = next((w for w, key in keyed_words if key == "name" and any(
         k == "qty" and abs(o["top"] - w["top"]) < HEADER_BAND for o, k in keyed_words)), None)
     if anchor:
@@ -71,7 +89,9 @@ def rebuild_from_grid(page, carry: dict | None = None, words: list[dict] | None 
     elif carry and carry.get("open") and words:
         header, body_top = [], min(w["top"] for w in words) - 2
     elif template:
-        return state, {"items": [], "warnings": [], "templateType": template, **fields}
+        # 审批意见等续页没有表格属正常；带标题的页面认不出表头则要提示
+        warnings = ["未识别到明细表头，请人工补录并核对原件"] if titled else []
+        return state, {"items": [], "warnings": warnings, "templateType": template, **fields}
     else:
         return None, None
 
@@ -130,7 +150,7 @@ def rebuild_from_grid(page, carry: dict | None = None, words: list[dict] | None 
         cells = {key: _cell_text(ws) for key, ws in columns.items()}
         top = min(w["top"] for w in segment)
         height = max(w["bottom"] - w["top"] for w in segment)
-        new = re.fullmatch(r"\d+", cells.get("idx", "")) or _number(cells.get("qty", ""))
+        new = re.fullmatch(r"\d+", cells.get("idx", "")) or _quantity_start(cells.get("qty", ""))
         # 续行合并：序号不是整数、数量不是数字的行并入上一行（固定资产单的第二行型号、领用单的输入框横线都靠这一条）
         if not new and rows and (has_idx or top - rows[-1]["bottom"] <= WRAP_GAP * height):
             previous = rows[-1]

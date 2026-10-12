@@ -72,7 +72,7 @@ SERIAL_RE = re.compile(r"(?:流水号|申请编号|单号|编号|流水号[:：]
 # 冒号可有可无；没有冒号时标签与值之间须有空白，避免把「部门领导意见」读成部门
 DEPARTMENT_LABEL_RE = re.compile(
     r"(?:申领部门|申请单位部门|申请部门|需求部门|使用部门|部门)(?:[:：]\s*|\s+)"
-    r"(?!领导|负责人|意见)([\u4e00-\u9fa5A-Za-z0-9（）()\-]{2,24})"
+    r"(?!领导|负责人|意见|(?:备注|数量|规格|型号|单价|金额|用途|序号|品名|名称)(?:\s|$))([\u4e00-\u9fa5A-Za-z0-9（）()\-]{2,24})"
 )
 DEPARTMENT_SUFFIX_RE = re.compile(r"([\u4e00-\u9fa5A-Za-z0-9]{2,10}(?:部|处|科|室|中心|组|所|局))")
 # 标题/栏目行不参与部门启发式
@@ -208,8 +208,14 @@ def item_from_cells(cells: dict[str, str], label: str) -> dict:
     m = None if quantity is not None else re.fullmatch(rf"(\d+(?:\.\d+)?)\s*{UNIT_RE}", qty_text)
     if m:
         quantity, unit = float(m.group(1)), unit or m.group(2)
+    if quantity == 0:  # 申请数量为 0 没有意义，按未填写处理
+        quantity = None
     price = parse_number(cells.get("price")) or None  # 空白、0、0.00 都不是单价
     amount = parse_number(cells.get("amount")) or None
+    for key, field in (("price", "单价"), ("amount", "金额")):
+        raw = (cells.get(key) or "").strip()
+        if raw and parse_number(raw) is None:
+            warnings.append(f"{label}{field}「{raw}」不是数字，已留空，请对照原件")
     link = None
     for text in (cells.get("url") or "", cells.get("note") or ""):
         found = URL_RE.search(text)
@@ -264,6 +270,7 @@ BOUNDARY_LABELS = ("使用范围", "资金来源", "单位", "合计", "总金�
 _LABELS = "|".join(sorted({x for xs in FIELD_LABELS.values() for x in xs} | set(BOUNDARY_LABELS), key=len, reverse=True))
 LABEL_ONLY_RE = re.compile(rf"({_LABELS})\s*[:：]?")
 LABEL_INLINE_RE = re.compile(rf"({_LABELS})\s*[:：]\s*(.+)")
+LABEL_SPLIT_RE = re.compile(rf"\s*(?:{_LABELS})\s*[:：]")
 LABELED_DATE_RE = re.compile(r"(\d{4})\s*[-/年]\s*(\d{1,2})\s*[-/月]\s*(\d{1,2})\s*日?")
 
 
@@ -295,6 +302,18 @@ def fields_from_words(words: list[dict]) -> dict:
         if m or inline:
             labels.append((w, (m or inline).group(1), inline.group(2) if inline else None))
     label_ids = {id(w) for w, _, _ in labels}
+    # 表格表头（「数量」「规格」等整词）不会是单据头的值，但也不作取值边界：两行挨得很近时不能把它们读进经办人、部门
+    skipped = label_ids | {id(w) for w in words if header_key(w["text"])}
+
+    def middle_of(w: dict) -> float:
+        return (w["top"] + w["bottom"]) / 2
+
+    def owner(w: dict) -> dict | None:
+        """词左侧最近的标签：先比纵向距离（按 3pt 分档，同一行的标签并列），再取水平最近的。
+
+        上下排列的「标签 | 值」清单里，下一行的值属于下一行的标签；同一行里，值属于紧挨在它左边的标签。"""
+        left = [label for label, _, _ in labels if label["x1"] <= w["x0"] + 1]
+        return min(left, key=lambda label: (round(abs(middle_of(label) - middle_of(w)) / 3), w["x0"] - label["x1"]), default=None)
     result: dict = {}
     for field, names in FIELD_LABELS.items():
         for name in names:
@@ -303,8 +322,8 @@ def fields_from_words(words: list[dict]) -> dict:
                 band = max(word["bottom"] - word["top"], 6) * 1.3
                 in_band = [w for w in words if abs((w["top"] + w["bottom"]) / 2 - middle) <= band]
                 right = min((w["x0"] for w in in_band if id(w) in label_ids and w["x0"] > word["x1"]), default=float("inf"))
-                values = sorted((w for w in in_band if id(w) not in label_ids and w["x0"] >= word["x1"] - 1 and w["x1"] <= right + 1),
-                                key=lambda w: (w["top"], w["x0"]))
+                values = sorted((w for w in in_band if id(w) not in skipped and w["x0"] >= word["x1"] - 1 and w["x1"] <= right + 1
+                                 and owner(w) is word), key=lambda w: (w["top"], w["x0"]))
                 lines: list[list] = []
                 for w in values:
                     if lines and abs(lines[-1][0] - w["top"]) <= 3:
@@ -312,6 +331,8 @@ def fields_from_words(words: list[dict]) -> dict:
                     else:
                         lines.append([w["top"], [w["text"]]])
                 text = "".join(" ".join(parts) for _, parts in lines)
+                if inline:  # 一个词里写了好几个「标签：值」时，值止于下一个标签
+                    inline = LABEL_SPLIT_RE.split(inline)[0]
                 value = _field_value(field, (inline + text) if inline else text)
                 if value:
                     result[field] = value
@@ -382,91 +403,179 @@ def _row_source(cells: list[dict]) -> dict:
             "confidence": min(scores) if scores else None, "rotation": cells[0].get("rotation", 0)}
 
 
-def _header_columns(cells: list[dict]) -> list[tuple[str, float]]:
-    columns = []
-    for cell in cells:
-        text = to_halfwidth(cell["text"]).replace(" ", "")
-        key = None
-        if "品名" in text or "名称" in text or text == "物品":
-            key = "name"
-        elif "数量" in text:
-            key = "qty"
-        elif "单价" in text or text == "价格":
-            key = "price"
-        elif "单位" in text:
-            key = "unit"
-        elif "规格" in text or "型号" in text:
-            key = "spec"
-        elif "链接" in text:
-            key = "url"
-        elif "金额" in text or "备注" in text or text == "序号":
-            key = "ignore"
-        if key:
-            columns.append((key, (cell["left"] + cell["right"]) / 2))
-    if not {"name", "qty"}.issubset({key for key, _ in columns}):
+NUMERIC_KEYS = {"idx", "qty", "price", "amount"}
+TEXT_KEYS = {"name", "spec", "spec2", "brand", "note", "unit", "url", "cat"}
+OCR_STOP_RE = re.compile(r"^(?:插入项|合计|总计|总金额|审批意见|部门领导意见|签字|经办人|申请人|部门|流水号)(?:[:：\s]|$)")
+# 置信度告警阈值：整行最低分低于前者、数量或单价单元格低于后者时提示（评测后可调）
+LOW_ROW_CONFIDENCE, LOW_CELL_CONFIDENCE = .6, .8
+OCR_NUMBER_RE = re.compile(rf"([¥￥]?)([\dOoIl|.,。]+)(\s*(?:元|{UNIT_RE[1:-1]})?)")
+
+
+def ocr_number(text: str) -> str:
+    """OCR 读出的数量、单价、金额单元格：把常见误识字符换回数字（O、o→0；l、I、|→1），数字间的「。」换成小数点。
+
+    只替换本来就由数字和这些字符组成的单元格（可带「¥」「元」或计数单位）；品名、规格不做任何替换，替换后仍不是数字的由调用方留空并提示。"""
+    value = to_halfwidth(text).strip()
+    m = OCR_NUMBER_RE.fullmatch(value)
+    if not m or not re.search(r"\d", m.group(2)):
+        return value
+    core = re.sub(r"[OoIl|]", lambda c: "0" if c.group(0) in "Oo" else "1", m.group(2).replace("。", "."))
+    return m.group(1) + core + m.group(3)
+
+
+def _header_columns(cells: list[dict]) -> list[dict]:
+    """表头行 → 列 {key, left, right, text, top}；必须同时有名称列与数量列。"""
+    columns = [{"key": key, "left": c["left"], "right": c["right"], "text": c["text"], "top": c["top"]}
+               for c in cells if (key := _table_key(c["text"]))]
+    if not {"name", "qty"}.issubset({c["key"] for c in columns}):
         return []
-    return sorted(columns, key=lambda c: c[1])
+    return sorted(columns, key=lambda c: c["left"])
+
+
+def _merge_header(columns: list[dict], cells: list[dict]) -> list[dict]:
+    """两行表头：上下半行的词与已有列水平重叠时按上下顺序拼接文字再取键（「规格」+「型号」、「生产」+「厂家」），不重叠的另成一列。"""
+    for cell in cells:
+        column = next((c for c in columns if min(c["right"], cell["right"]) - max(c["left"], cell["left"]) > 0), None)
+        if column is None:
+            columns.append({"key": _table_key(cell["text"]), "left": cell["left"], "right": cell["right"],
+                            "text": cell["text"], "top": cell["top"]})
+            continue
+        text = cell["text"] + column["text"] if cell["top"] < column["top"] else column["text"] + cell["text"]
+        column.update(key=_table_key(text) or column["key"], left=min(column["left"], cell["left"]),
+                      right=max(column["right"], cell["right"]), text=text, top=min(column["top"], cell["top"]))
+    return sorted(columns, key=lambda c: c["left"])
+
+
+def _intervals(columns: list[dict]) -> list[tuple[str, float, float]]:
+    """列区间：各列向两侧扩展到与相邻表头的中点，第一列到左页边、最后一列到右页边。"""
+    bounds = [0.0] + [(a["right"] + b["left"]) / 2 for a, b in zip(columns, columns[1:])] + [1.0]
+    return [(column["key"], bounds[i], bounds[i + 1]) for i, column in enumerate(columns)]
+
+
+def _gap_ok(row: dict, previous: dict, factor: float) -> bool:
+    return row["top"] - previous["bottom"] <= factor * min(row["bottom"] - row["top"], previous["bottom"] - previous["top"])
+
+
+def _ocr_fields(rows: list[dict]) -> dict:
+    """单据头：OCR 词框换算成千分坐标后按「标签词右侧、同一行带」取值（与文本层同一规则）。
+
+    OCR 常把一行里的几组「标签：值」识别成一个框：按标签位置切成几个词，横坐标按字符位置分配。"""
+    words = []
+    for row in rows:
+        for c in row["cells"]:
+            text, x0, x1 = c["text"], c["left"] * 1000, c["right"] * 1000
+            starts = [m.start() for m in re.finditer(rf"(?:{_LABELS})\s*[:：]", text)]
+            cuts = sorted({0, *starts, len(text)})
+            for a, b in zip(cuts, cuts[1:]):
+                if text[a:b].strip():
+                    words.append({"text": text[a:b].strip(), "x0": x0 + (x1 - x0) * a / len(text),
+                                  "x1": x0 + (x1 - x0) * b / len(text), "top": c["top"] * 1000, "bottom": c["bottom"] * 1000})
+    return fields_from_words(words)
 
 
 def rebuild_from_entries(entries: list[dict]) -> dict:
-    """Recover physical table rows from cells, without merging by item name."""
+    """Recover physical table rows from cells, without merging by item name.
+
+    Columns come from the header cells widened to the midpoints between neighbours; a cell joins the column it
+    overlaps most. A row without an integer index and without a numeric quantity, closely below the previous row,
+    is a wrapped continuation of that row. Header fields use the label-right-of rule first, then text patterns."""
     rows = _positioned_rows(entries)
     if not rows:
         return rebuild_from_lines([entry["text"] for entry in entries])
     unpositioned = [entry["text"] for entry in entries if not entry.get("box")]
-    remaining, items, columns, previous_row = [], [], [], None
-    for row in rows:
+    remaining, records, columns, previous = [], [], [], None
+    merged_rows: set[int] = set()
+    table_seen = False
+    for index, row in enumerate(rows):
+        if index in merged_rows:
+            continue
         cells = row["cells"]
         text = " ".join(cell["text"] for cell in cells)
         header = _header_columns(cells)
         if header:
-            columns = header
-            previous_row = None
+            for other in (index - 1, index + 1):
+                near = rows[other] if 0 <= other < len(rows) else None
+                if near and all(_table_key(c["text"]) for c in near["cells"]) and (
+                        _gap_ok(row, near, 1) if other < index else _gap_ok(near, row, 1)):
+                    header = _merge_header(header, near["cells"])
+                    merged_rows.add(other)
+                    near_text = " ".join(c["text"] for c in near["cells"])
+                    if other < index and remaining and remaining[-1] == near_text:
+                        remaining.pop()
+            columns, previous, table_seen = _intervals(header), None, True
             continue
         if not columns:
             remaining.append(text)
             continue
-        values: dict[str, list[str]] = {}
+        if any(OCR_STOP_RE.match(to_halfwidth(cell["text"]).strip()) for cell in cells):
+            columns, previous = [], None
+            remaining.append(text)
+            continue
+        assigned: dict[str, list[dict]] = {}
         for cell in cells:
-            center = (cell["left"] + cell["right"]) / 2
-            key = min(columns, key=lambda column: abs(column[1] - center))[0]
-            values.setdefault(key, []).append(to_halfwidth(cell["text"]).strip())
-        values = {key: " ".join(parts) for key, parts in values.items()}
+            def overlap(c: tuple, cell: dict = cell) -> float:
+                return min(cell["right"], c[2]) - max(cell["left"], c[1])
+            key = max(columns, key=overlap)[0]
+            # 序号列只有整数：表头居中的窄序号列旁边，左对齐的短品名（「光盘」）可能与序号列重叠更多，归到最近的文字列
+            if key == "idx" and not re.fullmatch(r"\d+", to_halfwidth(cell["text"]).strip()):
+                texts = [c for c in columns if c[0] not in NUMERIC_KEYS]
+                key = max(texts, key=overlap)[0] if texts else key
+            assigned.setdefault(key, []).append(cell)
+        values = {key: " ".join(to_halfwidth(c["text"]).strip() for c in sorted(group, key=lambda c: (c["left"], c["top"])))
+                  for key, group in assigned.items()}
+        for key in ("qty", "price", "amount"):
+            if key in values:
+                values[key] = ocr_number(values[key])
+        qty = values.get("qty", "")
+        anchored = values.get("idx", "").isdigit() or bool(re.match(r"\d+(?:\.\d+)?", qty.replace(",", "")))
+        # 续行：有序号列的表按「没有整数序号、没有数量」并入上一行（行距 0.5 倍行高内）；没有序号列的表，
+        # Paddle 的框有留白、真实的相邻行也挨得很近，只有只含品名或规格的紧邻行（0.3 倍行高内）才算换行
+        has_idx = any(c[0] == "idx" for c in columns)
+        wrapped = (_gap_ok(row, previous, .5) if has_idx else set(values) <= {"name", "spec"} and _gap_ok(row, previous, .3)) \
+            if previous is not None else False
+        if not anchored and records and wrapped:
+            record = records[-1]
+            for key, value in values.items():
+                record["values"][key] = " ".join(filter(None, [record["values"].get(key), value]))
+            record["cells"].extend(cells)
+            record["rawText"] += " " + text
+            previous["bottom"] = row["bottom"]
+            continue
         name = values.get("name", "")
-        if re.search(r"^(?:合计|总计|审批意见|签字|经办人|申请人|部门|流水号)(?:[:：\s]|$)", name):
-            columns = []
+        # 品名格是空的、但有序号或数量和其他文字（规格、备注等）的行仍是一条物理行：保留并提示，与文本层一致
+        described = anchored and any(values.get(k) for k in TEXT_KEYS if k != "name")
+        if (name and is_ui_noise(name)) or not (name or described):
             remaining.append(text)
+            previous = None
             continue
-        # A closely spaced line containing only name/spec text is a wrapped cell.
-        # A new row with numeric/unit anchors always remains a separate physical row.
-        continuation = (
-            previous_row is not None and items and
-            set(values).issubset({"name", "spec"}) and
-            row["top"] - previous_row["bottom"] <= .3 * min(
-                row["bottom"] - row["top"], previous_row["bottom"] - previous_row["top"])
-        )
-        if continuation:
-            for key, field in (("name", "itemName"), ("spec", "spec")):
-                if values.get(key):
-                    items[-1][field] = " ".join(filter(None, [items[-1].get(field), values[key]]))
-            previous_row["cells"].extend(cells)
-            previous_row["bottom"] = row["bottom"]
-            items[-1]["_source"] = _row_source(previous_row["cells"])
-            items[-1]["rawText"] += " " + text
-            continue
-        if not name or is_ui_noise(name):
-            remaining.append(text)
-            previous_row = None
-            continue
-        item = rows_from_table([
-            ["品名", "规格", "数量", "单位", "单价", "链接"],
-            [name, values.get("spec"), values.get("qty"), values.get("unit"), values.get("price"), values.get("url")],
-        ])
-        if item:
-            item[0].update({"rawText": text, "_source": _row_source(cells), "_label": f"第 {len(items) + 1} 行"})
-            items.extend(item)
-            previous_row = row
+        records.append({"values": values, "cells": list(cells), "rawText": text, "assigned": assigned})
+        previous = {"top": row["top"], "bottom": row["bottom"]}
+    items = []
+    for number, record in enumerate(records, 1):
+        values = record["values"]
+        idx = values.get("idx", "")
+        label = f"第 {idx if idx.isdigit() else number} 行"
+        item = item_from_cells(values, label)
+        scores = [c["confidence"] for c in record["cells"] if c.get("confidence") is not None]
+        if scores and min(scores) < LOW_ROW_CONFIDENCE:
+            item["_warnings"].append(f"{label}识别置信度低，请对照原件")
+        for key, field in (("qty", "数量"), ("price", "单价")):
+            cell_scores = [c["confidence"] for c in record["assigned"].get(key, []) if c.get("confidence") is not None]
+            if cell_scores and min(cell_scores) < LOW_CELL_CONFIDENCE:
+                item["_warnings"].append(f"{label}{field}置信度低，请对照原件")
+        items.append({**item, "rawText": record["rawText"], "_source": _row_source(record["cells"])})
     result = rebuild_from_lines(remaining + unpositioned)
+    if table_seen:
+        # 找到了表格：表外的文字（单位名、单据头标签、审批意见）只用来取单据头，不再按行猜明细
+        result["items"] = []
+        result["warnings"] = [w for w in result["warnings"] if w.startswith("未识别到") and "明细" not in w]
+        if not items:
+            result["warnings"].insert(0, "未识别到物品明细，请人工补录或换清晰的单据截图")
+    fields = _ocr_fields(rows)
+    for key, label in (("serialNumber", "流水号"), ("department", "申领部门"), ("handler", "经办人"), ("requestDate", "申请日期")):
+        if fields.get(key):
+            result[key] = fields[key]
+            result["warnings"] = [w for w in result["warnings"] if w != f"未识别到{label}，请人工确认"]
     if items:
         table_items, warnings = finalize_items(items)
         result["items"] = table_items + result["items"]
@@ -494,6 +603,11 @@ def rows_from_table(table: list[list[str | None]]) -> list[dict]:
         if item["itemName"]:
             items.append({**item, "rawText": name})
     return items
+
+
+def table_key(cell: str) -> str | None:
+    """表头单元格 → 列键：先按整词（header_key），再按包含关系（「商品名称」→ name、「领用数量」→ qty）。"""
+    return _table_key(cell)
 
 
 def _table_key(cell: str) -> str | None:

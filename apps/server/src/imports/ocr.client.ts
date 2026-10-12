@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { parseResultSchema } from '@canglin/shared';
 
 const textModeSchema = parseResultSchema.extend({ textLayer: z.union([z.string(), z.literal(false)]) });
+const stripsSchema = z.object({ mime: z.string().startsWith('image/'), images: z.array(z.string()).min(1).max(3) });
 @Injectable()
 export class OcrClient {
   private form(file: Buffer, filename: string) {
@@ -57,6 +58,11 @@ export class OcrClient {
     const response = await this.post(`page?page=${page}`, file, filename, true);
     const mime = String(response.headers['content-type'] ?? '').split(';')[0].trim();
     return { bytes: Buffer.from(response.data), mime: mime.startsWith('image/') ? mime : 'image/png' };
+  }
+  /** 长截图自上而下切成 1 到 3 段（只切在空白带），每段与 page() 同样预处理 */
+  async pageStrips(file: Buffer, filename: string, page: number): Promise<{ mime: string; images: Buffer[] }> {
+    const value = stripsSchema.parse(await this.request(`page?page=${page}&strips=1`, file, filename));
+    return { mime: value.mime, images: value.images.map((image) => Buffer.from(image, 'base64')) };
   }
   async health(): Promise<boolean> {
     try {

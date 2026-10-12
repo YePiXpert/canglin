@@ -11,17 +11,18 @@
 | 草稿 | 未知数量为 null，申请日期不补当天；独立行、稳定 lineId、逐页来源、乐观版本号、修改历史 |
 | 确认 | 严格数量/价格校验；保留原件物理行，含同名行；规格和单位参与物品身份；任务只能确认一次 |
 | 原件 | 内容哈希提示重复，可直接打开已有任务，用户明确继续才创建新任务；未确认原件保留 30 天，上传及每 6 小时清理到期任务；确认后的来源长期保留 |
-| OCR | Python 3.11、PaddleOCR 3.7.0、PaddlePaddle 3.3.1、PP-OCRv6 medium；方向识别开启，去畸变关闭 |
+| OCR | Python 3.11、PaddleOCR 3.7.0、PaddlePaddle 3.3.1、PP-OCRv6 medium；方向识别开启，去畸变关闭；检测阶段最长边 2560（与输入一致）；照片识别前转灰度并拉伸对比度 |
 | OCR 资源 | 一个进程/推理实例/活动解析，2 CPU、4GB 内存、2 推理线程，页面最大边 2560；30MB、自动最多 30 页 |
-| AI | Responses，第三方 baseURL 可配置；原件识别优先，本地 OCR 备用；能力按实际请求检测 |
-| 请求 | 智能导入并发 1，单页输出最多 4096 tokens，120 秒；429/500/502/503 最多重试一次，不确定超时不自动重发 |
+| 文本层 PDF | 按表格边框与词坐标重建物理行列（网格重建），不渲染、不 OCR；单页约 30–200 毫秒 |
+| AI | Responses，第三方 baseURL 可配置；文本层 PDF 页走审核模式，截图、照片与扫描页走识别模式，本地 OCR 备用；能力按实际请求检测 |
+| 请求 | 智能导入并发 1，单页输出最多 12000 tokens（含推理），120 秒；429/500/502/503 最多重试一次，不确定超时不自动重发；服务以 400 拒绝 temperature / reasoning 时去掉后重发一次并记住 |
 | 用量 | 输入/输出 tokens、模型、耗时、请求标识；缺少用量为未知，未配置价格不计算费用 |
 | 库存 | 品名、规格、单位构成物品身份；收货待处理与库存分开；直发余量不自动入库 |
 | 写防重 | 申请、采购、收货、入库、发放、退回、取消、调整及撤销等写操作必须带 Idempotency-Key；同事务持久化请求指纹及结果 |
 
 模型文件在构建期预下载，以 `apps/ocr/models.sha256` 校验；依赖来自 `apps/ocr/requirements.lock`。禁止运行时补下载作为正常启动流程。真实 CPU 测试发现当前 oneDNN 路径不兼容，已明确关闭 MKLDNN；更新此设置需重跑真实容器测试。
 
-首次识别结果、AI 重试建议和人工草稿分开保存。图片优先直接识别原始字节；PDF 仅依赖 Python 做页数检查和渲染，AI 成功时无需启动 OCR 模型。失败页才回退本地 OCR。后台迟到结果不能覆盖人工编辑；重试保留历史。AI 只有页级定位，不会伪造坐标。原件文本只作为数据，自动识别不携带业务写工具；问答仍使用只读工具白名单、参数校验和六轮工具上限。
+首次识别结果、AI 重试建议和人工草稿分开保存。页图统一经 OCR 服务的 `/page` 预处理（照片转正、缩放到 2560 并转 JPEG，截图与 PDF 页为 PNG；OCR 服务不可用时图片仍按原图发送）；文本层 PDF 由网格重建取得物理行，AI 只做核对与品名拆分，均无需启动 OCR 模型。失败页才回退本地 OCR。后台迟到结果不能覆盖人工编辑；重试保留历史。AI 识别的行只有页级定位，不会伪造坐标；审核模式的行就是文本层的物理行，保留其真实坐标。原件文本只作为数据，自动识别不携带业务写工具；问答仍使用只读工具白名单、参数校验和六轮工具上限。
 
 ## 配置第三方 Responses
 
@@ -57,8 +58,8 @@ services:
 - `GET .../:id/original`、`GET .../:id/pages/:page`：鉴权读取，服务端路径不对外暴露。
 - `POST .../:id/retry`：`{stage:"local"|"ai",pages?:number[]}`；`POST .../:id/cancel` 取消当前代次。
 - `POST /api/workflow/imports/confirm`：人工确认后的最终值、taskId、version，以及 Idempotency-Key 请求头；同一事务校验任务/页核对/版本、建立申请与原件关联、标记确认并记录审计。旧 `POST /api/imports/confirm` 已随旧台账删除。
-- `POST /api/ai/capabilities`：检测 Responses 的实际能力。
-- OCR `/health` 为进程存活；`/ready` 要求加载模型并完成小样例推理。
+- `POST /api/ai/capabilities`：检测 Responses 的实际能力。2026-10-12 起不再提供 `POST /api/ai/ocr-review`（返回 404）。
+- OCR `/health` 为进程存活；`/ready` 要求加载模型并完成小样例推理。OCR `POST /parse?page=N[&mode=text]`、`POST /page?page=N[&strips=1]`、`POST /inspect` 只供服务端调用，见[识别优化](#2026-10-12-ocr-与-ai-识别优化)。
 
 新增迁移 `20260927000000_trusted_import`，增加 ImportTask 字段、ImportRevision、OperationReceipt、AiCall。历史解析读取时补稳定历史 ID，未知值保持空；没有依据的历史字段不创建框选。历史台账和 Float 数据不重归并、不转换（2026-10-08 起随旧表删除）。
 
@@ -129,6 +130,47 @@ services:
 
 **试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 钉在候选提交 `42b9ae6`（v2.1.0 的代码，镜像标签 `sha-42b9ae6`）：项目名 `canglin-trial-42b9ae6`，数据卷 `canglin-trial-42b9ae6_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。
 
+## 2026-10-12 OCR 与 AI 识别优化
+
+方案与原件分析见 [docs/ocr-ai-optimization](./ocr-ai-optimization/README.md)。识别结果仍须人工确认后入账，业务数量规则不变。
+
+**文本层 PDF 网格重建**：带文本层的 OA 打印页（致远「办公用品领用单」「固定资产购买申请单」及同类表格）按表格边框与词坐标恢复物理行与列：竖线按与表体重叠长度之和计覆盖度，词按水平重叠最大归列，格内换行直接拼接（型号、链接、部门名常按字符拆行），没有序号和数量的行并入上一行，续页沿用上一页的列定义（单页请求先推算前面各页的列）。品名保留名称单元格原文，备注能解释为单位（「50张」「一个」且与数量相符）才取单位，其余备注文字并入规格并提示核对拆行；固定资产单的规格型号、主要技术指标与生产厂家合并为规格，预计总价写入 `amount` 并与数量×单价交叉校验。单据头按「标签词右侧同一行」取值，部门名换行拼接，经办人可以是岗位名。浏览器页眉页脚、插入项、合计、审批链不成行。已识别模板的原件不再退回旧的逐行解析（它在固定资产单上每份产出三十多条假明细）；文本层存在但没有表格的页面不再渲染 OCR。`parserVersion` 为 `4`。
+
+**AI 识别分两种模式**（提示词与版本号集中在 `apps/server/src/ai/prompts.ts`）：
+
+| 页面 | 模式 | 模型的任务 | 服务端校验 |
+| --- | --- | --- | --- |
+| 文本层 PDF 且网格重建出明细行 | 审核 `review-v1` | 页图 + 文本层的行：核对行数与列归属，拆分品名与规格，判断单位 | 行（lineId）必须与文本层一一对应，否则按契约错误回退；数量、单价、金额、链接与已有单据头一律用文本层的值，模型读数不同只提示；规格列（规格型号、主要技术指标、生产厂家）的内容保留在规格里；品名格为空的行照样保留。重试时本页已有明细必须正是这些物理行（lineId 与原文都对得上），否则按识别模式重识别（旧解析器同样用 `p页-r序号` 作 lineId，但指向的行不同） |
+| 文本层 PDF 但没有明细行 | 识别 `recognition-v2` | 页图 + 本页文本层（最多 6000 字）主识别 | 链接必须能由文本层片段按顺序拼出（备注格里按字符换行的链接也算），否则置空并提示 |
+| 截图、照片、扫描页 | 识别 `recognition-v2` | 页图主识别 | 日期不合法置空、空品名的行丢弃、数量×单价与金额不符提示 |
+
+输出契约 v2 每行带名称单元格原文 `rawText`、`amount` 与可选的 `catalogSuggestion`，不再要求每行写 `reason`；单据带 `templateType`。附带物品目录（最近 300 个「品名 + 规格 + 单位」）时，模型可给出与已有物品完全相同的一条作为归一建议，界面显示「匹配到已有物品」，由用户点「采用已有物品」替换，绝不自动替换。调用记录 `AiCall` 新增 `mode`（`RECOGNITION` | `REVIEW`）与 `promptVersion`（附带目录或分段时带 `+catalog` / `+strips`），任务视图的调用记录一并返回。AI 路径的 `parserVersion` 为 `ai-primary-2`；审核页的页模式（`pages[].mode`）为 `AI_REVIEW`，整份结果的 `mode` 仍按 `AI_IMAGE` 汇总，回退到旧版本时旧契约也能读取已保存的结果。
+
+**调用参数**：识别与审核 `max_output_tokens` 12000；`temperature` 与 `reasoning` 真正写入请求，默认识别 `low`、问答 `medium`、搜索与能力检测不发；服务以 400 点名拒绝时去掉该参数重发一次，并按配置指纹记在 `aiParamSupport` 设置里，之后不再发送（重新做能力检测或更换服务、密钥、模型后重新学习）。输出因 `max_output_tokens` 截断时提示「模型输出超过上限，请减少单页行数或拆分页面」，原因记入调用记录。设置页「高级配置」可选推理强度（自动 / 不发送 / 最低 / 低 / 中 / 高，「不发送」时温度也不带）与「文本层 PDF 也请模型核对」（默认开；关闭后文本层页面同截图一样走识别模式）。重试只把定位所需的 `lineId、itemName、spec、quantity、unit` 作为 `existingRows` 发给模型。
+
+**只读问答**：提示词补充相对日期换算、最多 6 轮工具调用与先汇总后钻取、同名多物品先列候选、Markdown 表格与截断提示；工具结果改为结构化精简（去掉空值与时间戳，附件只留类型和文件名，每张单据最多 20 行，仍超过 16000 字符时从末尾删条目并标记 `truncated` 与 `hint`），不再截出残缺 JSON；`query_documents` 默认每页 10 条、`query_stock` 默认 30 条。语义搜索的缓存键带词表哈希，词表变化后旧的扩展结果失效。
+
+**本地 OCR 路径（截图、照片）**：列区间扩展到相邻表头的中点，单元格按水平重叠最多归列，序号列只放整数（表头居中的窄序号列旁，左对齐的短品名归品名列）；两行表头（规格/型号、生产/厂家）合并；有序号列的表，没有整数序号也没有数量的行并入上一行，没有序号列的表只把只含品名或规格的紧邻行当换行（数量以数字开头，如「2箱」，就是新的一行）；品名格为空但有数量和其他文字的行保留并提示；遇插入项、合计、总金额关闭表格；找到表格后，表外文字（单位名、单据头标签、审批意见）只用来取单据头，不再按行猜明细；数量、单价、金额单元格把常见误识字符换回数字（O→0、l/I/|→1、数字间的「。」→小数点），换后仍不是数字的留空并提示；整行置信度低于 0.6、数量或单价低于 0.8 时提示，前端给低置信度行加底色与「识别置信度低」标记；单据头先按标签规则取值（一个框里写了几组「标签：值」时按标签切开，上下排列的标签清单里值归属纵向最近的标签），再用全文规则补。没有表头的续页仍按逐行规则解析（扫描多页时可能产生假明细，开启 AI 时由识别模式处理）。
+
+**迁移**：`20261012000000_add_ai_call_prompt_version` 给 `AiCall` 增加可空的 `promptVersion`、`mode`，不回填；回退代码不需要回退迁移。
+
+**OCR 接口**（服务端内部调用）：`POST /parse?page=N&mode=text` 只读文本层与网格重建，不渲染、不 OCR，返回本页明细与 `textLayer`（正文，没有文本层时为 `false`）；`POST /page?page=N` 的响应类型以实际编码为准（`image/jpeg` 或 `image/png`）；`POST /page?page=N&strips=1` 把高宽比超过 1.6 的长截图在空白带处切成 1–3 段，返回 `{"mime","images":[base64…]}`。
+
+**开关与回退**：
+
+| 范围 | 开关 | 行为 |
+| --- | --- | --- |
+| 网格重建 | OCR 环境变量 `OCR_GRID_REBUILD=0` | 跳过网格重建，回到 `find_tables` 与逐行解析 |
+| 审核模式 | 设置页「文本层 PDF 也请模型核对」 | 关闭后文本层页面走识别模式，网格结果仍作为本地结果 |
+| 调用参数 | 设置页推理强度「不发送」 | 请求不带 `reasoning` 与 `temperature` |
+| 页图预处理 | OCR 环境变量 `OCR_PAGE_PREPROCESS=0` | `/page` 只渲染与缩放，照片不转 JPEG |
+| 照片 OCR 预处理 | OCR 环境变量 `OCR_PHOTO_PREPROCESS=0` | 识别前不转灰度、不拉伸对比度 |
+| 检测尺寸 | OCR 环境变量 `OCR_DET_LIMIT_SIDE_LEN=0` | 回到 Paddle 默认的检测缩放 |
+| 长截图分段 | 服务端环境变量 `AI_IMAGE_STRIPS=1` 开启 | 默认关闭，评测通过后再开 |
+| 数据库 | 不需要 | 新字段可空 |
+
+**评测**：`scripts/evaluate-imports.py` 的变体与基线改为参数（manifest 顶层 `variants`、`baseline`，或 `--variants`、`--baseline`，最后一个变体是最终流程）。`scripts/export-text-layer-fixtures.py` 把人工核对过的标准答案与原件导出为脱敏夹具（姓名换占位、审批时间戳固定、页脚地址与 jsessionid 清零、京东跟踪参数按原长度替换），放到 `apps/ocr/tests/fixtures/seeyon/` 后由 `test_seeyon_fixtures.py` 逐份对照；部门、品名、数量、单号仍保留，提交前须确认可以入库。
+
 ## 验证命令
 
 ```sh
@@ -142,6 +184,7 @@ pnpm --filter @canglin/web exec playwright install --with-deps chromium
 pnpm --filter @canglin/web test:e2e
 python3 -m unittest discover -s deploy/tests -v
 python3 -m unittest discover -s scripts/tests -v
+(cd apps/ocr && pytest)
 docker build -f deploy/Dockerfile.ocr -t canglin-ocr:runtime-test .
 docker build -f deploy/Dockerfile.ocr-test -t canglin-ocr:test .
 docker run --rm --network none --cpus 2 --memory 4g canglin-ocr:test

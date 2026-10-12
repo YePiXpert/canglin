@@ -14,7 +14,7 @@ import { ImportsService } from '../src/imports/imports.service';
 import { OcrClient } from '../src/imports/ocr.client';
 import { config } from '../src/config';
 
-const ocr = { inspect: vi.fn(), parse: vi.fn(), page: vi.fn(), textLayer: vi.fn() };
+const ocr = { inspect: vi.fn(), parse: vi.fn(), page: vi.fn(), textLayer: vi.fn(), pageStrips: vi.fn() };
 const llm = { chat: vi.fn() };
 let enabled = true;
 let cfg = { enabled: true, autoImport: true, baseUrl: 'https://example.com/v1', apiKey: 'fixture-key',
@@ -25,7 +25,7 @@ let context: TestingModule, prisma: PrismaService, imports: ImportsService;
 function response(page = 1) {
   return { content: JSON.stringify({ templateType: null, serialNumber: 'OA-AI', department: '行政部', handler: '张三',
     requestDate: '2026-09-30', items: [{ lineId: null, rawText: `原件物品${page}（A4）`, itemName: `原件物品${page}`, spec: 'A4',
-      quantity: 8, unit: '包', unitPrice: 18, amount: null, purchaseLink: null }], warnings: [] }),
+      quantity: 8, unit: '包', unitPrice: 18, amount: null, purchaseLink: null, catalogSuggestion: null }], warnings: [] }),
     usage: { input: 20, output: 30 } };
 }
 async function start() {
@@ -94,7 +94,7 @@ function reviewed(overrides: Record<string, unknown>[] = []) {
     { lineId: 'p1-r1', rawText: 'A4打印纸(规格：80g)--（5包/箱）', itemName: 'A4打印纸', spec: '80g；5包/箱', quantity: 10, unit: null,
       unitPrice: null, amount: null, purchaseLink: 'https://www.cemall.com.cn/goods/1' },
     { lineId: 'p1-r2', rawText: '光盘', itemName: '光盘', spec: null, quantity: 50, unit: '张', unitPrice: null, amount: null, purchaseLink: null },
-  ].map((item, i) => ({ ...item, ...overrides[i] }));
+  ].map((item, i) => ({ catalogSuggestion: null, ...item, ...overrides[i] }));
   return { content: JSON.stringify({ templateType: 'OFFICE_SUPPLY', serialNumber: '2026090101', department: '行政管理部（党委办公室）',
     handler: '十一层前台', requestDate: '2026-09-01', items, warnings: [] }), usage: { input: 20, output: 30 } };
 }
@@ -114,7 +114,9 @@ describe('AI review of text-layer PDF pages', () => {
     expect(message.header).toEqual({ serialNumber: '2026090101', department: '行政管理部（党委办公室）', handler: '十一层前台', requestDate: '2026-09-01' });
     expect(message.rows.map((row: { lineId: string; note: string | null }) => [row.lineId, row.note])).toEqual([['p1-r1', null], ['p1-r2', '50张']]);
     expect(ocr.parse).not.toHaveBeenCalled();
-    expect(task.result).toMatchObject({ mode: 'AI_REVIEW', templateType: 'OFFICE_SUPPLY' });
+    // 审核页的页模式是 AI_REVIEW；整份结果按 AI_IMAGE 汇总，回退到旧版本时旧契约也能读取
+    expect(task.result).toMatchObject({ mode: 'AI_IMAGE', templateType: 'OFFICE_SUPPLY' });
+    expect(task.result?.pages?.[0]).toMatchObject({ status: 'DONE', mode: 'AI_REVIEW' });
     expect(task.draft?.items.map((i) => [i.lineId, i.itemName, i.spec, i.quantity, i.purchaseLink])).toEqual([
       ['p1-r1', 'A4打印纸', '80g；5包/箱', 10, 'https://www.cemall.com.cn/goods/1'],
       ['p1-r2', '光盘', null, 50, null],
@@ -148,6 +150,66 @@ describe('AI review of text-layer PDF pages', () => {
     expect(task.draft?.items.map((i) => i.quantity)).toEqual([10, 50]);
   });
 
+  it('offers only exact catalog entries as item name suggestions and never applies them', async () => {
+    const products = await Promise.all([
+      prisma.catalogProduct.create({ data: { name: 'A4打印纸', specification: '80g', unit: '包' } }),
+      prisma.catalogProduct.create({ data: { name: '光盘', specification: '', unit: '张' } }),
+    ]);
+    try {
+      llm.chat.mockResolvedValueOnce(reviewed([
+        { catalogSuggestion: { name: 'A4打印纸', spec: '80g', unit: '包' } },
+        { catalogSuggestion: { name: '光盘', spec: 'CD-R', unit: '张' } },  // 目录里没有这一条
+      ]));
+      const task = await settle(await upload('office.pdf'));
+      const sent = llm.chat.mock.calls[0][0];
+      expect(sent.messages[0].content).toContain('catalog 是系统已有物品');
+      expect(JSON.parse(sent.messages[1].content).catalog).toEqual(expect.arrayContaining([
+        { name: 'A4打印纸', spec: '80g', unit: '包' }, { name: '光盘', spec: null, unit: '张' }]));
+      expect(task.calls[0].promptVersion).toBe('review-v1+catalog');
+      expect(task.aiResult[0].items.map((i) => i.catalogSuggestion)).toEqual([{ name: 'A4打印纸', spec: '80g', unit: '包' }, null]);
+      expect(task.draft?.items[0].itemName).toBe('A4打印纸');  // 来自 AI 的拆分，不是目录替换
+      expect(task.draft?.items[0].spec).toBe('80g；5包/箱');
+    } finally {
+      await prisma.catalogProduct.deleteMany({ where: { id: { in: products.map((p) => p.id) } } });
+    }
+  });
+
+  it('keeps nameless text-layer rows and the spec columns, and checks amounts against the text layer only', async () => {
+    const grid = gridPage();
+    grid.result.items = [
+      { ...grid.result.items[0], spec: 'SF-CH-2306A黑框；京顺发', quantity: 4, unitPrice: 610, amount: 2440 },
+      { lineId: 'p1-r2', itemName: '', quantity: 3, source: { ...grid.result.items[1].source, rawText: '' } },
+    ] as unknown as typeof grid.result.items;
+    ocr.textLayer.mockResolvedValueOnce(grid);
+    llm.chat.mockResolvedValueOnce(reviewed([
+      { itemName: '办公椅', spec: null, quantity: 4, unitPrice: 610, amount: 2000 },  // 模型读错了金额
+      { lineId: 'p1-r2', rawText: '', itemName: '', quantity: 3 },
+    ]));
+    const task = await settle(await upload('asset.pdf'));
+    expect(JSON.parse(llm.chat.mock.calls[0][0].messages[1].content).rows[0].spec).toBe('SF-CH-2306A黑框；京顺发');
+    expect(task.calls[0].status).toBe('DONE');
+    expect(task.draft?.items.map((i) => [i.lineId, i.itemName, i.spec, i.quantity, i.amount])).toEqual([
+      ['p1-r1', '办公椅', 'SF-CH-2306A黑框；京顺发', 4, 2440], ['p1-r2', '', null, 3, null]]);
+    expect(task.aiResult[0].warnings).not.toContain('「办公椅」数量×单价与金额不符，请对照原件');
+    expect(task.aiResult[0].warnings).toContain('AI 读到第 1 页第 1 行金额为 2000，已保留文本层的 2440');
+  });
+
+  it('retries a page whose stored rows came from another parser in recognition mode', async () => {
+    // 旧解析器（v3）同样用 p1-r1 作 lineId，但指向别的行：不能把审核结果挂到这些行上
+    const id = randomUUID(), storagePath = `imports/${id}.pdf`;
+    fs.mkdirSync(path.join(config.uploadsDir, 'imports'), { recursive: true });
+    fs.writeFileSync(path.join(config.uploadsDir, storagePath), 'fixture-pdf');
+    const legacy = { mode: 'PDF_TEXT', parserVersion: '3', pageCount: 1, warnings: [],
+      pages: [{ page: 1, status: 'DONE', mode: 'PDF_TEXT' }],
+      items: [{ lineId: 'p1-r1', itemName: 'print Page 1 of', quantity: 1, source: { page: 1, method: 'PDF_TEXT', rawText: 'print Page 1 of 1' } }] };
+    await prisma.importTask.create({ data: { id, filename: 'legacy.pdf', storagePath, status: 'DONE', aiStatus: 'DISABLED',
+      result: JSON.stringify(legacy), draft: JSON.stringify({ items: legacy.items, reviewedPages: [] }) } });
+    await imports.retry(id, 'ai', [1]);
+    const task = await settle(id);
+    expect(llm.chat.mock.calls[0][0].messages[0].content).toContain('你是采购申请单据的识别器');
+    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION' });
+  });
+
   it('switching review off sends text-layer pages to recognition with the text attached', async () => {
     cfg = { ...cfg, reviewTextPdf: false } as typeof cfg;
     const recognized = JSON.parse(response().content);
@@ -162,6 +224,27 @@ describe('AI review of text-layer PDF pages', () => {
     expect(task.result?.items[0].purchaseLink).toBeNull();
     expect(task.aiResult[0].warnings).toContain('「原件物品1」的链接不在本页文本层中，已置空，请对照原件');
     cfg = { ...cfg, reviewTextPdf: undefined } as typeof cfg;
+  });
+});
+
+describe('AI page checks', () => {
+  it('nulls impossible dates instead of throwing', async () => {
+    const { checkAiPage } = await import('../src/imports/import-result');
+    for (const date of ['2026-13-01', '2026-09-00', '2026-12-32', '2026-02-30']) {
+      const page = { ...JSON.parse(response().content), requestDate: date };
+      expect(() => checkAiPage(page)).not.toThrow();
+      expect(page.requestDate).toBeNull();
+    }
+  });
+
+  it('accepts links that wrap across text-layer lines and rejects invented ones', async () => {
+    const { checkLinks } = await import('../src/imports/import-result');
+    const textLayer = '1 A4打印纸(规格：80g)--（5包/箱） 10.0 https://www.cemall.com.cn/goods/1\n935987761612783617\n2 文件袋 20.0 https://www.cemall.com.cn/goods/2\n019699022839906306';
+    const page = JSON.parse(response().content);
+    page.items = [{ ...page.items[0], purchaseLink: 'https://www.cemall.com.cn/goods/1935987761612783617' },
+      { ...page.items[0], itemName: '文件袋', purchaseLink: 'https://www.cemall.com.cn/goods/1019699022839906306' }];
+    checkLinks(page, textLayer);
+    expect(page.items.map((i: { purchaseLink: string | null }) => i.purchaseLink)).toEqual(['https://www.cemall.com.cn/goods/1935987761612783617', null]);
   });
 });
 
@@ -181,6 +264,25 @@ describe('AI primary original recognition', () => {
     expect(sent).toMatchObject({ maxTokens: 12_000, reasoningEffort: 'low' });
     expect(sent.messages[1].images).toEqual([`data:image/jpeg;base64,${Buffer.from('rendered-page').toString('base64')}`]);
     expect(JSON.parse(sent.messages[1].content).existingRows).toEqual([]);
+  });
+
+  it('sends a long screenshot as ordered strips of one page when strips are switched on', async () => {
+    Object.defineProperty(config, 'aiImageStrips', { value: true, configurable: true });
+    try {
+      ocr.pageStrips.mockResolvedValueOnce({ mime: 'image/png', images: [Buffer.from('top'), Buffer.from('bottom')] });
+      const task = await settle(await upload('long.png'));
+      const sent = llm.chat.mock.calls[0][0];
+      expect(sent.messages[1].images).toEqual(['top', 'bottom'].map((s) => `data:image/png;base64,${Buffer.from(s).toString('base64')}`));
+      expect(sent.messages[0].content).toContain('本页按自上而下顺序分成 strips 段图像');
+      expect(JSON.parse(sent.messages[1].content).strips).toBe(2);
+      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v2+strips' });
+      ocr.pageStrips.mockRejectedValueOnce(new Error('strips failed'));
+      await settle(await upload('long2.png'));
+      expect(llm.chat.mock.calls[1][0].messages[1].images).toHaveLength(1);
+      expect(llm.chat.mock.calls[1][0].messages[0].content).not.toContain('strips 段图像');
+    } finally {
+      Object.defineProperty(config, 'aiImageStrips', { value: false, configurable: true });
+    }
   });
 
   it('sends the original image when the OCR service cannot preprocess it', async () => {

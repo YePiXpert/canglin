@@ -80,7 +80,9 @@ export class AiConfigService {
     const row = await this.prisma.setting.findUnique({ where: { key: 'aiParamSupport' } });
     const stored = row ? (JSON.parse(row.value) as { fingerprint: string; rejected: RejectableParam[] }) : undefined;
     const rejected = stored?.fingerprint === this.fingerprint(cfg) ? stored.rejected : [];
-    const effort = cfg.reasoningEffort === 'auto' || !cfg.reasoningEffort ? AUTO_EFFORT[purpose] : cfg.reasoningEffort;
+    // 搜索只有 512 个输出 token，带推理容易截断后静默失效：固定强度也只用于识别、审核与问答
+    const effort = purpose === 'search' ? undefined
+      : cfg.reasoningEffort === 'auto' || !cfg.reasoningEffort ? AUTO_EFFORT[purpose] : cfg.reasoningEffort;
     return {
       ...(effort && !rejected.includes('reasoning') ? { reasoningEffort: effort } : {}),
       ...(temperature != null && !rejected.includes('temperature') ? { temperature } : {}),

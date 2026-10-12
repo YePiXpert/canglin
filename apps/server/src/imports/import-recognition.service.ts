@@ -14,6 +14,7 @@ import {
   AiContractError,
   aiPageSchema,
   checkAiPage,
+  checkCatalog,
   checkLinks,
   checkReview,
   draftFrom,
@@ -23,10 +24,12 @@ import {
   type AiPage,
 } from './import-result';
 import {
+  CATALOG_NOTE,
   RECOGNITION_PROMPT_VERSION,
   RECOGNITION_SYSTEM,
   REVIEW_PROMPT_VERSION,
   REVIEW_SYSTEM,
+  STRIPS_NOTE,
   recognitionMessage,
   reviewMessage,
 } from '../ai/prompts';
@@ -95,6 +98,19 @@ export class ImportRecognitionService {
       if (!image) throw error;
       return { bytes, mime: MIME[ext] };
     }
+  }
+  /** 识别模式的图像：开启分段时长截图切成多张（同一页，自上而下），否则一张；分段失败退回整页 */
+  private async recognitionImages(bytes: Buffer, filename: string, page: number) {
+    if (config.aiImageStrips && path.extname(filename).toLowerCase() !== '.pdf') {
+      try {
+        const { mime, images } = await this.ocr.pageStrips(bytes, filename, page);
+        return images.map((image) => `data:${mime};base64,${image.toString('base64')}`);
+      } catch {
+        /* fall back to the whole page */
+      }
+    }
+    const image = await this.pageInput(bytes, filename, page);
+    return [`data:${image.mime};base64,${image.bytes.toString('base64')}`];
   }
   async runLocal(id: string, generation: number, requested?: number[]) {
     const row = await this.live(id, generation);
@@ -215,6 +231,12 @@ export class ImportRecognitionService {
     });
     let failed = false;
     const errors: string[] = [];
+    // 品名归一建议的候选：最近的 300 个已有物品（品名 + 规格 + 单位）；目录为空时不附带
+    const catalog = (await this.prisma.catalogProduct.findMany({
+      select: { name: true, specification: true, unit: true },
+      orderBy: { id: 'desc' },
+      take: 300,
+    })).map((c) => ({ name: c.name, spec: c.specification || null, unit: c.unit || null }));
     for (let i = previous.length - 1; i >= 0; i--)
       if (selected.includes(previous[i].page)) previous.splice(i, 1);
     await this.prisma.importTask.updateMany({
@@ -256,14 +278,22 @@ export class ImportRecognitionService {
             text = undefined;
           }
         if (!(await this.live(id, generation))) return;
-        const rows = cfg.reviewTextPdf !== false && text?.result.items.length ? text.result.items : null;
+        // 本页已有明细（重试）时，只有它们正是文本层的这些物理行（lineId 与原文都对得上）才走审核模式；
+        // 旧解析器（v3）同样用 p页-r序号 作 lineId，但指向的行不同，按识别模式重识别，避免建议挂到别的行上
+        const existing = result.items.filter((i) => i.source?.page === page);
+        const sameRows = existing.every((item) => {
+          const row = text?.result.items.find((r) => r.lineId === item.lineId);
+          return !!row && (row.source?.rawText ?? row.itemName) === (item.source?.rawText ?? item.itemName);
+        });
+        const rows = cfg.reviewTextPdf !== false && text?.result.items.length && sameRows ? text.result.items : null;
         const mode = rows ? 'REVIEW' : 'RECOGNITION';
         const callId = randomUUID(),
           start = Date.now(),
           model = cfg.model;
+        const catalogSuffix = catalog.length ? '+catalog' : '';
         await this.prisma.aiCall.create({
           data: { id: callId, taskId: id, page, generation, model, status: 'NOT_SENT', mode,
-            promptVersion: rows ? REVIEW_PROMPT_VERSION : RECOGNITION_PROMPT_VERSION },
+            promptVersion: (rows ? REVIEW_PROMPT_VERSION : RECOGNITION_PROMPT_VERSION) + catalogSuffix },
         });
         let metadata:
           | { usage?: { input: number; output: number }; requestId?: string; incompleteReason?: string }
@@ -274,8 +304,13 @@ export class ImportRecognitionService {
         try {
           if (budgetBlocked)
             throw new BadRequestException('AI 预算已达上限、计价未配置或存在用量未知的调用');
-          const image = await this.pageInput(bytes, source.filename, page);
+          const images = rows
+            ? [await this.pageInput(bytes, source.filename, page)].map((i) => `data:${i.mime};base64,${i.bytes.toString('base64')}`)
+            : await this.recognitionImages(bytes, source.filename, page);
           controller.signal.throwIfAborted();
+          if (images.length > 1)
+            await this.prisma.aiCall.update({ where: { id: callId },
+              data: { promptVersion: `${RECOGNITION_PROMPT_VERSION}+strips${catalogSuffix}` } });
           // Persist the dispatch boundary before calling the provider. A crash after it is uncertain.
           await this.prisma.aiCall.update({ where: { id: callId }, data: { status: 'RUNNING' } });
           callStatus = 'RUNNING';
@@ -290,7 +325,11 @@ export class ImportRecognitionService {
             timeoutMs: 120_000,
             signal: controller.signal,
             messages: [
-              { role: 'system', content: rows ? REVIEW_SYSTEM : RECOGNITION_SYSTEM },
+              {
+                role: 'system',
+                content: [rows ? REVIEW_SYSTEM : RECOGNITION_SYSTEM, !rows && images.length > 1 ? STRIPS_NOTE : '',
+                  catalog.length ? CATALOG_NOTE : ''].filter(Boolean).join('\n\n'),
+              },
               {
                 role: 'user',
                 content: rows
@@ -306,6 +345,7 @@ export class ImportRecognitionService {
                       rows: rows.map((row) => ({
                         lineId: row.lineId!,
                         rawText: row.source?.rawText ?? row.itemName,
+                        spec: row.spec ?? null,
                         quantity: row.quantity,
                         unit: row.unit ?? null,
                         unitPrice: row.unitPrice ?? null,
@@ -313,6 +353,7 @@ export class ImportRecognitionService {
                         purchaseLink: row.purchaseLink ?? null,
                         note: row.note ?? null,
                       })),
+                      catalog,
                     })
                   : recognitionMessage({
                       page,
@@ -324,14 +365,17 @@ export class ImportRecognitionService {
                         .map((i) => ({ lineId: i.lineId, itemName: i.itemName, spec: i.spec ?? null,
                           quantity: i.quantity, unit: i.unit ?? null })),
                       textLayer: text?.textLayer ?? null,
+                      strips: images.length,
+                      catalog,
                     }),
-                images: [`data:${image.mime};base64,${image.bytes.toString('base64')}`],
+                images,
               },
             ],
           });
           metadata = response;
           parsed = aiPageSchema.parse(JSON.parse(response.content ?? ''));
-          checkAiPage(parsed);
+          checkAiPage(parsed, !!rows);
+          checkCatalog(parsed, catalog);
           if (rows) checkReview(page, parsed, rows, text!.result);
           else if (text?.textLayer) checkLinks(parsed, text.textLayer);
           const validIds = new Set(
@@ -393,7 +437,7 @@ export class ImportRecognitionService {
           previous.push({ ...parsed, page, mode });
           if (initial) {
             mergePage(result, page, {
-              mode: pageMode,
+              mode: 'AI_IMAGE',
               ...(parsed.templateType ? { templateType: parsed.templateType } : {}),
               // 审核模式的行就是文本层的物理行：保留它们在页面上的真实坐标
               items: parsed.items.map((item) => parsedItemSchema.parse({

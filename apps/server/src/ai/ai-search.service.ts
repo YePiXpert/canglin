@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { maintenance } from '../common/maintenance';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,7 +18,7 @@ export class AiSearchService {
   private readonly logger = new Logger(AiSearchService.name);
   private epoch = maintenance.epoch;
   private readonly cache = new Map<string, { terms: string[]; exp: number }>();
-  private vocabCache: { names: string[]; exp: number } | null = null;
+  private vocabCache: { names: string[]; hash: string; exp: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -36,18 +37,22 @@ export class AiSearchService {
       this.epoch = maintenance.epoch;
     }
     if (term.length < 2 || /^\d+$/.test(term)) return [];
+    let key = term;
     try {
       // 先看开关再查缓存：开关切换立即生效，不沿用缓存中的扩展结果
       if (!(await this.aiConfig.semanticSearchEnabled())) return [];
-      const cached = this.cache.get(term);
+      // 缓存键带词表哈希：新增品名后旧的扩展结果立即失效
+      await this.vocabulary();
+      key = `${term}:${this.vocabCache?.hash ?? ''}`;
+      const cached = this.cache.get(key);
       if (cached && cached.exp > Date.now()) return cached.terms;
       const terms = await this.expand(term);
-      this.putCache(term, terms);
+      this.putCache(key, terms);
       return terms;
     } catch (e) {
       // 搜索是高频路径，AI 挂了只降级不报错
       this.logger.warn(`搜索词扩展失败（降级为普通搜索）: ${e instanceof Error ? e.message : e}`);
-      this.putCache(term, []);
+      this.putCache(key, []);
       return [];
     }
   }
@@ -77,7 +82,8 @@ export class AiSearchService {
     const names = [
       ...new Set([...lineNames.map((g) => g.itemName), ...products.map((p) => p.name)]),
     ];
-    this.vocabCache = { names, exp: Date.now() + VOCAB_TTL_MS };
+    const hash = createHash('sha256').update(JSON.stringify(names)).digest('hex').slice(0, 16);
+    this.vocabCache = { names, hash, exp: Date.now() + VOCAB_TTL_MS };
     return names;
   }
 
@@ -97,6 +103,7 @@ export class AiSearchService {
           content:
             '你是采购申请与库存的搜索助手。下面给出系统现有品名词表与用户搜索词。' +
             '从词表中选出与搜索词指同一种或相近物品的名称（忽略词表中已包含搜索词字面的项）。' +
+            '不要选择只是同类别但明显不同的物品，如签字笔和荧光笔。' +
             '只输出 JSON：{"terms": ["..."]}，最多 ' +
             MAX_SYNONYMS +
             ' 个；没有合适的输出空数组。',
@@ -129,8 +136,8 @@ export class AiSearchService {
       .slice(0, MAX_SYNONYMS);
   }
 
-  private putCache(term: string, terms: string[]): void {
+  private putCache(key: string, terms: string[]): void {
     if (this.cache.size > 200) this.cache.clear();
-    this.cache.set(term, { terms, exp: Date.now() + CACHE_TTL_MS });
+    this.cache.set(key, { terms, exp: Date.now() + CACHE_TTL_MS });
   }
 }

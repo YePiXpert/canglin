@@ -1,7 +1,7 @@
 import io
 from types import SimpleNamespace
 import pytest
-from app import pipeline
+from app import ocr, pipeline
 from app.ocr import _to_lines
 
 
@@ -74,6 +74,28 @@ def test_result_adapter_restores_normalized_coordinates():
     result=_to_lines([item],100,200)[0]
     assert result['box'][0]==[.8,.05]
     assert result['rotation']==90
+
+
+def _image(fmt, exif=None, size=(300, 100), color=(200, 60, 60)):
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGB', size, color).save(buf, format=fmt, **({'exif': exif} if exif is not None else {}))
+    buf.seek(0)
+    return Image.open(buf)
+
+
+def test_photos_are_turned_upright_grayed_and_stretched_before_ocr(monkeypatch):
+    from PIL import Image
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    photo = ocr.prepare_image(_image('JPEG', exif, (4000, 100)))
+    assert photo.size == (64, 2560)
+    r, g, b = photo.getpixel((10, 10))
+    assert r == g == b  # 灰度，三通道相同
+    shot = ocr.prepare_image(_image('PNG'))
+    assert shot.getpixel((10, 10)) == (200, 60, 60)  # 截图不改颜色
+    monkeypatch.setattr(ocr, 'PHOTO_PREPROCESS', False)
+    assert len(set(ocr.prepare_image(_image('JPEG')).getpixel((10, 10)))) > 1  # 关掉开关后照片保留颜色
 
 
 @pytest.fixture

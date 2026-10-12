@@ -42,6 +42,8 @@ export interface AiImportPage {
     unitPrice: number | null;
     amount?: number | null;
     purchaseLink: string | null;
+    /** 与已有物品明显是同一物品时的建议（品名 + 规格 + 单位），只在用户点「采用」后替换 */
+    catalogSuggestion?: { name: string; spec: string | null; unit: string | null } | null;
   }[];
   warnings: string[];
 }

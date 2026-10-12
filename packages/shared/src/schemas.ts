@@ -86,8 +86,8 @@ export const parseResultSchema = z.object({
   warnings: z.array(z.string()),
   pages: z.array(parsePageSchema).optional(),
   pageCount: z.number().int().positive().optional(),
-  /** AI_REVIEW：文本层 PDF 的物理行由网格重建得出，AI 只拆分品名与规格、判断单位 */
-  mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT', 'AI_IMAGE', 'AI_REVIEW']),
+  /** 审核模式的页（pages[].mode 为 AI_REVIEW）在整份结果里按 AI_IMAGE 汇总，旧版本回退后也能读取 */
+  mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT', 'AI_IMAGE']),
 });
 export type ParseResult = z.infer<typeof parseResultSchema>;
 /** 确认导入的明细只记申请事实（品名、规格、数量、单位）；成交价与链接在登记采购时填写。 */

@@ -354,6 +354,19 @@ export function useImportTask() {
     l.unit = s.unit ?? '';
     acknowledge(s);
   }
+  /** 已有物品建议：与当前品名、规格、单位不同才显示 */
+  function catalogMatch(l: Line) {
+    const c = suggestion(l)?.catalogSuggestion;
+    return c && (c.name !== l.itemName || (c.spec ?? '') !== (l.spec ?? '') || (c.unit ?? '') !== (l.unit ?? '')) ? c : null;
+  }
+  /** 采用已有物品：只换品名、规格、单位，原文与数量不动 */
+  function applyCatalog(l: Line) {
+    const c = catalogMatch(l);
+    if (!c) return;
+    l.itemName = c.name;
+    l.spec = c.spec ?? '';
+    l.unit = c.unit ?? '';
+  }
   function addSuggestion(s: AiImportPage['items'][number] & { page: number }) {
     lines.value.push(
       line({
@@ -465,7 +478,8 @@ export function useImportTask() {
     active, box, pageCount, issuePages, suggestions, localState, aiState, fields, labels, stateDot, stackedLabel,
     // 动作
     loadHistory, reloadDraft, revisionRows, needsReview, line, persist, upload, uploadFile, openDuplicate, cancel,
-    retry, focusLine, suggestion, acknowledge, apply, addSuggestion, localValue, applyLocal, reviewed, confirm,
+    retry, focusLine, suggestion, acknowledge, apply, catalogMatch, applyCatalog, addSuggestion, localValue, applyLocal,
+    reviewed, confirm,
     scrollToTask,
   };
 }

@@ -6,7 +6,7 @@ import io
 import os
 from .grid import page_words, rebuild_from_grid
 from .normalize import to_halfwidth
-from .ocr import ocr_pdf_page, run_ocr
+from .ocr import is_photo, ocr_pdf_page, run_ocr
 from .reconstruct import rebuild_from_entries, rebuild_from_lines, rows_from_table, finalize_items, extract_fields
 
 MAX_PAGES = int(os.environ.get("OCR_MAX_PAGES", "30"))
@@ -207,11 +207,8 @@ def document_info(data: bytes, filename: str):
     return {"pageCount": count}
 
 
-def render_page(data: bytes, filename: str, page: int) -> tuple[bytes, str]:
-    """Page image for the model and for manual review: (bytes, mime).
-
-    Photos (JPEG, or EXIF with a camera make/model) are upright-rotated, scaled to 2560px and re-encoded as JPEG 85;
-    screenshots and PDF pages stay PNG. OCR_PAGE_PREPROCESS=0 keeps PNG output for everything."""
+def _page_image(data: bytes, filename: str, page: int):
+    """Upright page image scaled to 2560px and whether it is a photo (photos are sent as JPEG)."""
     from PIL import Image, ImageOps
     photo = False
     if filename.lower().endswith(".pdf"):
@@ -228,16 +225,72 @@ def render_page(data: bytes, filename: str, page: int) -> tuple[bytes, str]:
         if page != 1:
             raise ValueError("页码超出范围")
         with Image.open(io.BytesIO(data)) as original:
-            exif = original.getexif()
-            photo = original.format == "JPEG" or bool(exif.get(0x010F) or exif.get(0x0110))
+            photo = is_photo(original)
             image = ImageOps.exif_transpose(original).convert("RGB")
     image.thumbnail((2560, 2560))
+    return image, photo and PAGE_PREPROCESS
+
+
+def _encode(image, photo: bool) -> tuple[bytes, str]:
     out = io.BytesIO()
-    if photo and PAGE_PREPROCESS:
+    if photo:
         image.save(out, "JPEG", quality=85)
-        mime = "image/jpeg"
-    else:
-        image.save(out, "PNG")
-        mime = "image/png"
-    image.close()
-    return out.getvalue(), mime
+        return out.getvalue(), "image/jpeg"
+    image.save(out, "PNG")
+    return out.getvalue(), "image/png"
+
+
+def render_page(data: bytes, filename: str, page: int) -> tuple[bytes, str]:
+    """Page image for the model and for manual review: (bytes, mime).
+
+    Photos (JPEG, or EXIF with a camera make/model) are upright-rotated, scaled to 2560px and re-encoded as JPEG 85;
+    screenshots and PDF pages stay PNG. OCR_PAGE_PREPROCESS=0 keeps PNG output for everything."""
+    image, photo = _page_image(data, filename, page)
+    try:
+        return _encode(image, photo)
+    finally:
+        image.close()
+
+
+# 长截图分段：高宽比超过 STRIP_RATIO 的页图在空白带处切开，每段尽量不高于宽度的 1.3 倍，最多 3 段
+STRIP_RATIO, STRIP_HEIGHT, STRIP_MAX = 1.6, 1.3, 3
+
+
+def split_strips(image) -> list:
+    """Cut a tall screenshot at blank horizontal bands near evenly spaced targets; never through text, no overlap."""
+    import math
+    import numpy as np
+    width, height = image.size
+    if height / width <= STRIP_RATIO:
+        return [image]
+    count = min(STRIP_MAX, math.ceil(height / (STRIP_HEIGHT * width)))
+    ink = (np.asarray(image.convert("L")) < 200).sum(axis=1)
+    blank = ink <= max(1, width * .002)
+    bands, start = [], None
+    for y, empty in enumerate(blank):
+        if empty and start is None:
+            start = y
+        elif not empty and start is not None:
+            bands.append((start, y))
+            start = None
+    if start is not None:
+        bands.append((start, height))
+    cuts = []
+    for k in range(1, count):
+        target, window = k * height / count, .25 * height / count
+        near = [(a + b) // 2 for a, b in bands if 0 < (a + b) // 2 < height and abs((a + b) / 2 - target) <= window]
+        if near:
+            cuts.append(min(near, key=lambda y: abs(y - target)))
+    bounds = [0, *sorted(set(cuts)), height]
+    return [image.crop((0, a, width, b)) for a, b in zip(bounds, bounds[1:]) if b > a]
+
+
+def render_strips(data: bytes, filename: str, page: int) -> tuple[list[bytes], str]:
+    """The page image cut into 1-3 strips from top to bottom, each encoded like render_page."""
+    image, photo = _page_image(data, filename, page)
+    try:
+        parts = split_strips(image)
+        encoded = [_encode(part, photo) for part in parts]
+        return [content for content, _ in encoded], encoded[0][1]
+    finally:
+        image.close()

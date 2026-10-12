@@ -195,6 +195,41 @@ async def test_unknown_template_without_borders_falls_back_with_warning(monkeypa
     assert result["warnings"][0] == "第 1 页未识别到表格边框，已按文本逐行解析，请对照原件核对"
 
 
+def bordered_table(header, rows, top=100.0, pitch=20.0):
+    """没有序号列的通用表格：每行一条全宽横线，列线贯穿表体。"""
+    from seeyon import FakePage, h, v, words_of
+    xs = [60.0, 220.0, 330.0, 420.0, 500.0]
+    words = [w for text, x in zip(header, xs) for w in words_of(text, x + 5, top + 4, 10)]
+    edges = [h(top, xs[0], xs[-1]), h(top + pitch, xs[0], xs[-1])]
+    y = top + pitch
+    for row in rows:
+        for text, x in zip(row, xs):
+            words += words_of(text, x + 5, y + 5)
+        y += pitch
+        edges.append(h(y, xs[0], xs[-1]))
+    edges += [v(x, top, y) for x in xs]
+    return FakePage(words + words_of("合计", 70, y + 5), edges)
+
+
+def test_rows_without_index_start_at_quantities_with_units():
+    page = bordered_table(["物品名称", "规格", "数量", "单位"], [["A4复印纸", "80g", "5包", ""], ["矿泉水", "550ml", "2箱", ""]])
+    items, _, _ = rows_of([page])
+    assert [(i["itemName"], i.get("spec"), i["quantity"], i.get("unit")) for i in items] == [
+        ("A4复印纸", "80g", 5, "包"), ("矿泉水", "550ml", 2, "箱")]
+
+
+def test_text_after_a_wrapped_link_stays_out_of_the_link():
+    items, _, _ = rows_of(office_form([{"idx": "1", "name": ["订书钉"], "qty": "5.0", "note": ["https://item.jd.com/100012345.html", "5盒"]}]))
+    assert (items[0]["purchaseLink"], items[0]["unit"]) == ("https://item.jd.com/100012345.html", "盒")
+
+
+def test_header_synonyms_are_recognised_and_titled_pages_without_header_are_flagged():
+    items, _, _ = rows_of(office_form([{"idx": "1", "name": ["文件袋"], "qty": "20.0"}], header=("序号", "商品名称", "领用数量", "单价", "备注")))
+    assert [(i["itemName"], i["quantity"]) for i in items] == [("文件袋", 20)]
+    state, result = rebuild_from_grid(office_form([{"idx": "1", "name": ["文件袋"], "qty": "20.0"}], header=("序号", "物料", "件", "价", "注"))[0])
+    assert result["items"] == [] and result["warnings"] == ["未识别到明细表头，请人工补录并核对原件"]
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
