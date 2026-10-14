@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Panel from '@/components/ui/Panel.vue';
@@ -91,7 +92,13 @@ defineExpose({ refresh });
       列表加载失败：{{ error }}
       <template #actions><Button variant="link" size="sm" @click="refresh()"><Icon name="refresh" :size="14" />重新加载</Button></template>
     </Notice>
-    <p v-else-if="!rows.length" class="px-5 py-4 text-[13px] text-muted">{{ tab === 'pending' ? '没有未完成的导入' : '没有已入账的导入' }}</p>
+    <!-- 空态：标题文字是 e2e 接口（「没有未完成的导入」）；线描只是装饰 -->
+    <EmptyState
+      v-else-if="!rows.length"
+      art="inbox"
+      :title="tab === 'pending' ? '没有未完成的导入' : '没有已入账的导入'"
+      :description="tab === 'pending' ? '上传的原件识别后会留在这里，随时可以回来继续核对。' : '确认入账的任务会留在这里，只读查看，可回到对应申请。'"
+    />
     <ul v-else class="divide-y divide-line">
       <li v-for="task in rows" :key="task.id" class="flex items-center gap-3.5 px-5 py-3 transition-colors duration-150" :class="task.id === props.currentTaskId ? 'bg-primary-soft' : ''" :aria-current="task.id === props.currentTaskId ? 'true' : undefined">
         <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">

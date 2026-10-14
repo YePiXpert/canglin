@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
+import LineArt from '@/components/ui/LineArt.vue';
 import Notice from '@/components/ui/Notice.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
@@ -113,101 +114,141 @@ const subheading = computed(() =>
       ? '输入初始化时生成的恢复码与新密码'
       : '单管理员模式，输入密码继续',
 );
+
+/** 桌面左栏的三条价值点 */
+const VALUES = [
+  { icon: 'file', title: '原件先存档', text: '上传即保存 OA 原件，确认后关联到申请，随时对照查看。' },
+  { icon: 'layers', title: '按量采购可追溯', text: '同一明细可分次、分供应商采购，每批数量与成交价都留痕。' },
+  { icon: 'inventory', title: '库存与领用同一本账', text: '直发、入库、领用与归还按物品和单位记账。' },
+];
+/* 朱砂方印：品牌唯一的实心朱砂色块（与顶栏一致；实心底上的字用 primary-fg） */
+const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg-accent text-sm font-bold leading-none text-primary-fg select-none';
 </script>
 
 <template>
-  <!-- 「墨线」：纸色画布上一张居中的面板，没有背景纹理 -->
-  <div class="min-h-dvh bg-canvas flex flex-col items-center justify-center px-4 py-10">
-    <div class="w-full max-w-[420px] bg-surface border border-line rounded-xl p-6 sm:p-8">
-      <!-- 品牌：朱砂方印 + 词标（与顶栏一致） -->
+  <!--
+    「墨线」：纸色画布，没有背景纹理。桌面（≥ lg）左右两栏：左 5/12 是品牌面板（画布色，右边一条发丝线）——
+    方印与词标、一幅单色线描（粮仓，门楣一方朱砂印）、一句定位与三条价值点；右边是表单面板。
+    手机单栏，只有表单面板（面板顶部自带方印与词标），线描不显示。
+  -->
+  <div class="min-h-dvh bg-canvas lg:grid lg:grid-cols-12">
+    <aside class="hidden border-r border-line lg:col-span-5 lg:flex lg:flex-col lg:px-12 lg:py-12 xl:px-16" aria-label="关于仓廪">
       <div class="flex items-center gap-3">
-        <span class="flex items-center justify-center size-10 shrink-0 rounded-[5px] bg-accent text-sm font-bold leading-none text-primary-fg select-none" aria-hidden="true">仓廪</span>
+        <span :class="SEAL" aria-hidden="true">仓廪</span>
         <div class="min-w-0">
           <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
           <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
         </div>
       </div>
-
-      <!-- 服务端不可达 -->
-      <div v-if="auth.unreachable" class="mt-8 text-center">
-        <span class="mx-auto flex items-center justify-center size-11 rounded-full bg-red-soft text-red">
-          <Icon name="alert-circle" :size="20" />
-        </span>
-        <p class="mt-4 text-lg font-bold text-ink">连接不上后端服务</p>
-        <p class="mt-1 text-[13px] text-muted">服务可能还在启动，或者容器没跑起来。</p>
-        <Button variant="primary" size="lg" class="w-full mt-6" :loading="loading" @click="auth.refresh()">重试</Button>
+      <div class="my-auto max-w-sm py-12">
+        <LineArt name="granary" :size="120" accent class="text-faint" />
+        <p class="mt-8 text-[22px] leading-8 font-bold tracking-[-0.01em] text-ink">从 OA 申请到领用，记在同一本账上</p>
+        <p class="mt-2 text-[13px] leading-relaxed text-muted">导入已审批的申请，分次采购、到货、发放与库存都跟着申请走，每一笔都能追到原件。</p>
+        <ul class="mt-8 space-y-4">
+          <li v-for="v in VALUES" :key="v.title" class="flex items-start gap-3">
+            <Icon :name="v.icon" :size="18" class="mt-px shrink-0 text-muted" />
+            <div class="min-w-0">
+              <p class="text-sm leading-5 font-medium text-ink">{{ v.title }}</p>
+              <p class="mt-0.5 text-[12.5px] leading-[18px] text-muted">{{ v.text }}</p>
+            </div>
+          </li>
+        </ul>
       </div>
+    </aside>
 
-      <!-- 恢复码已生成（初始化成功） -->
-      <div v-else-if="recoveryCodeIssued" class="mt-8">
-        <div class="flex items-center gap-2 text-teal">
-          <Icon name="check-circle" :size="18" />
-          <p class="text-lg font-bold">初始化完成</p>
+    <div class="flex min-h-dvh flex-col items-center justify-center px-4 py-10 lg:col-span-7">
+      <!-- 面板首帧轻弹入（animate-pop-in；减少动态效果时全局缩到近 0） -->
+      <div class="w-full max-w-[420px] bg-surface border border-line rounded-xl p-6 sm:p-8 animate-pop-in">
+        <!-- 品牌：朱砂方印 + 词标（与顶栏一致）；桌面上品牌在左栏，这里不再重复 -->
+        <div class="mb-8 flex items-center gap-3 lg:hidden">
+          <span :class="SEAL" aria-hidden="true">仓廪</span>
+          <div class="min-w-0">
+            <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
+            <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
+          </div>
         </div>
-        <p class="mt-2 text-[13px] text-muted leading-relaxed">
-          请把恢复码保存在安全的地方，密码遗忘时用它重置：
-        </p>
-        <p class="mt-4 py-3 px-4 bg-surface-2 border border-line rounded-lg text-center font-mono text-lg tracking-[0.2em] text-ink select-all break-all">
-          {{ recoveryCodeIssued }}
-        </p>
-        <Button variant="secondary" size="sm" class="w-full mt-3" @click="copyCode">
-          <Icon :name="copied ? 'check' : 'copy'" :size="14" /> {{ copied ? '已复制' : '复制恢复码' }}
-        </Button>
-        <Notice tone="red" variant="inline" size="sm" class="mt-4">恢复码只显示这一次，离开页面后无法再次查看。</Notice>
-        <Button variant="primary" size="lg" class="w-full mt-5" @click="finishSetup">我已保存，进入系统</Button>
+
+        <!-- 服务端不可达 -->
+        <div v-if="auth.unreachable" class="text-center">
+          <span class="mx-auto flex items-center justify-center size-11 rounded-full bg-red-soft text-red">
+            <Icon name="alert-circle" :size="20" />
+          </span>
+          <p class="mt-4 text-lg font-bold text-ink">连接不上后端服务</p>
+          <p class="mt-1 text-[13px] text-muted">服务可能还在启动，或者容器没跑起来。</p>
+          <Button variant="primary" size="lg" class="w-full mt-6" :loading="loading" @click="auth.refresh()">重试</Button>
+        </div>
+
+        <!-- 恢复码已生成（初始化成功） -->
+        <div v-else-if="recoveryCodeIssued">
+          <div class="flex items-center gap-2 text-teal">
+            <Icon name="check-circle" :size="18" />
+            <p class="text-lg font-bold">初始化完成</p>
+          </div>
+          <p class="mt-2 text-[13px] text-muted leading-relaxed">
+            请把恢复码保存在安全的地方，密码遗忘时用它重置：
+          </p>
+          <p class="mt-4 py-3 px-4 bg-surface-2 border border-line rounded-lg text-center font-mono text-lg tracking-[0.2em] text-ink select-all break-all">
+            {{ recoveryCodeIssued }}
+          </p>
+          <Button variant="secondary" size="sm" class="w-full mt-3" @click="copyCode">
+            <Icon :name="copied ? 'check' : 'copy'" :size="14" /> {{ copied ? '已复制' : '复制恢复码' }}
+          </Button>
+          <Notice tone="red" variant="inline" size="sm" class="mt-4">恢复码只显示这一次，离开页面后无法再次查看。</Notice>
+          <Button variant="primary" size="lg" class="w-full mt-5" @click="finishSetup">我已保存，进入系统</Button>
+        </div>
+
+        <template v-else>
+          <h1 class="text-lg font-bold text-ink">{{ heading }}</h1>
+          <p class="mt-1 mb-6 text-[13px] text-muted">{{ subheading }}</p>
+
+          <form class="space-y-4" @submit.prevent="submit">
+            <Input
+              v-if="mode === 'recover'"
+              v-model="recoveryCode"
+              label="恢复码"
+              placeholder="16 位恢复码"
+              required
+              autocomplete="one-time-code"
+              :error="errors.recoveryCode"
+            />
+            <Input
+              v-model="password"
+              type="password"
+              :label="mode === 'login' ? '密码' : '新密码'"
+              :placeholder="mode === 'login' ? '请输入密码' : '至少 8 位'"
+              required
+              :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+              :error="errors.password"
+            />
+            <Input
+              v-if="mode !== 'login'"
+              v-model="passwordConfirm"
+              type="password"
+              label="确认密码"
+              placeholder="再输入一次"
+              required
+              autocomplete="new-password"
+              :error="errors.confirm"
+            />
+
+            <Notice v-if="auth.status.locked" tone="red" size="sm">失败次数过多已锁定，约 {{ lockMinutes }} 分钟后可重试</Notice>
+
+            <Button variant="primary" size="lg" type="submit" class="w-full mt-2" :loading="loading" :disabled="auth.status.locked">
+              {{ mode === 'setup' ? '初始化系统' : mode === 'recover' ? '重置密码' : '登 录' }}
+            </Button>
+          </form>
+
+          <!-- 进恢复模式后必须能回来：原来这个按钮在 recover 模式下会消失 -->
+          <Button v-if="mode === 'login'" variant="link" class="mt-5 text-[13px]" @click="openRecover">
+            忘记密码？使用恢复码
+          </Button>
+          <Button v-else-if="mode === 'recover'" variant="link" class="mt-5 text-[13px]" @click="backToLogin">
+            <Icon name="chevron-left" :size="14" /> 返回登录
+          </Button>
+        </template>
       </div>
 
-      <template v-else>
-        <h1 class="mt-8 text-lg font-bold text-ink">{{ heading }}</h1>
-        <p class="mt-1 mb-6 text-[13px] text-muted">{{ subheading }}</p>
-
-        <form class="space-y-4" @submit.prevent="submit">
-          <Input
-            v-if="mode === 'recover'"
-            v-model="recoveryCode"
-            label="恢复码"
-            placeholder="16 位恢复码"
-            required
-            autocomplete="one-time-code"
-            :error="errors.recoveryCode"
-          />
-          <Input
-            v-model="password"
-            type="password"
-            :label="mode === 'login' ? '密码' : '新密码'"
-            :placeholder="mode === 'login' ? '请输入密码' : '至少 8 位'"
-            required
-            :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
-            :error="errors.password"
-          />
-          <Input
-            v-if="mode !== 'login'"
-            v-model="passwordConfirm"
-            type="password"
-            label="确认密码"
-            placeholder="再输入一次"
-            required
-            autocomplete="new-password"
-            :error="errors.confirm"
-          />
-
-          <Notice v-if="auth.status.locked" tone="red" size="sm">失败次数过多已锁定，约 {{ lockMinutes }} 分钟后可重试</Notice>
-
-          <Button variant="primary" size="lg" type="submit" class="w-full mt-2" :loading="loading" :disabled="auth.status.locked">
-            {{ mode === 'setup' ? '初始化系统' : mode === 'recover' ? '重置密码' : '登 录' }}
-          </Button>
-        </form>
-
-        <!-- 进恢复模式后必须能回来：原来这个按钮在 recover 模式下会消失 -->
-        <Button v-if="mode === 'login'" variant="link" class="mt-5 text-[13px]" @click="openRecover">
-          忘记密码？使用恢复码
-        </Button>
-        <Button v-else-if="mode === 'recover'" variant="link" class="mt-5 text-[13px]" @click="backToLogin">
-          <Icon name="chevron-left" :size="14" /> 返回登录
-        </Button>
-      </template>
+      <p class="mt-6 text-meta">本地部署 · 数据自持 · v{{ appVersion }}</p>
     </div>
-
-    <p class="mt-6 text-meta">本地部署 · 数据自持 · v{{ appVersion }}</p>
   </div>
 </template>

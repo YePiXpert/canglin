@@ -24,7 +24,7 @@
 2. **一层容器**：内容直接放在面板上，面板之间用留白分隔；不允许卡片套卡片。
 3. **表格就是表格**：表头 surface-2 淡底、12px 不加粗不大写，单行行高 44–48px，发丝线分隔，数字右对齐且等宽（tabular）；行内只放一个描边小按钮 +「…」更多，危险动作不出现在行内。
 4. **控件全部自绘**：复选、单选、开关、分段、日期、文件上传都用本规范的组件或全局类，深浅色一致，不露原生外观。
-5. **颜色是信息**：只有状态和警示上色；不用彩色图标底、渐变、彩色标题、大插画这类装饰。
+5. **颜色是信息**：只有状态和警示上色；不用彩色图标底、渐变、彩色标题、大插画这类装饰。唯一的插画是没有数据处的单色线描（§5.9「墨线画」），不用照片、素材库插图、背景纹理。
 
 ## 2. 令牌与主题
 
@@ -47,7 +47,8 @@
 | `scrim` | 弹窗与抽屉的遮罩，用全局类 `.overlay`（浅色 40% 墨色，深色 60% 纯黑）；不要再写 `bg-ink/40 dark:bg-black/60` |
 | `--radius-card` / `--radius-control` | 面板与卡片 10px / 按钮与输入框 6px；弹窗 `rounded-xl`（12px），状态 chip `rounded-sm`（4px），药丸 `rounded-full` |
 | `--shadow-xs` / `--shadow-card` / `--shadow-pop` | 经 `--elevation-*` 间接取值：Tailwind 会把命名阴影的值内联进工具类，直接在 `.dark` 覆盖 `--shadow-*` 无效。面板与按钮都没有阴影；只有弹窗、下拉、Toast 用 `shadow-pop`，分段控件的当前项用 `shadow-xs` |
-| `animate-fade-in` / `animate-pop-in` / `animate-sheet-in` | 遮罩 / 下拉与弹层 / 底部抽屉的进场动效，时长与曲线见 `main.css` |
+| `animate-fade-in` / `animate-pop-in` / `animate-sheet-in` | 遮罩 / 下拉与弹层（也给登录面板的首帧）/ 底部抽屉的进场动效，时长与曲线见 `main.css` |
+| `animate-check-draw` | 对勾按笔画描出（300ms）：path 写 `pathLength="1" stroke-dasharray="1"`；只用于导入「已确认导入」。不做路由切换过渡（e2e 依赖即时渲染，`<main>` 回顶也会受影响） |
 | `--font-sans` / `--font-mono` | 系统中文字体栈（Segoe UI、PingFang SC、Microsoft YaHei …，不引网络字体）/ 流水号、备份文件名与代码 |
 
 文字层级：
@@ -233,7 +234,7 @@
 ### 5.6 FileDropzone
 
 - 点击或拖入上传。内部始终只有一个 `<input type="file">`（`sr-only`，整块是可键盘聚焦的 `<label>`），e2e 直接对它 `setInputFiles`。
-- 外观：surface 底 + 1.5px line-strong 虚线、12px 圆角；48px surface-2 图标块 + 15px / 600 标题 + 12px faint 限制说明；悬停描边加深、拖入时描边墨色 + surface-2 底；键盘焦点是全局的朱砂外框。
+- 外观：surface 底 + 1.5px line-strong 虚线、12px 圆角；48px surface-2 图标块 + 15px / 600 标题 + 12px faint 限制说明；悬停描边加深、拖入时描边墨色 + surface-2 底；键盘焦点是全局的朱砂外框。`art`（只给导入页撑高的上传态）：≥ 640px 用 96px 的「单据 + 扫描线」线描代替图标块，拖入时线描只换描边色（faint → 墨色）；手机与页尾的紧凑上传框不传，仍是图标块。
 - props：`accept`（拖入的文件也按它过滤）、`multiple`（默认只交出第一个文件）、`label`、`hint`、`disabled`、`capture`（手机上多一个「拍照上传」，临时给同一个 input 加 `capture`）；默认插槽追加在文案下方。
 - 事件：`files(File[])`（交出后清空 input，同一文件可以再选）；`rejected(File[])`——组件已经弹了错误 Toast（「不支持的文件类型，请选择 …」，格式名按 `accept` 生成：`.pdf` → PDF、`.jpeg` 并入 JPG、`image/*` → 图片），调用方不要再弹。组件用到 toast store，单测挂载需要活动的 pinia（见 `FileDropzone.spec.ts`）。
 
@@ -261,7 +262,8 @@
 
 ### 5.9 EmptyState / ErrorState / Skeleton / Toast
 
-- `EmptyState`：44px surface-2 圆角图标块 + 15px / 600 标题 + 13px muted 一句话 + 最多两个 sm 按钮（默认插槽），上下 40px；没有插画。`icon`（默认 `box`；`false` = 不画图标块）、`title`、`description?`；`illustration`（`box`、`ledger`、`truck`、`search`、`empty`）是旧的场景名，现在只换成对应的线性图标，新代码直接传 `icon`。三种用法：首次使用 = 图标 + 一句话 + 两个入口（primary sm + secondary sm）；搜索 / 筛选无结果 = `icon=false`，标题复述条件，给「清除全部条件」(secondary sm)/「只清除关键词」(ghost sm)；待办已清空 = 页面里一行提示，不占高度。
+- `EmptyState`：44px surface-2 圆角图标块 + 15px / 600 标题 + 13px muted 一句话 + 最多两个 sm 按钮（默认插槽），上下 40px。`icon`（默认 `box`；`false` = 不画图标块）、`art?`（单色线描，传了就代替图标块，默认不画）、`title`、`description?`；`illustration`（`box`、`ledger`、`truck`、`search`、`empty`）是旧的场景名，现在只换成对应的线性图标，新代码直接传 `icon`。三种用法：首次使用 = 图标（重要的几处用 `art`）+ 一句话 + 两个入口（primary sm + secondary sm）；搜索 / 筛选无结果 = `icon=false`、不传 `art`，标题复述条件，给「清除全部条件」(secondary sm)/「只清除关键词」(ghost sm)；待办已清空 = 页面里一行提示，不占高度。
+- 「墨线画」`LineArt`（`components/ui/LineArt.vue` + `art.ts`）：单色线描，120 × 96 视窗、2px 描边（不随尺寸缩放）、圆角线帽、`aria-hidden`，宽不超过 120px。主线是 currentColor（调用方给 `text-faint`，拖入、强调时可换墨色），单据上的文字行与地面线自动画成更淡的 `line-strong`，深浅色跟着令牌换；`accent` 只给登录页粮仓门楣的一方朱砂印。只出现在没有数据的地方：工作台与申请单的「还没有申请单」（`ledger`）、库存「还没有库存物品」（`box`）、备份管理「还没有备份」（`archive`）、导入任务列表空态（`inbox`）、404（`search`）、导入页撑高的上传框（`scan`）、登录页左栏（`granary`）。允许的只有这种单色线描；不用彩色插画、照片、素材库插图、渐变与背景纹理，新增母题照 `art.ts` 的规格画。
 - `ErrorState`：原位的加载失败——朱砂 `alert-circle` + `title`（默认「加载失败」）+ `message` +「重新加载」（secondary sm，`loading` 时转圈并禁用；旧名 `retrying` 已改）；默认插槽追加在「重新加载」之后（如「查看系统状态」ghost sm）；事件 `retry`。不带 role（页面同时只该有一个 alert）。
 - `Skeleton`：surface-2 条块，用尺寸类拼出占位形状（`<Skeleton class="h-4 w-40" />`），代替「加载中…」文字；只给首次加载，刷新时保留旧内容。`animate-pulse` 也是 e2e 判断「没有停在骨架屏上」的依据。
 - Toast：`useToastStore()` 的 `success(msg, action?)`、`error(msg)`、`info(msg)`；墨色浮层白字（`bg-panel`），成功图标绿、信息图标蓝，错误换成深朱砂底（`bg-panel-red`）；桌面右下、手机居中在标签栏之上，最多同时 4 条；错误是 `role="alert"`，其余 `role="status"`；带动作（如「撤销」）的成功提示停留更久，动作是浅色小药丸按钮。
@@ -388,7 +390,7 @@
 
 ## 8. 页面特例
 
-- **登录**：单个居中面板；保留 `input[type=password]` 与按钮文字「登 录」（e2e 用 `/^登\s*录$/` 匹配）。
+- **登录**：桌面（≥ lg）左右两栏——左 5/12 是品牌面板（画布色，右侧一条发丝线）：方印 + 词标、线描粮仓（`granary`，门楣朱砂印）、一句定位与三条价值点（原件先存档 / 按量采购可追溯 / 库存与领用同一本账）；右侧是表单面板（首帧 `animate-pop-in`），面板里的方印与词标在桌面上隐藏，避免重复。手机单栏，只有表单面板，线描不显示。保留 `input[type=password]`、按钮文字「登 录」（e2e 用 `/^登\s*录$/` 匹配）、恢复码与初始化流程、页脚版本号。
 - **工作台 `/workbench`**：页头说明写等待推进的申请张数（待办总数）。「待办概览」是一行数字：到货待处理在最前（大于 0 时数字朱砂）、待到货、待采购、未完成导入，最右库存物品；各项链接到 `/requests?stage=…`、`/import`、`/stock`，手机上是通栏横向滑动的小卡。主体「待办申请」取后端待办的前 10 张（`pending: '1'`，后端按录入倒序），前端按下一步重排：有待处理 > 有待到货 > 仅待采购，同级按申请日期升序（`components/workflow/workbench.ts`）；每行是 `WorkbenchRequestRow`（流水号、部门 · 经办人、日期 · 明细数与状态 chip ｜ 各明细的剩余数量，待处理蓝色加粗、已办结绿色 ｜ 下一步按钮 + 一句原因：定去向 primary，登记到货 / 登记采购 secondary），按钮都进 `/requests/:id` 办理，工作台不直接登记；桌面三栏 200 / 1fr / 180，窄屏纵向堆叠、按钮整宽。待办清空时是一行提示（不占高度），从没有申请时给「人工录入申请」入口。右栏（< xl 排到主体下方）：`components/import/ImportPendingAside`（最近 5 份未入账的导入，「继续处理」进 `/import?task=…`，总数交给概览）与 `RecentDocumentsAside`（最近录入的 3 条业务记录，能对应到申请的链接到申请详情）。
 - **申请单 `/requests`**：
   - 列表（`RequestCollection`）是一层 `Panel flush`：工具栏 = 搜索（流水号 / 品名 / 部门 / 经办人；接口不搜规格）+ 分段筛选「全部 · 有待采购 · 有待到货 · 有待处理 · 已办结」（地址参数 `stage`，工作台的待办数字链接到这里）+ 右侧「共 N 张 · 按录入时间倒序」（接口按录入顺序倒序）。表格 `table-fixed`，一张申请一行（`RequestRow`，`tr[data-request-id]`）：流水号（等宽，副行「N 条明细 · N 份原件」）| 部门 / 经办人 | 申请日期 | 申请明细（前两项单行截断带 title，「等 N 项」不参与截断；只有一条明细时副行写申请 / 已采购 / 已到货 …）| 进度 chips | 下一步 +「…」（查看申请详情、查看原件）。没有记录时不出分页；首次使用给「导入 OA 单」「人工录入申请」两个入口，搜索 / 筛选无结果复述条件并给「清除全部条件」「只清除关键词」。手机按 `.table-cards` 变卡片：流水号与明细在前，chips 与按钮在底部。
@@ -404,7 +406,7 @@
   - 页头右侧是识别服务状态（`components/import/ImportServiceStatus`，只读 `aiApi.config` 与 `systemApi.ocrHealth`，各自取回后才显示）：「AI 原件识别 已启用 / 未启用 / 未配置」（已启用的条件与服务端自动识别一致：启用 + 上传后自动识别 + 有 Key + 识别检测通过）、「本地 OCR 正常 / 不可用」，文字前一个小圆点（正常 teal、未启用与未配置 faint、不可用 red）。
   - 从上到下：步骤条（上传原件 → 识别单据 → 核对入账；当前步墨色实心数字、完成 teal 柔底对勾、识别失败琥珀提醒、未到描边数字，步骤之间 1px `line-strong` 线，手机只显示当前步骤名）、状态条（一张 sheet：文件名、「识别：…」「AI：…」、页数、「草稿已保存」（teal）、停止 / 重试）、页级核对复选框；桌面双栏（原件预览 : 草稿 = 5 : 7，`lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]`），手机用「明细 / 原件」分段切换。草稿明细的表头只写一次（品名 / 数量 / 单位；面板窄时逐条堆叠，字段名改写在字段上方），行内 `Input size="sm"`，可访问名称带行号（「第 N 行品名 / 规格 / 数量 / 单位」，`hide-label`；e2e 按占位文字找这几格），正在核对的明细 `bg-primary-soft`，「删除」是 `danger-ghost`（可访问名称「删除第 N 行」），识别依据与 AI 建议收在 `Disclosure` 里。
   - 上传态（还没有任务，或地址里的任务已不存在）：步骤条下面两栏 `lg:grid-cols-[minmax(0,1fr)_400px]`——左边 FileDropzone 虚线框（撑高到 280px：标题「把 PDF、OA 截图或手机照片拖到这里」、限制说明、主按钮样式的「选择文件」提示，手机上框下另有「拍照上传」）、隐私说明（含「未确认的原件保留 30 天」）和「上传之后会发生什么」三小段；右边是「未完成的导入」。两栏外层是 `div`：e2e 按「含标题『未完成的导入』的 `section`」找任务面板，再套 `section` 会把上传区也圈进去。
-  - StickyActionBar：「保存草稿」（secondary）「确认全部内容并导入」（primary），保存失败与其它错误放在 `#start`；还不能入账时 `#start` 另有一行琥珀 inline 汇总原因（`confirmBlockers`：单据头未填、明细品名 / 数量 / 单位未确认、页面未核对、AI 建议待核对、原件缺失，规则与 `workflowImportConfirmSchema` 及服务端确认一致），此时确认按钮禁用并经 `aria-describedby` 指向这行字（不是 alert）。「重新载入已保存版本」走页内 `ConfirmDialog`，放弃草稿失败的原因只显示在它自己的确认框里。其后是修改历史与 AI 用量（历史只在展开时加载，草稿版本没变不重复请求，有加载中、失败重试与空态；AI 调用状态写中文，费用 `¥0.0123`），页尾仍是「上传区 | 未完成的导入」两栏（上传框不撑高、不显示三小段），方便导入下一份。确认成功后换成一张 sheet：teal 对勾 +「已确认导入」+ 创建 / 合并 / 跳过 / 关联原件数 + 主按钮「继续办理申请」。
+  - StickyActionBar：「保存草稿」（secondary）「确认全部内容并导入」（primary），保存失败与其它错误放在 `#start`；还不能入账时 `#start` 另有一行琥珀 inline 汇总原因（`confirmBlockers`：单据头未填、明细品名 / 数量 / 单位未确认、页面未核对、AI 建议待核对、原件缺失，规则与 `workflowImportConfirmSchema` 及服务端确认一致），此时确认按钮禁用并经 `aria-describedby` 指向这行字（不是 alert）。「重新载入已保存版本」走页内 `ConfirmDialog`，放弃草稿失败的原因只显示在它自己的确认框里。其后是修改历史与 AI 用量（历史只在展开时加载，草稿版本没变不重复请求，有加载中、失败重试与空态；AI 调用状态写中文，费用 `¥0.0123`），页尾仍是「上传区 | 未完成的导入」两栏（上传框不撑高、不显示三小段），方便导入下一份。确认成功后换成一张 sheet：teal 对勾（`animate-check-draw` 按笔画描出，300ms）+「已确认导入」+ 创建 / 合并 / 跳过 / 关联原件数 + 主按钮「继续办理申请」。
   - 「未完成的导入」（标题沿用这个名字，e2e 按它找面板）：只按 `confirmedAt` 区分，分段 Tabs「未完成 / 已入账」，正在看「未完成」时标签后带朱砂计数；每行 = 状态图标（识别中蓝色转圈、待核对 `file`、识别失败琥珀 `alert`、已入账 teal `check-circle`）+ 文件名 +「时间 · 状态」（今天只写时刻、昨天写「昨天 HH:mm」，完整时间在 `title` 里；状态：识别中 / AI 原件识别中 / 识别失败，待人工核对（琥珀）/ 待核对入账（蓝）/ 已入账（teal），原件不在时追加「· 原件缺失」；未确认的任务不叫「已完成」）+ 右侧一个链接：待核对与识别失败是「继续处理」（secondary sm），识别中与已入账是「查看」（ghost sm）；每行只有文件名带 `title`、只有这一个链接（e2e 按 `title` 与链接计数）；当前任务行 `aria-current="true"`、`bg-primary-soft` 并带「当前」Badge；页脚「共 N 条」或「已显示 N 条」，底部「显示更多（共 N 条）」追加下一页。状态判断、文案、图标与颜色集中在 `components/import/status.ts`（`isTaskActive`、`taskKind`、`taskStatusLabel`、`TASK_KIND_STYLES`），工作台的「未完成的导入」与识别步骤条、`useImportTask` 共用，不再各写一份 `PENDING || RUNNING`。
   - 当前任务只由地址里的 `task` 决定：切换前先保存草稿（保存失败就拦下并说明原因），切换时清空上一个任务的状态、丢弃迟到的响应，并把 `<main>` 滚回顶部。已确认的任务只读。
   - 重复上传相同内容的原件时，上传框下面出现一条 sheet：琥珀 chip「同一原件」+ 说明 +「打开已有任务」（primary sm）「这是新的业务，继续处理」「取消本次上传」。

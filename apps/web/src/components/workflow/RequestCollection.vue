@@ -99,7 +99,7 @@ defineExpose({ refresh: load });
         <Button variant="secondary" size="sm" @click="emit('create')">人工录入申请</Button>
       </EmptyState>
       <!-- 首次使用：两个入口 -->
-      <EmptyState v-else icon="ledger" title="还没有申请单" description="从 OA 原件导入，或人工录入一张已审批申请。">
+      <EmptyState v-else art="ledger" title="还没有申请单" description="从 OA 原件导入，或人工录入一张已审批申请。">
         <router-link to="/import" :class="buttonClass({ variant: 'primary', size: 'sm' })">导入 OA 单</router-link>
         <Button variant="secondary" size="sm" @click="emit('create')">人工录入申请</Button>
       </EmptyState>

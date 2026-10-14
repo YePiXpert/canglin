@@ -58,8 +58,11 @@ const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloa
 
     <!-- 完成：一张 sheet，绿色对勾 + 结果 + 主动作「继续办理申请」 -->
     <section v-if="finished" class="card flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center">
+      <!-- 对勾按笔画描出来（300ms，animate-check-draw）；减少动态效果时直接显示画好的对勾 -->
       <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-teal-soft text-teal" aria-hidden="true">
-        <Icon name="check" :size="20" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5" pathLength="1" stroke-dasharray="1" class="animate-check-draw" />
+        </svg>
       </span>
       <div class="min-w-0 flex-1">
         <p class="text-[15px] leading-6 font-semibold text-ink">已确认导入</p>

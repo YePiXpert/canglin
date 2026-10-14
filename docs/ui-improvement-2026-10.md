@@ -317,3 +317,20 @@ pnpm --filter @canglin/web test:e2e
   - 新增用例：`unitPriceLabel`、`Pagination` v-model、`Disclosure` update:open、`Tabs`（新文件，2 个）、供应商搜索。
 - 浏览器实测：56 种物品时库存列表先显示 50 种、页脚「已显示 50 种 · 共 56 种」，点「显示更多」到 56；供应商搜索「找到 4 家 · 共 7 家」；审计摘要以「流水号：… · 明细行数：1」开头；800px 宽触屏（`pointer: coarse` 为真）下搜索框、md 输入框、Select、NativeSelect 均 44px，sm 输入框 40px，桌面细指针 md 仍 36px。
 - 校验：typecheck ✓ lint ✓ test 218 passed（38 个文件，批次 B 结束时 216）
+
+### 批次 D（2026-10-14）
+
+- 完成（按 §5 的评估结论：只做单色线描、品牌资产与两处微动效）：
+  - D2 新增 `components/ui/art.ts`（7 个母题的 path：`ledger`、`box`、`archive`、`inbox`、`search`、`scan`、`granary`；120 × 96 视窗）与 `components/ui/LineArt.vue`（currentColor 主线、`line-strong` 细节、可选朱砂 `accent`，2px 不缩放描边，`aria-hidden`）。`EmptyState` 新增 `art`（传了就代替图标块，默认不画）；用在工作台与申请单的「还没有申请单」（ledger）、库存「还没有库存物品」（box）、备份管理「还没有备份」（archive）、导入任务列表空态（inbox，原来的一行字换成 EmptyState，标题文字不变）。筛选无结果仍 `icon=false`、不画。
+  - D3 `NotFoundView` 用 `search` 线描；`FileDropzone` 新增 `art`，导入页撑高的上传态在 ≥ 640px 用 96px 的 `scan` 线描代替 48px 图标块，拖入时只换描边色；手机与页尾紧凑上传框不变。
+  - D1 `LoginView`：≥ lg 左右两栏（左 5/12 品牌面板：方印 + 词标、`granary` 线描带朱砂门楣印、一句定位、三条价值点；右侧表单面板，桌面上面板内的品牌头隐藏避免重复）；手机单栏不变。`input[type=password]`、「登 录」、恢复码 / 初始化流程、页脚版本号保留。
+  - D4 `apps/web/scripts/render-icons.mjs`（Playwright Chromium 渲染 SVG）生成 `public/apple-touch-icon.png`（180 × 180，朱砂底铺满、白色方盒，RGB 无透明）与 `public/icons/icon-maskable-512.png`（图形收在中心安全区）；`index.html` 加 `apple-touch-icon`，`vite.config.ts` 的 manifest 补 `purpose: 'maskable'` 一项；README「本地开发」补重新生成的命令。
+  - D5 新令牌 `animate-check-draw`（`check-draw` 关键帧，300ms，`both`），导入「已确认导入」的 teal 对勾按笔画描出；登录表单面板首帧 `animate-pop-in`。两者都受全局「减少动态效果」规则约束（`both` 保证直接停在画好的状态）。没有加路由切换过渡。
+- 跳过：无。
+- 与方案不同：
+  - 线描的主线用 `text-faint`、细节用 `line-strong`（方案写的是 `text-line-strong` 描边）：实测 `line-strong` 在深色下几乎看不见、在浅色下比 `faint` 细节还淡，层次倒置；改成主线 faint、细节 line-strong 后两个主题都清楚且仍然克制。
+  - 手机登录页不显示线描（方案允许「缩到 72px 放在表单上方或不显示」二选一）。
+  - 图标图形沿用现有 favicon / icon-512 的白色方盒（品牌在 PWA 里一直用它），没有改成「仓廪」两字的方印：小尺寸下两个汉字识别度差，且 192 / 512 两枚现有图标不变，保持一致。
+- 改动的测试接口：无。导入任务列表空态的文字「没有未完成的导入 / 没有已入账的导入」保留（e2e 按它找），只是从一行字换成 EmptyState 标题并加了说明。新增 `EmptyState.spec.ts` 用例（art 渲染线描、默认不画）。
+- 浏览器实测：登录页 1440 浅 / 深色两栏正常、390 单栏不变；404 与导入上传态的线描显示正常；控制台无警告。
+- 校验：typecheck ✓ lint ✓ test 219 passed（38 个文件）

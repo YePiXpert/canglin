@@ -70,6 +70,8 @@ pnpm dev                          # API :3000 + Vite :5173（自动代理 /api�
 
 访问 http://localhost:5173，首次进入设置管理员密码。
 
+iOS 主屏图标与 PWA 的 maskable 图标（`apps/web/public/apple-touch-icon.png`、`apps/web/public/icons/icon-maskable-512.png`）由脚本生成，改了品牌图形后重新运行 `node apps/web/scripts/render-icons.mjs`（用 Playwright 的 Chromium 渲染 SVG，首次需 `pnpm --filter @canglin/web exec playwright install chromium`）。
+
 ## 测试
 
 ```bash

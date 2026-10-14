@@ -107,7 +107,7 @@ function clearAll() { state.stock = ''; clearSearch(); }
           <p class="text-[12.5px] text-muted">采购到货后，在申请单里直接发放或登记入库；没处理完的余量会留在这里。</p>
         </div>
       </div>
-      <EmptyState v-else-if="!tabProducts.length && !state.search" icon="box" title="还没有库存物品" description="申请到货后登记入库会自动建立物品；已有的库存可以先新增物品，再用盘点调整录入数量。">
+      <EmptyState v-else-if="!tabProducts.length && !state.search" art="box" title="还没有库存物品" description="申请到货后登记入库会自动建立物品；已有的库存可以先新增物品，再用盘点调整录入数量。">
         <Button variant="primary" size="sm" @click="creatingProduct = true">新增库存物品</Button>
         <router-link to="/requests" :class="buttonClass({ variant: 'secondary', size: 'sm' })">查看申请单</router-link>
       </EmptyState>

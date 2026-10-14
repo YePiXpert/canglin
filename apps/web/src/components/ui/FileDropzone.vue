@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue';
 import { useToastStore } from '@/stores/toast';
 import Icon from './Icon.vue';
+import LineArt from './LineArt.vue';
+import type { LineArtName } from './art';
 import { buttonClass } from './button';
 
 /**
@@ -22,6 +24,11 @@ const props = withDefaults(
     hint?: string;
     /** 手机上显示「拍照上传」按钮 */
     capture?: boolean;
+    /**
+     * 撑高的大上传框（导入页的上传态）用 96px 单色线描代替 48px 图标块，只在 ≥ 640px 显示；
+     * 手机与紧凑上传框不传，仍是图标块。拖入时线描只换描边色。
+     */
+    art?: LineArtName;
   }>(),
   { label: '点击选择或把文件拖到这里', multiple: false, capture: false },
 );
@@ -159,9 +166,19 @@ function onDrop(e: DragEvent): void {
         @change="onChange"
         @cancel="resetInput"
       />
+      <LineArt
+        v-if="art"
+        :name="art"
+        :size="96"
+        class="mb-3 hidden transition-colors duration-150 sm:block"
+        :class="dragging ? 'text-ink' : disabled ? 'text-line-strong' : 'text-faint'"
+      />
       <span
         class="mb-2 flex size-12 items-center justify-center rounded-xl transition-colors duration-150"
-        :class="dragging ? 'bg-surface text-ink' : disabled ? 'bg-surface-2 text-faint' : 'bg-surface-2 text-ink'"
+        :class="[
+          dragging ? 'bg-surface text-ink' : disabled ? 'bg-surface-2 text-faint' : 'bg-surface-2 text-ink',
+          art ? 'sm:hidden' : '',
+        ]"
         aria-hidden="true"
       >
         <Icon name="upload-cloud" :size="22" />

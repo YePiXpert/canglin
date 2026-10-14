@@ -33,6 +33,7 @@ const intro = computed(() => !task.value && (!taskId.value || missing.value));
       label="把 PDF、OA 截图或手机照片拖到这里"
       :disabled="busy || !!active"
       capture
+      :art="intro ? 'scan' : undefined"
       :class="intro ? 'sm:[&>label]:min-h-70' : ''"
       @files="upload"
     >

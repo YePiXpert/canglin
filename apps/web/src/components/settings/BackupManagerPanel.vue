@@ -131,7 +131,7 @@ function moreActions(backup: BackupInfo): MenuItem[] {
         </template>
       </Notice>
     </div>
-    <EmptyState v-else-if="backups.length === 0" icon="history" title="还没有备份" description="点「立即备份」留一份当前数据；开启自动备份后会按间隔生成。" />
+    <EmptyState v-else-if="backups.length === 0" art="archive" title="还没有备份" description="点「立即备份」留一份当前数据；开启自动备份后会按间隔生成。" />
     <!-- 桌面：最高 384px 内部滚动、表头钉在滚动框顶边；手机卡片不设高度上限，随页面滚动 -->
     <div v-else class="overflow-auto sm:max-h-96">
       <table class="table-base table-sticky table-cards">

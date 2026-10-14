@@ -75,6 +75,11 @@
   --animate-fade-in: fade-in 0.15s ease-out;
   --animate-pop-in: pop-in 0.16s ease-out;
   --animate-sheet-in: sheet-in 0.2s ease-out;
+  /*
+   * 对勾描边（导入「已确认导入」）：path 写 pathLength="1" stroke-dasharray="1"，从 1 画到 0；
+   * both 让动画前后都停在端点，减少动态效果时直接是画好的对勾
+   */
+  --animate-check-draw: check-draw 0.3s ease-out 0.05s both;
 
   @keyframes fade-in {
     from {
@@ -91,6 +96,14 @@
     from {
       transform: translateY(16px);
       opacity: 0;
+    }
+  }
+  @keyframes check-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
     }
   }
 }

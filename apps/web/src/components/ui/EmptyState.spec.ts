@@ -29,6 +29,16 @@ describe('EmptyState', () => {
     expect(mount(EmptyState, { props: { title: 't' } }).get('path').attributes('d')).toBe(iconPath('box'));
   });
 
+  it('传 art 时换成单色线描（aria-hidden、currentColor），不再画图标块；默认不画', () => {
+    const wrapper = mount(EmptyState, { props: { title: '还没有备份', art: 'archive', icon: 'history' } });
+    const svg = wrapper.get('svg');
+    expect(svg.attributes('aria-hidden')).toBe('true');
+    expect(svg.attributes('viewBox')).toBe('0 0 120 96');
+    expect(svg.attributes('stroke')).toBe('currentColor');
+    expect(wrapper.find('span[aria-hidden="true"]').exists()).toBe(false);
+    expect(mount(EmptyState, { props: { title: 't' } }).get('svg').attributes('viewBox')).toBe('0 0 24 24');
+  });
+
   it('icon=false 不画图标块（搜索无结果）', () => {
     const wrapper = mount(EmptyState, { props: { title: '没有找到相关的申请', icon: false } });
     expect(wrapper.find('svg').exists()).toBe(false);
