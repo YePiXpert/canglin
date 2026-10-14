@@ -20,14 +20,8 @@ async function write(page: Page, path: string, data: object) {
   return response.json();
 }
 
-/*
- * 暂不随整组运行（fixme）：服务端的维护闸门在请求被客户端中途取消（如上传到一半关页面、跳页）时不释放
- * maintenance.active，之后「立即备份」会持锁等待最多 190 秒，期间所有接口都返回 503，后面的用例跟着失败。
- * 前面的 spec 里只要有一次被取消的上传就会触发，整组结果就不稳定。服务端修好后去掉 fixme；
- * 单独验证：BACKUP_E2E=1 pnpm --filter @canglin/web exec playwright test e2e/settings.spec.ts（全新的服务，没有被取消的请求）。
- */
+// 和其它 spec 一起跑：前面被取消的请求（上传到一半跳页等）必须已归还维护名额，否则备份会一直等、期间全站 503
 test('备份：立即备份、下载、确认后删除', async ({ page }) => {
-  test.fixme(!process.env.BACKUP_E2E, '服务端维护闸门会因被取消的请求泄漏，见上方说明；设 BACKUP_E2E=1 单独运行');
   await login(page);
   // 备份进行中服务端整体维护（503），这时读不到列表：返回 null，由 poll 重试
   const names = async () => {

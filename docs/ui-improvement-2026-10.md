@@ -357,3 +357,10 @@ pnpm --filter @canglin/web test:e2e
   1. 服务端维护闸门泄漏（未修，超出本方案只改前端的范围）：`apps/server/src/bootstrap.ts` 的 `onRequest` 里 `maintenance.enter()` 只在 `onResponse` / `onError` 释放；请求被客户端中途取消（实测：限速上传 3 MB 时中断 curl）时不释放，`maintenance.active` 一直大于 0。之后任何一次备份（手动「立即备份」或自动备份）都会先置 `locked`、再等最多 190 秒，期间所有接口返回 503「备份或恢复维护中」，最后以「仍有处理中任务」失败——直到服务重启。建议在服务端补上 `onRequestAbort`（或在 `reply.raw` 的 `close` 上释放）后，去掉 `e2e/settings.spec.ts` 备份用例的 `fixme`。
   2. 是否提交视觉回归基线（`apps/web/e2e/visual.spec.ts-snapshots/`，68 张、6.1 MB）：基线依赖本机字体（文泉驿微米黑），其它机器需先 `--update-snapshots`。
   3. 改密与重置恢复码输错密码时服务端返回 401（与「会话过期」同一个状态码），前端现在按地址区分（`isCredentialCheck`）；若服务端改成 400 / 403 会更干净。
+
+### 后续处理（2026-10-14）
+
+收尾时列出的三项，用户决定都做：
+
+1. 维护名额泄漏已在服务端修复（`apps/server/src/bootstrap.ts`）。实测「上传到一半断开」「请求发完、处理中断开」两种情况：处理函数结束时 `onSend` 都会执行，`finish` / `onResponse` 都不会来。现在「处理已给出响应（`onSend`）」与「连接已关闭」都发生后归还名额；不在断开的那一刻归还，因为处理函数可能还在写库或落盘（第二种情况断开后处理又跑了约 400ms）。新增 `apps/server/test/maintenance-gate.spec.ts`（上传中断、处理中断开、下载中断 3 例，旧代码上 3 例都失败），服务端 190 passed。`e2e/settings.spec.ts` 的备份用例去掉 `fixme` 与 `BACKUP_E2E`：整组 e2e 连续两次 20 passed、4 skipped（4 个是只在 `VISUAL=1` 时运行的视觉回归）；本机的 Playwright 浏览器缓存已不在，这两次用系统的 `/usr/bin/chromium`（154）经临时配置的 `executablePath` 运行。
+2. 视觉基线随批次 E 一起提交（`apps/web/e2e/visual.spec.ts-snapshots/`，68 张）。
