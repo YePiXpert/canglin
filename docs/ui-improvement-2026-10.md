@@ -334,3 +334,26 @@ pnpm --filter @canglin/web test:e2e
 - 改动的测试接口：无。导入任务列表空态的文字「没有未完成的导入 / 没有已入账的导入」保留（e2e 按它找），只是从一行字换成 EmptyState 标题并加了说明。新增 `EmptyState.spec.ts` 用例（art 渲染线描、默认不画）。
 - 浏览器实测：登录页 1440 浅 / 深色两栏正常、390 单栏不变；404 与导入上传态的线描显示正常；控制台无警告。
 - 校验：typecheck ✓ lint ✓ test 219 passed（38 个文件）
+
+### 批次 E（2026-10-14）
+
+- 完成：
+  - E2 单测（vitest + @vue/test-utils）：`useImportTask.spec.ts`（7：700ms 内多次修改合成一次保存、在途时再改排在其后并用回写的版本号；保存失败时切换任务被 `onBeforeRouteUpdate` 拦下且编辑保留；识别中 1.5 秒轮询、非活动后停止；切换任务清空全部状态；404 置 `missing` 且不再轮询；其它错误 5 秒后重试；确认成功后 `finished` 与阻塞项）、`Dialog.spec.ts`（5：无改动直接关、dirty 二次确认、Esc 先关内层确认、persistent 关不掉、description 与 aria-describedby）、`ConfirmDialog.spec.ts`（2）、`useRegisterLines.spec.ts`（5：全选 / 半选 / 行级错误汇总与顺序，含 `RegisterLineTable`）、`useUrlState.spec.ts`（3：URL → 状态只一次、状态 → URL 用 replace、默认值不写、保留其它 query）、`stores/auth.spec.ts`（2：`refresh` 不可达时降级不抛错）、`SettingsLayout.spec.ts`（3：带 hash 定位、滚动时当前项变化与滚到底、子页 aria-current）。
+  - E3 `e2e/settings.spec.ts`（4）：备份的立即备份 / 下载 / 确认删除；供应商新增、编辑、搜索、有单据时确认框禁用删除；审计日志按类型筛选与按详情搜索（并核对摘要先列流水号）；改密后旧会话 401、用新密码重新登录，`finally` 里改回原密码（后面的 spec 仍用原密码）。
+  - E1 `e2e/visual.spec.ts`：用接口播种固定数据（两家供应商、四张申请、采购 / 到货 / 入库 / 直发 / 库存领用、一个导入任务），浏览器时钟固定在 2026-10-14 10:00（Asia/Shanghai），矩阵 1440 × 1000 与 390 × 844（2x、触屏）× 浅 / 深色，页面：登录、工作台、申请单、申请详情、库存四个页签、导入空态与任务页、报表、设置、供应商、审计，弹窗：登记采购、直接发放、人工录入申请（共 68 张，`maxDiffPixelRatio: 0.01`，等 `.animate-pulse` 消失，`time` / 最近登记 / 数据库大小 / 审计时间与详情用 mask）。基线在 `e2e/visual.spec.ts-snapshots/`（6.1 MB），本机连续两次比较全部通过。
+- 跳过 / 未完成：E3 的备份用例在整组运行时标为 `test.fixme`（设 `BACKUP_E2E=1` 时运行，单独运行 4/4 通过）。原因是服务端缺陷，见下方「需要人工决定」。
+- 与方案不同：
+  - E1 二选一选了「CI 跳过此 spec 并在 README『测试』写明」：spec 只在 `VISUAL=1` 时运行，CI 的 `test:e2e` 跳过；且必须单独运行在全新数据库上（和其它 spec 一起跑时整组自动跳过），因为共用的临时库里别的 spec 会留下带时间戳的数据。
+  - E3 的业务日期用 2026-07-15：第一次整组运行时我用了 2026-09-29，与 `workflow.spec` 按当天汇总报表的断言冲突（成交原额 218 → 228），改日期后通过。
+- 改动的测试接口：无新增改动（新增文件见上）。
+- 校验：typecheck ✓ lint ✓ test 246 passed（45 个文件）
+
+### 收尾校验（2026-10-14）
+
+- `pnpm --filter @canglin/web build` ✓（manifest 含 maskable 图标，index.html 含 apple-touch-icon）；`pnpm --filter @canglin/server build` ✓（服务端代码未改）。
+- `pnpm --filter @canglin/web test:e2e`：连续两次 19 passed、5 skipped（4 个视觉回归 + 1 个备份 fixme）；单独运行 `BACKUP_E2E=1 … e2e/settings.spec.ts` 4 passed；`VISUAL=1 … e2e/visual.spec.ts` 4 passed（68 张截图与基线一致）。
+- 截图检查（DESIGN.md §9）：除 68 张视觉基线外，用参考脚本对全新数据跑了 67 张（工作台、申请单、申请详情、四个弹窗、库存各页签、导入空态与任务页、报表、设置、供应商、审计、AI 抽屉、「更多」抽屉、404、登录；1440 / 390 × 浅 / 深色，含长页），390px 下没有一页横向溢出，控制台 0 条错误或警告；人工查看了申请详情、导入任务页、设置（深色手机长页）、登记采购弹窗（手机触屏）、AI 抽屉、工作台（手机长页）与登录页，未见原生控件穿帮、卡片套卡片或被底栏遮挡的控件。
+- 需要人工决定：
+  1. 服务端维护闸门泄漏（未修，超出本方案只改前端的范围）：`apps/server/src/bootstrap.ts` 的 `onRequest` 里 `maintenance.enter()` 只在 `onResponse` / `onError` 释放；请求被客户端中途取消（实测：限速上传 3 MB 时中断 curl）时不释放，`maintenance.active` 一直大于 0。之后任何一次备份（手动「立即备份」或自动备份）都会先置 `locked`、再等最多 190 秒，期间所有接口返回 503「备份或恢复维护中」，最后以「仍有处理中任务」失败——直到服务重启。建议在服务端补上 `onRequestAbort`（或在 `reply.raw` 的 `close` 上释放）后，去掉 `e2e/settings.spec.ts` 备份用例的 `fixme`。
+  2. 是否提交视觉回归基线（`apps/web/e2e/visual.spec.ts-snapshots/`，68 张、6.1 MB）：基线依赖本机字体（文泉驿微米黑），其它机器需先 `--update-snapshots`。
+  3. 改密与重置恢复码输错密码时服务端返回 401（与「会话过期」同一个状态码），前端现在按地址区分（`isCredentialCheck`）；若服务端改成 400 / 403 会更干净。

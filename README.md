@@ -80,10 +80,13 @@ pnpm test                                           # 前端单测 + 服务端�
 pnpm --filter @canglin/server build            # 浏览器测试的 API（apps/server/test/browser-server.cjs）加载 dist
 pnpm --filter @canglin/web exec playwright install --with-deps chromium   # 首次运行浏览器测试前
 pnpm --filter @canglin/web test:e2e            # 浏览器流程：临时 SQLite + 真实 API，OCR/GPT 为合成替身
+VISUAL=1 pnpm --filter @canglin/web exec playwright test e2e/visual.spec.ts   # 视觉回归（可选，见下）
 python3 -m unittest discover -s deploy/tests -v     # 部署脚本（伪 git/docker，不接触真实服务）
 python3 -m unittest discover -s scripts/tests -v    # 导入评测脚本
 (cd apps/ocr && pytest)                             # 解析器单测 + API 集成（无需 paddle）
 ```
+
+视觉回归 `apps/web/e2e/visual.spec.ts`（1440 / 390 × 浅 / 深色，主要页面与三个登记弹窗）只在设了 `VISUAL=1` 时运行，平时的 `test:e2e` 与 CI 都跳过：截图基线（`e2e/visual.spec.ts-snapshots/`）依赖本机字体，现有基线是在装了 `fonts-wqy-microhei` 的 Linux 上生成的，字体不同的机器上先加 `--update-snapshots` 生成本机基线再比较。它要一个全新的数据库，必须单独运行（和其它 spec 一起跑时整组自动跳过）；有意改了 UI 后用 `--update-snapshots` 重建基线并人工看一遍差异。
 
 ## Docker 部署（VPS）
 
