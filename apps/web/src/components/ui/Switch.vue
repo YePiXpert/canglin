@@ -65,7 +65,7 @@ function onChange(event: Event): void {
         @change="onChange"
       />
       <span
-        class="pointer-events-none absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-(--shadow-xs) transition-[translate,background-color] duration-150 ease-out peer-checked:translate-x-4 peer-checked:bg-primary-fg"
+        class="pointer-events-none absolute left-0.5 top-0.5 size-4 rounded-full bg-paper shadow-(--shadow-xs) transition-[translate,background-color] duration-150 ease-out peer-checked:translate-x-4 peer-checked:bg-primary-fg"
         aria-hidden="true"
       />
     </span>

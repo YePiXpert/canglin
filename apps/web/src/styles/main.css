@@ -48,6 +48,11 @@
   --color-panel-soft: #2a2824;
   --color-panel-red: #3a1f18;
 
+  /* paper：两个主题都是白——原件预览的纸底（透明的截图、扫描件按白纸显示）、开关关闭时的圆钮 */
+  --color-paper: #ffffff;
+  /* scrim：弹窗与抽屉的遮罩（.overlay）；浅色是 40% 墨色，深色下墨色近白，改成 60% 纯黑 */
+  --color-scrim: rgb(26 25 21 / 0.4);
+
   /* 面板 10、控件 6；弹窗用 rounded-xl（12），状态 chip 用 rounded-sm（4），药丸 rounded-full */
   --radius-card: 10px;
   --radius-control: 6px;
@@ -141,6 +146,8 @@
     --color-panel-soft: #36342f;
     --color-panel-red: #4a261d;
 
+    --color-scrim: rgb(0 0 0 / 0.6);
+
     --elevation-xs: 0 1px 2px rgb(0 0 0 / 0.3);
     --elevation-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.3);
     --elevation-pop: 0 8px 24px -8px rgb(0 0 0 / 0.55), 0 24px 48px -16px rgb(0 0 0 / 0.5);
@@ -214,6 +221,11 @@
   /* 面板：白底 + 发丝描边，默认不加阴影（深色下同样靠描边区分层级） */
   .card {
     @apply bg-surface border border-line rounded-(--radius-card);
+  }
+
+  /* 弹窗、抽屉的遮罩：scrim 令牌（深色自动加深）；定位、层级与进场动效由使用处给 */
+  .overlay {
+    @apply bg-scrim;
   }
 
   /*

@@ -34,4 +34,13 @@ describe('Pagination', () => {
     await wrapper.findAll('button').find((b) => b.text() === '2')!.trigger('click');
     expect(wrapper.emitted('change')?.[0]).toEqual([2]);
   });
+
+  it('支持 v-model:page：翻页同时发 update:page', async () => {
+    const wrapper = mount(Pagination, {
+      props: { page: 1, pageSize: 20, total: 60, 'onUpdate:page': (p: number) => wrapper.setProps({ page: p }) },
+    });
+    await wrapper.get('button[aria-label="下一页"]').trigger('click');
+    expect(wrapper.emitted('update:page')?.[0]).toEqual([2]);
+    expect(wrapper.get('[aria-current="page"]').text()).toBe('2');
+  });
 });

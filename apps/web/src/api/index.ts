@@ -1,4 +1,4 @@
-import { http } from './client';
+import { http, mutate } from './client';
 
 export { http, apiError, bindRouter } from './client';
 import type {
@@ -91,16 +91,7 @@ export interface ImportTaskSummary {
 export interface ImportTasksPage extends Paged {
   tasks: ImportTaskSummary[];
 }
-/** Keep an uncertain operation's key across retries and browser reloads. Clear only after a known result. */
-async function mutation<T>(url: string, body?: unknown): Promise<T> {
-  const key = 'canglin-operation:' + url + ':' + JSON.stringify(body ?? {});
-  const id = sessionStorage.getItem(key) || crypto.randomUUID();
-  sessionStorage.setItem(key, id);
-  // 失败时保留 key：下次重试沿用同一个 Idempotency-Key
-  const response = await http.post<T>(url, body, { headers: { 'Idempotency-Key': id } });
-  sessionStorage.removeItem(key);
-  return response.data;
-}
+
 export const importsApi = {
   upload: (file: File, continueDuplicate = false) => {
     const form = new FormData();
@@ -130,9 +121,9 @@ export const importsApi = {
   retry: (id: string, stage: 'local' | 'ai', pages?: number[]) =>
     http.post(`/imports/tasks/${id}/retry`, { stage, pages }),
   cancel: (id: string) => http.post(`/imports/tasks/${id}/cancel`),
-  discard: (id: string, version: number) => mutation<{ ok: true }>(`/imports/tasks/${id}/discard`, { version }),
+  discard: (id: string, version: number) => mutate<{ ok: true }>('post', `/imports/tasks/${id}/discard`, { version }),
   confirmRequest: (body: WorkflowImportConfirmInput) =>
-    mutation<{ requestId: number; created: number; merged: number; skipped: number; attached: number }>('/workflow/imports/confirm', body),
+    mutate<{ requestId: number; created: number; merged: number; skipped: number; attached: number }>('post', '/workflow/imports/confirm', body),
 };
 
 /* ---------------------------------- 附件 ---------------------------------- */

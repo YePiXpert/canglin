@@ -14,3 +14,9 @@ export interface MenuItem {
   /** 选中后执行；菜单会先自己关上 */
   onSelect?: () => void;
 }
+
+/** Notice 的列表用法（items）：每条一行，可以各带图标；不传 icon 用 Notice 自己的图标 */
+export interface NoticeItem {
+  text: string;
+  icon?: string;
+}

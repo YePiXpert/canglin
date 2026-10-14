@@ -18,6 +18,23 @@ export function formatDateTime(input: string | Date | null | undefined, withSeco
   return `${date} ${time}`;
 }
 
+/**
+ * 列表里的短时间（本地时区，DESIGN.md §8）：今天只写时刻「09:12」、昨天「昨天 17:40」、
+ * 今年「10-08 14:20」、往年「2025-12-30 14:20」；完整时间由调用方放进 title（formatDateTime）。
+ */
+export function shortDateTime(input: string, now: Date = new Date()): string {
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return input;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const days = Math.round((dayStart(now) - dayStart(date)) / 86_400_000);
+  if (days === 0) return time;
+  if (days === 1) return `昨天 ${time}`;
+  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return date.getFullYear() === now.getFullYear() ? `${monthDay} ${time}` : `${date.getFullYear()}-${monthDay} ${time}`;
+}
+
 /** 本地日期 YYYY-MM-DD */
 export function formatDate(input: string | Date | null | undefined): string {
   if (!input) return '—';

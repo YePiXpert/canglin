@@ -8,12 +8,20 @@ import Icon from './Icon.vue';
  *   标题行已经是 flex items-center gap-2，不要再传 flex / gap-*（同一属性的两个工具类谁生效看样式表顺序）。
  * - chevron：start（默认）= 标题前 chevron-right，展开时转 90°；end = 标题后 chevron-down 靠右（ml-auto），
  *   展开时转 180°；none = 不画。chevronSize 默认 14；chevronClass 整体替换箭头的默认类。
- * - open：绑定到 <details open>。用户点开 / 收起由浏览器维护，prop 变化时才写回 DOM。
- * - 不声明事件：调用方的 @toggle（如展开时才加载）和 class 落在根 <details> 上。
+ * - open：绑定到 <details open>。用户点开 / 收起由浏览器维护，prop 变化时才写回 DOM；
+ *   每次开合都发 update:open（可以 v-model:open）。
+ * - 原生 toggle 事件不声明：调用方的 @toggle（如展开时才加载）和 class 照样落在根 <details> 上。
  *
  * 箭头的旋转用子选择器 details[open] > summary > 箭头，嵌套的折叠区互不影响；
  * 根元素的 group/disclosure 留给调用方的内容用，但 group-open/disclosure: 是后代匹配，嵌套时外层展开也会命中。
  */
+const emit = defineEmits<{ 'update:open': [open: boolean] }>();
+
+/** toggle 不冒泡：嵌套的折叠区各发各的 */
+function onToggle(event: Event): void {
+  emit('update:open', (event.target as HTMLDetailsElement).open);
+}
+
 withDefaults(
   defineProps<{
     open?: boolean;
@@ -33,7 +41,7 @@ withDefaults(
 </script>
 
 <template>
-  <details class="group/disclosure" :open="open">
+  <details class="group/disclosure" :open="open" @toggle="onToggle">
     <summary
       class="flex cursor-pointer select-none list-none items-center gap-2 transition-colors duration-150 [&::-webkit-details-marker]:hidden"
       :class="summaryClass"

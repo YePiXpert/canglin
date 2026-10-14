@@ -67,6 +67,25 @@ describe('SuppliersView：列表', () => {
     expect(wrapper.text()).toContain('共 1 家');
   });
 
+  it('供应商搜索在前端过滤名称、联系人、电话；无结果时复述关键词并可清除', async () => {
+    mockedList.mockResolvedValue([DELI, { id: 4, name: '晨光文具', contact: '李四', phone: null, note: '月结', _count: { businessDocuments: 0 } }]);
+    const wrapper = await mountView();
+    const search = wrapper.find('input[aria-label="搜索供应商"]');
+    await search.setValue('王经理');
+    await search.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1);
+    expect(wrapper.text()).toContain('找到 1 家 · 共 2 家');
+    expect(wrapper.text()).toContain('得力文具');
+    await search.setValue('不存在');
+    await search.trigger('keyup', { key: 'Enter' });
+    await flushPromises();
+    expect(wrapper.text()).toContain('没有找到「不存在」相关的供应商');
+    await click(wrapper, '清除关键词');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2);
+    expect(mockedList).toHaveBeenCalledTimes(1);
+  });
+
   it('成交价格：搜索无结果时复述关键词并可一键清除；没有关键词时是「还没有成交价格」', async () => {
     const wrapper = await mountView();
     await click(wrapper, '成交价格');

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
@@ -7,9 +7,9 @@ import Notice from '@/components/ui/Notice.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import { buttonClass } from '@/components/ui/button';
 import { importsApi, type ImportTaskSummary } from '@/api';
-import { apiError } from '@/api/client';
-import { createRequestGuard } from '@/utils/request';
-import { shortDateTime } from '@/components/workflow/workbench';
+import { useResource } from '@/composables/useResource';
+import { formatDateTime, shortDateTime } from '@/utils/datetime';
+import { TASK_KIND_STYLES, taskKind, taskStatusLabel } from './status';
 
 /**
  * 工作台右栏的「未完成的导入」：只读的紧凑列表，取最近 5 份未确认入账的任务（与导入页「未完成」同一口径）。
@@ -18,44 +18,23 @@ import { shortDateTime } from '@/components/workflow/workbench';
  */
 const emit = defineEmits<{ total: [value: number] }>();
 const PAGE_SIZE = 5;
-const tasks = ref<ImportTaskSummary[]>([]);
-const total = ref(0);
-const loading = ref(true);
-const error = ref('');
-const guard = createRequestGuard();
+const { data, loading, error, load: refresh } = useResource(() => importsApi.tasks({ confirmed: false, page: 1, pageSize: PAGE_SIZE }));
+const tasks = computed<ImportTaskSummary[]>(() => data.value?.tasks ?? []);
+const total = computed(() => data.value?.total ?? 0);
+/* 每次成功加载都把总数交给工作台的待办概览（过期响应由 useResource 丢弃，不会报旧数） */
+watch(data, (result) => {
+  if (result) emit('total', result.total);
+}, { flush: 'sync' });
 
-async function refresh(): Promise<void> {
-  const isCurrent = guard.begin();
-  try {
-    const result = await importsApi.tasks({ confirmed: false, page: 1, pageSize: PAGE_SIZE });
-    if (!isCurrent()) return;
-    tasks.value = result.tasks;
-    total.value = result.total;
-    error.value = '';
-    emit('total', result.total);
-  } catch (e) {
-    if (isCurrent()) error.value = apiError(e);
-  } finally {
-    if (isCurrent()) loading.value = false;
-  }
-}
-
-const running = (status: string) => status === 'PENDING' || status === 'RUNNING';
-/** 与导入页任务列表同一套状态文案：识别完成 ≠ 入账，未确认的任务不叫「已完成」 */
-function statusLabel(task: ImportTaskSummary): string {
-  return running(task.aiStatus) ? 'AI 原件识别中'
-    : running(task.status) ? '识别中'
-      : task.status === 'FAILED' ? '识别失败，待人工核对' : '待核对入账';
-}
-function statusIcon(task: ImportTaskSummary): { name: string; class: string } {
-  if (running(task.aiStatus) || running(task.status)) return { name: 'clock', class: 'text-blue' };
-  return task.status === 'FAILED' ? { name: 'alert', class: 'text-amber' } : { name: 'file', class: 'text-faint' };
-}
-
-const rows = computed(() => tasks.value.map((task) => ({ task, label: statusLabel(task), icon: statusIcon(task) })));
+/** 与导入页任务列表同一套状态文案与图标（./status）：识别完成 ≠ 入账，未确认的任务不叫「已完成」 */
+const rows = computed(() =>
+  tasks.value.map((task) => {
+    const style = TASK_KIND_STYLES[taskKind(task)];
+    return { task, label: taskStatusLabel(task), icon: { name: style.icon, class: style.iconClass } };
+  }),
+);
 
 onMounted(() => void refresh());
-onUnmounted(() => guard.abandon());
 defineExpose({ refresh });
 </script>
 
@@ -82,7 +61,7 @@ defineExpose({ refresh });
           <Icon :name="icon.name" :size="16" class="shrink-0" :class="icon.class" />
           <div class="min-w-0 flex-1">
             <p class="truncate text-[13px] font-medium text-ink" :title="task.filename">{{ task.filename }}</p>
-            <p class="mt-0.5 text-meta"><span class="num whitespace-nowrap">{{ shortDateTime(task.createdAt) }}</span> · {{ label }}<template v-if="!task.originalAvailable"> · 原件缺失</template></p>
+            <p class="mt-0.5 text-meta"><time class="num whitespace-nowrap" :datetime="task.createdAt" :title="formatDateTime(task.createdAt)">{{ shortDateTime(task.createdAt) }}</time> · {{ label }}<template v-if="!task.originalAvailable"> · 原件缺失</template></p>
           </div>
           <router-link
             :to="{ path: '/import', query: { task: task.id } }"

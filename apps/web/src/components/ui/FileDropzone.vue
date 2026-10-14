@@ -44,6 +44,19 @@ const acceptList = computed(() =>
     .filter(Boolean),
 );
 
+/**
+ * 拒收提示里的格式名按 accept 生成：.pdf → PDF、.jpeg 并入 JPG、image/png → PNG、image/* → 图片；
+ * 没有 accept 时不会拒收。
+ */
+const acceptText = computed(() => {
+  const names = acceptList.value.map((rule) => {
+    if (rule.endsWith('/*')) return rule.startsWith('image/') ? '图片' : rule;
+    const ext = rule.startsWith('.') ? rule.slice(1) : rule.split('/').pop() ?? rule;
+    return (ext === 'jpeg' ? 'jpg' : ext).toUpperCase();
+  });
+  return [...new Set(names)].join(' / ');
+});
+
 function accepted(file: File): boolean {
   if (acceptList.value.length === 0) return true;
   const name = file.name.toLowerCase();
@@ -63,7 +76,7 @@ function deliver(list: FileList | null | undefined): void {
   if (picked.length) emit('files', picked);
   if (bad.length) {
     emit('rejected', bad);
-    toast.error('不支持的文件类型，请选择 PDF / PNG / JPG / WEBP');
+    toast.error(`不支持的文件类型，请选择 ${acceptText.value}`);
   }
 }
 

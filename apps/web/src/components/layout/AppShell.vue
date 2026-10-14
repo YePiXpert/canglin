@@ -248,7 +248,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
     <!-- 手机「更多」：底部抽屉，放底栏放不下的导航（设置）以及深浅色切换、退出登录 -->
     <DialogRoot :open="moreOpen" @update:open="(v) => (moreOpen = v)">
       <DialogPortal>
-        <DialogOverlay class="lg:hidden fixed inset-0 z-50 bg-ink/40 dark:bg-black/60 data-[state=open]:animate-fade-in" />
+        <DialogOverlay class="overlay lg:hidden fixed inset-0 z-50 data-[state=open]:animate-fade-in" />
         <DialogContent
           aria-label="更多功能"
           class="lg:hidden fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-y-auto bg-canvas border-t border-line rounded-t-xl px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-(--shadow-pop) focus:outline-hidden data-[state=open]:animate-sheet-in"

@@ -16,7 +16,8 @@ import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
 import { issueText } from '@/utils/form';
 import RegisterLineTable from './RegisterLineTable.vue';
-import { draftLineAmount, priceError, quantityError, quantityLabel } from './presentation';
+import { useRegisterLines } from './useRegisterLines';
+import { draftLineAmount, moneyLabel, priceError, quantityError, quantityLabel, unitPriceLabel } from './presentation';
 
 const props = defineProps<{ open: boolean; request: WorkflowRequestRow }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
@@ -37,12 +38,8 @@ type Line = (typeof lines.value)[number];
 const snapshot = () => JSON.stringify({ form, lines: lines.value.map((line) => ({ id: line.id, selected: line.selected, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink })), newSupplierName: newSupplierName.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 const supplierOptions = computed(() => suppliers.value.map((supplier) => ({ label: supplier.name, value: String(supplier.id) })));
-const selectedCount = computed(() => lines.value.filter((line) => line.selected).length);
-/** 表下汇总的行级错误（单元格里只标红框）；顺序与列一致：本次数量在前、成交单价在后 */
-const rowErrors = computed(() => lines.value.flatMap((line, index) => {
-  const reasons = [errors.value[`quantity.${line.id}`], errors.value[`price.${line.id}`]].filter(Boolean);
-  return reasons.length ? [`第 ${index + 1} 行 · ${line.itemName}：${reasons.join('；')}`] : [];
-}));
+/** 行级错误的顺序与列一致：本次数量在前、成交单价在后 */
+const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.id}`, `price.${line.id}`]);
 watch(() => props.open, async (open, _previous, onCleanup) => {
   let current = true;
   onCleanup(() => { current = false; });
@@ -106,15 +103,8 @@ function applyQuote(line: Line, quote: WorkflowPriceRow) {
   line.appliedFrom = quote.supplierId;
   line.appliedLink = quote.purchaseLink;
 }
-function selectAll(value: boolean) {
-  for (const line of lines.value) line.selected = value;
-}
-/** 金额展示加千分位（只改展示，计算仍是 shared 的定点函数给出的十进制字符串） */
-function money(text: string): string {
-  const [integer, fraction] = text.split('.');
-  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
-}
+
+
 const lineAmounts = computed(() => new Map(lines.value.map((line) => [line.id, draftLineAmount(line.quantity, line.unitPrice)])));
 const total = computed(() => {
   let amount = 0n, missing = 0;
@@ -230,7 +220,7 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
           </td>
           <td data-label="本行金额" class="num text-right">
             <template v-if="line.selected">
-              <span v-if="lineAmounts.get(line.id) != null" class="font-medium text-ink">¥{{ money(lineAmounts.get(line.id)!) }}</span>
+              <span v-if="lineAmounts.get(line.id) != null" class="font-medium text-ink">{{ moneyLabel(lineAmounts.get(line.id)!) }}</span>
               <span v-else class="text-meta">待填单价</span>
             </template>
             <span v-else class="text-faint">—</span>
@@ -244,7 +234,7 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
             <div v-else class="flex flex-wrap items-center gap-1.5 sm:pl-5.5">
               <span class="mr-0.5 text-meta">历史成交</span>
               <button v-for="quote in line.quotes" :key="quote.purchaseLineId" type="button" :class="QUOTE_PILL" :disabled="saving || !!form.supplierId && Number(form.supplierId) !== quote.supplierId" :title="`历史成交 ${quote.date}；核对本次实际价格后再登记`" @click="applyQuote(line, quote)">
-                {{ quote.supplierName }} · ¥{{ quote.unitPrice }} / {{ line.unit }}<span class="num text-faint">{{ quote.date }}</span>
+                {{ quote.supplierName }} · {{ unitPriceLabel(quote.unitPrice, line.unit) }}<span class="num text-faint">{{ quote.date }}</span>
               </button>
             </div>
           </td>
@@ -261,7 +251,7 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
     <template #footer="{ close }">
       <div class="mr-auto min-w-0 self-center max-sm:w-full">
         <Notice v-if="failure" tone="red" variant="inline" role="alert" class="mb-1">{{ failure }}</Notice>
-        <p class="text-[13px] text-muted">{{ total.missing ? '已填价合计' : '本次成交合计' }} <b class="num font-semibold text-ink">¥{{ money(total.amount) }}</b><span v-if="total.missing" class="ml-2 text-xs text-amber">{{ total.missing }} 条价格待填</span></p>
+        <p class="text-[13px] text-muted">{{ total.missing ? '已填价合计' : '本次成交合计' }} <b class="num font-semibold text-ink">{{ moneyLabel(total.amount) }}</b><span v-if="total.missing" class="ml-2 text-xs text-amber">{{ total.missing }} 条价格待填</span></p>
       </div>
       <Button variant="ghost" :disabled="saving || creatingSupplier" class="max-sm:h-11" @click="close">取消</Button>
       <Button variant="primary" :loading="saving" :disabled="creatingSupplier || loadingSuppliers" class="max-sm:h-11 max-sm:flex-1" @click="save">登记已下单</Button>

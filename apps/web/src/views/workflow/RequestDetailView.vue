@@ -82,7 +82,7 @@ async function refresh() {
       <div><Skeleton class="mb-2.5 h-5 w-48" /><Skeleton class="h-44" /></div>
       <div class="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_360px]"><Skeleton class="h-72" /><Skeleton class="h-48" /></div>
     </div>
-    <div v-else-if="error" class="card"><ErrorState :message="error" :retrying="refreshing" @retry="refresh" /></div>
+    <div v-else-if="error" class="card"><ErrorState :message="error" :loading="refreshing" @retry="refresh" /></div>
     <template v-else-if="request">
       <section aria-labelledby="request-lines-title">
         <div class="mb-2.5 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">

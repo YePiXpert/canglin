@@ -8,7 +8,7 @@ import Notice from '@/components/ui/Notice.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import { documentKindLabels, moneyLabel, quantityLabel } from './presentation';
 import { useWorkflowResource } from './useWorkflowResource';
-import { shortDateTime } from './workbench';
+import { formatDateTime, shortDateTime } from '@/utils/datetime';
 
 /**
  * 工作台右栏的「最近登记」：最近录入的 3 条业务记录（采购成交、到货、发放…，含已撤销的）。
@@ -84,7 +84,7 @@ const rows = computed(() => (data.value?.items ?? []).map((document) => ({
                 :title="row.summary"
               >{{ row.summary }}</router-link>
               <p v-else class="truncate text-[13px]" :class="row.textClass" :title="row.summary">{{ row.summary }}</p>
-              <p class="mt-0.5 text-meta num">{{ row.meta }}</p>
+              <p class="mt-0.5 text-meta num" :title="`录入于 ${formatDateTime(row.document.createdAt)}`">{{ row.meta }}</p>
             </div>
           </li>
         </ul>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { workflowReceiptSchema } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
@@ -11,6 +11,7 @@ import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
 import { issueText } from '@/utils/form';
 import RegisterLineTable from './RegisterLineTable.vue';
+import { useRegisterLines } from './useRegisterLines';
 import { quantityError, quantityLabel } from './presentation';
 
 const props = defineProps<{ open: boolean; purchase: WorkflowDocumentRow }>();
@@ -19,12 +20,7 @@ const form = reactive({ date: todayString(), note: '' });
 const lines = ref<{ id: number; itemName: string; specification: string; unit: string; purchased: string; received: string; maximum: string; selected: boolean; quantity: string }[]>([]);
 const snapshot = () => JSON.stringify({ form, lines: lines.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
-const selectedCount = computed(() => lines.value.filter((line) => line.selected).length);
-/** 表下汇总的行级错误（单元格里只标红框） */
-const rowErrors = computed(() => lines.value.flatMap((line, index) => {
-  const reason = errors.value[`quantity.${line.id}`];
-  return reason ? [`第 ${index + 1} 行 · ${line.itemName}：${reason}`] : [];
-}));
+const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.id}`]);
 watch(() => props.open, (open) => {
   if (!open) return;
   Object.assign(form, { date: todayString(), note: '' });
@@ -38,9 +34,6 @@ watch(() => props.open, (open) => {
 
 function lineMeta(line: (typeof lines.value)[number]): string {
   return [line.specification, `本批采购 ${quantityLabel(line.purchased, line.unit)}`, `已到 ${quantityLabel(line.received, line.unit)}`].filter(Boolean).join(' · ');
-}
-function selectAll(value: boolean) {
-  for (const line of lines.value) line.selected = value;
 }
 
 async function save() {

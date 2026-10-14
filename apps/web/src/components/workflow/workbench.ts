@@ -43,20 +43,6 @@ export function sortByNextStep(requests: readonly WorkflowRequestRow[]): Workflo
   );
 }
 
-const pad = (n: number) => String(n).padStart(2, '0');
-const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-
-/** 侧栏列表里的短时间（本地时区）：今天 09:12 / 昨天 17:40 / 10-08 14:20 / 2025-12-30 14:20 */
-export function shortDateTime(input: string, now: Date = new Date()): string {
-  const date = new Date(input);
-  if (Number.isNaN(date.getTime())) return input;
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  const days = Math.round((dayStart(now) - dayStart(date)) / 86_400_000);
-  if (days === 0) return `今天 ${time}`;
-  if (days === 1) return `昨天 ${time}`;
-  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  return date.getFullYear() === now.getFullYear() ? `${monthDay} ${time}` : `${date.getFullYear()}-${monthDay} ${time}`;
-}
 
 /** 页头上方的日期：2026 年 10 月 10 日 · 星期六 */
 export function todayLabel(now: Date = new Date()): string {

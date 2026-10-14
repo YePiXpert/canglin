@@ -6,7 +6,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import { buttonClass } from '@/components/ui/button';
-import { quantityLabel, moneyLabel, documentKindLabels, webLink } from './presentation';
+import { quantityLabel, moneyLabel, unitPriceLabel, documentKindLabels, webLink } from './presentation';
 import { PAYMENT_STATUS_LABELS, moneyText, parseFixed } from '@canglin/shared';
 
 /**
@@ -55,7 +55,7 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
       <li v-for="line in document.lines" :key="line.id" class="flex items-start justify-between gap-x-4 text-[13px]">
         <div class="min-w-0 flex-1">
           <p><span class="font-medium text-ink">{{ line.itemName }}</span><span v-if="line.specification" class="ml-1.5 text-muted">{{ line.specification }}</span></p>
-          <p class="mt-0.5 text-meta">明细 #{{ line.id }}<template v-if="line.sourceLineId"> · <Button variant="link" :aria-label="`查看来源明细 #${line.sourceLineId}`" @click="emit('source', line.sourceLineId)">来源明细 #{{ line.sourceLineId }}</Button></template><template v-if="line.recipient"> · {{ line.recipient }}</template><template v-if="line.unitPrice != null"> · <span class="num">¥{{ line.unitPrice }} / {{ line.unit }}</span></template><template v-if="line.requestId"> · <router-link :to="`/requests/${line.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ line.serialNumber || '#' + line.requestId }}</router-link></template><template v-if="webLink(line.purchaseLink)"> · <a :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">商家链接</a></template></p>
+          <p class="mt-0.5 text-meta">明细 #{{ line.id }}<template v-if="line.sourceLineId"> · <Button variant="link" :aria-label="`查看来源明细 #${line.sourceLineId}`" @click="emit('source', line.sourceLineId)">来源明细 #{{ line.sourceLineId }}</Button></template><template v-if="line.recipient"> · {{ line.recipient }}</template><template v-if="line.unitPrice != null"> · <span class="num">{{ unitPriceLabel(line.unitPrice, line.unit) }}</span></template><template v-if="line.requestId"> · <router-link :to="`/requests/${line.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ line.serialNumber || '#' + line.requestId }}</router-link></template><template v-if="webLink(line.purchaseLink)"> · <a :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">商家链接</a></template></p>
           <p v-if="line.reason" class="mt-0.5 text-meta">{{ line.reason }}</p>
           <ul v-if="!line.sourceLineId && line.sourceAllocations?.length" class="mt-1 space-y-0.5 text-meta">
             <li v-for="allocation in line.sourceAllocations" :key="allocation.originLineId"><Button variant="link" @click="emit('source', allocation.originLineId)">来源 #{{ allocation.originLineId }} · {{ quantityLabel(allocation.quantity, line.unit) }}</Button><template v-if="allocation.requestId"> · <router-link :to="`/requests/${allocation.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ allocation.serialNumber }}</router-link></template></li>

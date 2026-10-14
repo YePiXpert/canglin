@@ -19,7 +19,10 @@ const props = withDefaults(
     autocomplete?: string;
     /** 输入建议来源（datalist），如历史领用人、部门 */
     suggestions?: string[];
-    /** sm = h-8（表格行内、明细行）；md = 桌面 h-9（36px）、手机 h-11（44px，默认） */
+    /**
+     * sm = h-8（32px，表格行内、明细行）；md = 桌面 h-9（36px）、手机 h-11（44px，默认）。
+     * 触屏（pointer: coarse）上 sm 加高到 40px、md 在宽屏上也是 44px（触控目标，DESIGN.md §4）。
+     */
     size?: 'sm' | 'md';
     /** label 只留给读屏（视觉隐藏，输入框的 aria-label 照旧）：表格里列头已经说明了字段时用 */
     hideLabel?: boolean;
@@ -56,8 +59,8 @@ const isEmpty = computed(() => props.modelValue === null || props.modelValue ===
 const sizeClass = computed(() => {
   const pad = isDate.value ? 'pl-3' : 'px-3';
   return props.size === 'sm'
-    ? `h-8 ${isDate.value ? 'pl-2.5' : 'px-2.5'} text-base sm:text-[13px]`
-    : `h-11 sm:h-9 ${pad} text-base sm:text-sm`;
+    ? `h-8 pointer-coarse:h-10 ${isDate.value ? 'pl-2.5' : 'px-2.5'} text-base sm:text-[13px]`
+    : `h-11 sm:h-9 sm:pointer-coarse:h-11 ${pad} text-base sm:text-sm`;
 });
 </script>
 

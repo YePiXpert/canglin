@@ -31,6 +31,25 @@ export function onSessionExpired(handler: (() => Promise<boolean>) | null): void
   sessionExpiredHandler = handler;
 }
 
+/**
+ * 带 Idempotency-Key 的写请求（业务写操作都走它，README「开发约定」）：同一操作在重试、刷新页面后沿用同一个 key，
+ * 只有拿到确定结果（成功）后才从 sessionStorage 清掉；失败时保留，下次重试服务端能认出是同一次操作。
+ * storageKey 默认按地址 + 请求体生成；调用方可传入自己的键（workflowApi 沿用 `canglin-workflow:` 前缀，
+ * 升级前留在会话里的未决操作仍能找回原来的 key）。
+ */
+export async function mutate<T>(
+  method: 'post' | 'patch',
+  url: string,
+  body?: unknown,
+  storageKey = `canglin-operation:${url}:${JSON.stringify(body ?? {})}`,
+): Promise<T> {
+  const id = sessionStorage.getItem(storageKey) || crypto.randomUUID();
+  sessionStorage.setItem(storageKey, id);
+  const response = await http.request<T>({ method, url, data: body, headers: { 'Idempotency-Key': id } });
+  sessionStorage.removeItem(storageKey);
+  return response.data;
+}
+
 /** 从 axios 错误中提取用户可读信息 */
 export function apiError(e: unknown): string {
   if (axios.isAxiosError(e)) {

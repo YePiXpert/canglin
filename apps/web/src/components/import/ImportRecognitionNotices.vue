@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, inject, type Ref } from 'vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
-import Icon from '@/components/ui/Icon.vue';
+import Notice from '@/components/ui/Notice.vue';
+import type { NoticeItem } from '@/components/ui/types';
 import type { ImportTaskView } from '@/api';
 import { importTaskKey } from './useImportTask';
 
@@ -22,34 +23,16 @@ const localWarnings = computed(() => {
   }
   return [...general, ...[...rows].sort(([a], [b]) => a - b).map(([row, parts]) => `第 ${row} 行：${parts.join('；')}`)];
 });
+/** 一块琥珀提示里列出全部警告：本地识别的用提醒图标，AI 的用 sparkles */
+const warningItems = computed<NoticeItem[]>(() => [
+  ...localWarnings.value.map((text) => ({ text, icon: 'alert' })),
+  ...task.value.aiResult.flatMap((p) => p.warnings.map((w) => ({ text: `AI 第 ${p.page} 页：${w}`, icon: 'sparkles' }))),
+]);
 </script>
 
 <template>
-  <!--
-    识别警告：与 Notice（琥珀柔底）同款外观，但每条带自己的图标（本地 = 提醒、AI = sparkles），
-    所以手写成一个列表；多条警告放在同一块里，不堆一串 Notice。
-  -->
-  <ul
-    v-if="task.result?.warnings.length || task.aiResult.some((p) => p.warnings.length)"
-    class="space-y-1.5 rounded-(--radius-card) bg-amber-soft px-4 py-3 text-[13px] leading-5 text-amber"
-  >
-    <li v-for="w in localWarnings" :key="w" class="flex items-start gap-2">
-      <Icon name="alert" :size="14" class="mt-[3px] shrink-0" /><span class="min-w-0">{{
-        w
-      }}</span>
-    </li>
-    <li
-      v-for="(warning, i) in task.aiResult.flatMap((p) =>
-        p.warnings.map((w) => `AI 第 ${p.page} 页：${w}`),
-      )"
-      :key="`ai-${i}`"
-      class="flex items-start gap-2"
-    >
-      <Icon name="sparkles" :size="14" class="mt-[3px] shrink-0" /><span class="min-w-0">{{
-        warning
-      }}</span>
-    </li>
-  </ul>
+  <!-- 识别警告：多条放在同一个琥珀 Notice 的列表里（每条各带图标），不堆一串 Notice -->
+  <Notice v-if="warningItems.length" :items="warningItems" />
 
   <!-- 页级核对：全部勾选后从琥珀提醒退成普通面板 -->
   <div

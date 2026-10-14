@@ -8,7 +8,8 @@ import Button from './Button.vue';
  * 不带 role：页面上同时只该有一个 alert（e2e 用 getByRole('alert') 定位），需要时由调用方加。
  */
 withDefaults(
-  defineProps<{ title?: string; message?: string; retrying?: boolean }>(),
+  /** loading：重新加载进行中（按钮转圈并禁用），与 Button / ConfirmDialog 的 loading 同名 */
+  defineProps<{ title?: string; message?: string; loading?: boolean }>(),
   { title: '加载失败' },
 );
 defineEmits<{ retry: [] }>();
@@ -21,8 +22,8 @@ defineEmits<{ retry: [] }>();
       <p class="text-sm font-semibold text-ink">{{ title }}</p>
       <p v-if="message" class="mt-0.5 text-[13px] text-muted break-words">{{ message }}</p>
       <div class="mt-2.5 flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" :loading="retrying" @click="$emit('retry')">
-          <Icon v-if="!retrying" name="refresh" :size="14" /> 重新加载
+        <Button variant="secondary" size="sm" :loading="loading" @click="$emit('retry')">
+          <Icon v-if="!loading" name="refresh" :size="14" /> 重新加载
         </Button>
         <slot />
       </div>

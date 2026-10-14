@@ -206,7 +206,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     await page.goto(taskUrl);
     await expect(page.getByText('此任务已经确认入账，仅供查看。')).toBeVisible();
     await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: '查看已入账申请', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '查看已入账申请', exact: true })).toBeVisible();
   });
 }
 

@@ -26,8 +26,10 @@ const props = withDefaults(
     /** 撑满一行、各项等宽（等宽网格：最长的标签决定列宽，不截断；手机上的 segmented 常用） */
     block?: boolean;
     ariaLabel?: string;
+    /** 整组禁用（如保存中不许切换退货方式）；单项禁用用 TabItem.disabled */
+    disabled?: boolean;
   }>(),
-  { variant: 'underline', block: false },
+  { variant: 'underline', block: false, disabled: false },
 );
 const emit = defineEmits<{
   'update:modelValue': [value: T];
@@ -35,7 +37,7 @@ const emit = defineEmits<{
 }>();
 
 function select(tab: TabItem<T>): void {
-  if (tab.disabled || tab.value === props.modelValue) return;
+  if (props.disabled || tab.disabled || tab.value === props.modelValue) return;
   emit('update:modelValue', tab.value);
   emit('change', tab.value);
 }
@@ -52,7 +54,7 @@ function select(tab: TabItem<T>): void {
       v-for="t in tabs"
       :key="t.value"
       type="button"
-      :disabled="t.disabled"
+      :disabled="disabled || t.disabled"
       :aria-pressed="t.value === modelValue"
       :class="segmentedItemClass(t.value === modelValue)"
       @click="select(t)"
@@ -67,7 +69,7 @@ function select(tab: TabItem<T>): void {
       v-for="t in tabs"
       :key="t.value"
       type="button"
-      :disabled="t.disabled"
+      :disabled="disabled || t.disabled"
       :aria-pressed="t.value === modelValue"
       :class="underlineItemClass(t.value === modelValue)"
       @click="select(t)"

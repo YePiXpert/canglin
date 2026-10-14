@@ -26,7 +26,10 @@ const props = withDefaults(
     required?: boolean;
     /** 字段级错误：有值时触发框转红并在下方给出原因（与 Input 对齐） */
     error?: string;
-    /** sm = h-8 / 13px、弹层选项 h-7（明细行里与 Input size="sm" 同高）；md = 桌面 h-9、手机 h-11（默认，与 Input 同高） */
+    /**
+     * sm = h-8 / 13px、弹层选项 h-7（明细行里与 Input size="sm" 同高）；md = 桌面 h-9、手机 h-11（默认，与 Input 同高）。
+     * 触屏（pointer: coarse）上 sm 40px、md 44px，与 Input 一致。
+     */
     size?: 'sm' | 'md';
   }>(),
   { placeholder: '请选择', size: 'md' },
@@ -64,7 +67,7 @@ const errorId = `${useId()}-error`;
         <SelectTrigger
           class="control group inline-flex w-full items-center justify-between gap-2 data-[placeholder]:text-faint cursor-pointer"
           :class="[
-            size === 'sm' ? 'h-8 pl-2.5 text-[13px]' : 'h-11 sm:h-9 pl-3 text-base sm:text-sm',
+            size === 'sm' ? 'h-8 pointer-coarse:h-10 pl-2.5 text-[13px]' : 'h-11 sm:h-9 sm:pointer-coarse:h-11 pl-3 text-base sm:text-sm',
             clearable && modelValue ? (size === 'sm' ? 'pr-7' : 'pr-8') : size === 'sm' ? 'pr-2' : 'pr-2.5',
           ]"
           :disabled="disabled"

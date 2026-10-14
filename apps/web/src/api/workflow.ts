@@ -1,4 +1,4 @@
-import { http } from './client';
+import { http, mutate } from './client';
 import type {
   WorkflowDocumentKind, WorkflowDocumentRow, WorkflowOverview, WorkflowPage,
   WorkflowPurchaseInput, WorkflowQuery, WorkflowReceiptInput, WorkflowRequestCreateInput,
@@ -14,17 +14,11 @@ export type {
   WorkflowPage, WorkflowRequestLineRow, WorkflowRequestRow, WorkflowStockRow,
 } from '@canglin/shared';
 
-/** Preserve an uncertain submission's key through retries and browser reloads. */
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const key = `canglin-workflow:${path}:${JSON.stringify(body)}`;
-  const operationId = sessionStorage.getItem(key) || crypto.randomUUID();
-  sessionStorage.setItem(key, operationId);
-  const response = await http.post<T>(`/workflow${path}`, body, {
-    headers: { 'Idempotency-Key': operationId },
-  });
-  sessionStorage.removeItem(key);
-  return response.data;
+/** 业务写操作：经 mutate 带 Idempotency-Key；会话里的键沿用 `canglin-workflow:{path}:{body}` 的写法 */
+function write<T>(method: 'post' | 'patch', path: string, body: unknown): Promise<T> {
+  return mutate<T>(method, `/workflow${path}`, body, `canglin-workflow:${path}:${JSON.stringify(body)}`);
 }
+const post = <T>(path: string, body: unknown) => write<T>('post', path, body);
 
 export const workflowApi = {
   requests: (params: Partial<WorkflowQuery> = {}) =>
@@ -53,13 +47,5 @@ export const workflowApi = {
   adjust: (body: WorkflowAdjustmentInput) => post<WorkflowDocumentRow>('/adjustments', body),
   voidDocument: (id: number, body: WorkflowVoidInput) => post<WorkflowDocumentRow>(`/documents/${id}/void`, body),
   createProduct: (body: WorkflowProductCreateInput) => post<{ productId: number; itemName: string; specification: string; unit: string }>('/products', body),
-  metadata: async (id: number, body: WorkflowMetadataInput) => {
-    const path = `/documents/${id}/metadata`;
-    const key = `canglin-workflow:${path}:${JSON.stringify(body)}`;
-    const operationId = sessionStorage.getItem(key) || crypto.randomUUID();
-    sessionStorage.setItem(key, operationId);
-    const response = await http.patch<WorkflowDocumentRow>(`/workflow${path}`, body, { headers: { 'Idempotency-Key': operationId } });
-    sessionStorage.removeItem(key);
-    return response.data;
-  },
+  metadata: (id: number, body: WorkflowMetadataInput) => write<WorkflowDocumentRow>('patch', `/documents/${id}/metadata`, body),
 };

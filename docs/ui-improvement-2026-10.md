@@ -292,3 +292,28 @@ pnpm --filter @canglin/web test:e2e
   - 新增 `src/components/layout/RouteErrorBoundary.spec.ts`（2 个用例）。
 - 浏览器实测：申请详情 / 到货弹窗 / 账号弹窗 / 供应商弹窗 / 「更多」抽屉无 Description 警告；到货数量错误的 `aria-describedby` 指向「数量必须大于 0」；AI 抽屉打开聚焦输入框（未启用时「前往设置」），Tab 6 次仍在抽屉内，Esc 关闭后焦点回到「AI 助手」按钮；标题「工作台 · 仓廪」「OA-… · 仓廪」「登录 · 仓廪」「页面不存在 · 仓廪」；390px 申请详情卡片里为 0 的次要列 `display: none`。
 - 校验：typecheck ✓ lint ✓ test 216 passed（37 个文件，原 213）
+
+### 批次 C（2026-10-14）
+
+- 完成：
+  - C1 `api/client.ts` 导出 `mutate(method, url, body, storageKey?)`；`api/workflow.ts` 的 `post` 与 metadata 的 PATCH、`api/index.ts` 的 `mutation` 都改用它。行为不变：key 存 sessionStorage、成功后才清，各调用点沿用原来的会话键格式（`canglin-workflow:{path}:{body}` / `canglin-operation:{url}:{body}`），升级前留在会话里的未决操作仍能找回原 key。
+  - C2 `useWorkflowResource` 移到 `src/composables/useResource.ts`（原路径 re-export，`reset()` 顺带清 `refreshing`）；`ImportPendingAside`、`SuppliersView`（供应商列表补上了竞态守卫，成交价格改为 `loading` / `refreshing` 两态）、`AuditView` 改用它。
+  - C3 `presentation.ts` 新增 `unitPriceLabel(price, unit)`，`DocumentCard`、`PurchaseRegisterDialog`（历史价药丸；行金额与合计改用 `moneyLabel`，删掉重写的 `money()`）、`StockProductCard` 两处、`SuppliersView` 改用；`utils/format.ts` 删掉无人调用的 `formatCurrency / formatAmount / formatNumber`（只留 `formatBytes`）。
+  - C4 新建 `components/import/status.ts`（`isRunning`、`isTaskActive`、`taskKind`、`taskStatusLabel`、`TASK_KIND_STYLES`），`ImportTaskList`、`ImportPendingAside`、`ImportRecognitionSteps`、`useImportTask`（`active` 与水合判断）改用；短时间统一为 `utils/datetime.ts` 的 `shortDateTime`（今天只写时刻），`ImportTaskList` 删掉自己的 `shortTime`，工作台两个侧栏的时间带完整时间的 `title`。
+  - C5 新建 `components/workflow/useRegisterLines.ts`（`selectedCount`、`rowErrors`、`selectAll`），登记采购 / 到货 / 数量类三个弹窗共用，原有 spec 全部通过。
+  - C6 `Input` / `Select` / `NativeSelect` / `SearchInput` 在 `pointer: coarse` 下 sm 40、md 44（宽屏触屏也是），去掉 `RequestCreateDialog` 的 `max-sm:[&_input]:h-11` 补丁；`NativeSelect` sm 手机上 16px 字；字段 32 / 36 定为刻意的尺度并写进 DESIGN.md；`Tabs`、`SearchInput` 新增 `disabled`，`QuantityCommandDialog` 保存中禁用退货方式；`ConfirmDialog` `loading` 时内部传 `persistent` 并禁用「取消」；`ErrorState` 的 `retrying` 改名 `loading`（`RequestCollection`、`SuppliersView`、`RequestDetailView` 同步）；`FileDropzone` 的拒收提示按 `accept` 生成；`Pagination` 发 `update:page`（可 `v-model:page`）；`Disclosure` 发 `update:open`。
+  - C7 库存物品列表与成交价格表前端「显示更多」（每批 50，换筛选 / 重新查询回到前 50）并显示总数；供应商表加前端搜索（名称、联系人、电话、备注，地址参数 `supplierSearch`），无结果时复述关键词并可清除。
+  - C8 `ImportStatusBar`「查看已入账申请」与 `NotFoundView`「回到工作台」改为 `router-link` + `buttonClass`（「返回上一页」是 history 动作，保留按钮）；`RequestRow` 操作格去掉手写 `sm:py-2`；新增令牌 `paper`（`Switch` 圆钮、原件预览底，取代 `bg-white`）与 `scrim`（深色自动加深）及全局类 `.overlay`，`Dialog`（两处）、「更多」抽屉、AI 抽屉的遮罩改用（B3 已把恢复中遮罩换成 Dialog）；审计摘要先列流水号 / 文件名 / 明细行数（业务登记从 `input` 里提出流水号与行数），提交内容与操作编号放最后；`Notice` 新增 `items`（列表 + 每项图标，类型在 `ui/types.ts`），`ImportRecognitionNotices` 改用并删掉手写的琥珀块。
+- 跳过 / 未改：
+  - C2 `ImportTaskList`（「显示更多」是追加分页，语义不同）、`SettingsView`（四个资源各自降级并给面板回填初值）、`WorkflowReportsView`（查询前有区间校验、失败保留上次结果的「查询」语义）保持手写，原因同方案的「语义不同就跳过」。
+  - C7 服务端分页未加：前端分批显示已解决渲染量，接口返回量在单管理员规模下不构成问题，按方案「确有必要时才加」不改服务端。
+- 与方案不同：C8 遮罩除了 `.overlay` 类，还把颜色做成了 `scrim` 令牌（类只是 `bg-scrim`），这样深色不再需要 `dark:bg-black/60`；DESIGN.md §2 的「dark: 只留给…（遮罩加深…）」相应改写。
+- 改动的测试接口：
+  - e2e `e2e/import.spec.ts`：「查看已入账申请」由 `getByRole('button')` 改为 `getByRole('link')`（C8 把它改成了链接）。
+  - `src/components/ui/FileDropzone.spec.ts`：拒收提示期望值由「…PDF / PNG / JPG / WEBP」改为按 accept 生成的「…PDF / PNG / JPG / WEBP / BMP」。
+  - `src/components/ui/ErrorState.spec.ts`：`retrying: true` 改为 `loading: true`。
+  - `src/components/workflow/workbench.spec.ts`：`shortDateTime` 改从 `@/utils/datetime` 引入，今天的期望值由「今天 09:12」改为「09:12」。
+  - `src/utils/format.spec.ts`：删掉三个已删除函数的 4 个用例。
+  - 新增用例：`unitPriceLabel`、`Pagination` v-model、`Disclosure` update:open、`Tabs`（新文件，2 个）、供应商搜索。
+- 浏览器实测：56 种物品时库存列表先显示 50 种、页脚「已显示 50 种 · 共 56 种」，点「显示更多」到 56；供应商搜索「找到 4 家 · 共 7 家」；审计摘要以「流水号：… · 明细行数：1」开头；800px 宽触屏（`pointer: coarse` 为真）下搜索框、md 输入框、Select、NativeSelect 均 44px，sm 输入框 40px，桌面细指针 md 仍 36px。
+- 校验：typecheck ✓ lint ✓ test 218 passed（38 个文件，批次 B 结束时 216）

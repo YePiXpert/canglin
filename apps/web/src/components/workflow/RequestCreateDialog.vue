@@ -144,9 +144,10 @@ async function save() {
           </thead>
           <!--
             单元格的错误原因在表下汇总，字段下方的 .field-error 不显示；
-            手机上没有悬停，无框的单元格看不出是输入框：静止态补回描边与白底（聚焦、出错时仍用 .control 自己的样式）
+            手机上没有悬停，无框的单元格看不出是输入框：静止态补回描边与白底（聚焦、出错时仍用 .control 自己的样式）；
+            触屏上的行高由 Input size="sm" 自己加到 40px，这里不再单独改高度
           -->
-          <tbody class="max-sm:block max-sm:space-y-3 [&_.field-error]:hidden max-sm:[&_input]:h-11 max-sm:[&_input:not(:focus-visible,[aria-invalid=true])]:border-line-strong max-sm:[&_input:not(:disabled,[aria-invalid=true])]:bg-surface">
+          <tbody class="max-sm:block max-sm:space-y-3 [&_.field-error]:hidden max-sm:[&_input:not(:focus-visible,[aria-invalid=true])]:border-line-strong max-sm:[&_input:not(:disabled,[aria-invalid=true])]:bg-surface">
             <tr v-for="(line, i) in lines" :key="line.key" :data-line="line.key" class="max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:rounded-(--radius-card) max-sm:border max-sm:border-line max-sm:bg-canvas max-sm:p-3 sm:border-b sm:border-line sm:last:border-b-0">
               <td class="num text-meta max-sm:-order-2 max-sm:self-center sm:pl-3"><span class="sm:hidden">第 </span>{{ i + 1 }}<span class="sm:hidden"> 行</span></td>
               <td class="max-sm:col-span-2 sm:px-1 sm:py-1.5">

@@ -62,8 +62,8 @@ const menuItems = computed<MenuItem[]>(() => [
         <Badge v-for="chip in chips" :key="chip.key" :tone="chip.tone" :class="{ 'line-through': chip.struck }" :title="chip.detail">{{ chip.label }}</Badge>
       </div>
     </td>
-    <!-- 上下 8px：28px 的按钮与左边第一行文字居中对齐 -->
-    <td class="card-actions sm:py-2 sm:text-right">
+    <!-- 上下留白由 td:has(.row-action) 统一给（桌面 8px、触屏 2px）：28px 的按钮与左边第一行文字居中对齐 -->
+    <td class="card-actions sm:text-right">
       <div class="inline-flex items-center gap-1">
         <router-link :to="to" :class="[buttonClass({ variant: next.variant, size: 'sm' }), 'max-sm:h-10 max-sm:px-3.5']" :aria-label="`${next.label} ${request.serialNumber}`">{{ next.label }}</router-link>
         <Menu :items="menuItems">

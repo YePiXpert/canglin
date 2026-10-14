@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import { buttonClass } from '@/components/ui/button';
 
 const router = useRouter();
 </script>
@@ -16,7 +17,7 @@ const router = useRouter();
       <p class="mt-1 text-[13px] text-muted">地址可能输错了，或者这个页面已经被移除。</p>
       <div class="mt-6 flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-center">
         <Button variant="secondary" size="lg" class="sm:flex-1" @click="router.back()">返回上一页</Button>
-        <Button variant="primary" size="lg" class="sm:flex-1" @click="router.push('/workbench')">回到工作台</Button>
+        <router-link to="/workbench" :class="buttonClass({ variant: 'primary', size: 'lg' })" class="sm:flex-1">回到工作台</router-link>
       </div>
     </div>
   </div>

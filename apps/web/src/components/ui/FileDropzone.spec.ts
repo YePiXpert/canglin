@@ -47,7 +47,8 @@ describe('FileDropzone', () => {
     drop(wrapper.get('label').element, [new File(['x'], 'c.docx', { type: 'application/msword' })]);
     expect(wrapper.emitted('files')).toBeUndefined();
     expect(useToastStore().toasts).toMatchObject([
-      { kind: 'error', message: '不支持的文件类型，请选择 PDF / PNG / JPG / WEBP' },
+      // 格式名按 accept 生成（.jpeg 并入 JPG）
+      { kind: 'error', message: '不支持的文件类型，请选择 PDF / PNG / JPG / WEBP / BMP' },
     ]);
   });
 

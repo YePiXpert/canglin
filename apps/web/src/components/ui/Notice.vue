@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Icon from './Icon.vue';
+import type { NoticeItem } from './types';
 
 /**
  * 提示：替代手写的琥珀 / 红色提示块和红字错误行（DESIGN.md §5.11）。
@@ -11,6 +12,8 @@ import Icon from './Icon.vue';
  * - tone：amber = 提醒、需要人工处理（默认），red = 失败与错误，blue = 信息，teal = 成功（绿色）。
  *   柔底同色字，不画大图标：只有文字前一个 14–16px 的线性图标。
  * - icon：默认按 tone 取（amber → alert，red → alert-circle，blue → info，teal → check-circle）；false = 不画图标。
+ * - items：多条同类提示放进同一块（box）：渲染成 <ul>，每条一行、各带自己的图标（item.icon，不给就用上面的 icon），
+ *   如导入页的识别警告（本地 = alert、AI = sparkles）；传了 items 时默认插槽不渲染。
  *
  * 不声明 role：role="alert" / "status" 由调用方给，和 class 一样落在根元素上。
  * 根元素里除了 aria-hidden 的图标只有插槽内容，getByRole('alert') 读到的文字就是提示原文。
@@ -25,8 +28,10 @@ const props = withDefaults(
     size?: 'md' | 'sm';
     /** 图标名；不传按 tone 取，false 不画 */
     icon?: string | false;
+    /** 列表用法：每条一行、各带图标（只用于 box） */
+    items?: NoticeItem[];
   }>(),
-  { tone: 'amber', variant: 'box', size: 'md', icon: undefined },
+  { tone: 'amber', variant: 'box', size: 'md', icon: undefined, items: undefined },
 );
 
 const DEFAULT_ICONS: Record<NoticeTone, string> = {
@@ -78,7 +83,13 @@ const iconName = computed(() => (props.icon === false ? null : props.icon || DEF
 
 <template>
   <div v-if="variant === 'box'" :class="[layout.root, toneClass]">
-    <div class="flex min-w-0 flex-1 basis-64 items-start gap-2">
+    <ul v-if="items?.length" class="min-w-0 flex-1 basis-64 space-y-1.5">
+      <li v-for="(item, i) in items" :key="i" class="flex items-start gap-2">
+        <Icon v-if="item.icon || iconName" :name="(item.icon || iconName)!" :size="layout.icon" :class="layout.iconClass" />
+        <span class="min-w-0">{{ item.text }}</span>
+      </li>
+    </ul>
+    <div v-else class="flex min-w-0 flex-1 basis-64 items-start gap-2">
       <Icon v-if="iconName" :name="iconName" :size="layout.icon" :class="layout.iconClass" />
       <span class="min-w-0"><slot /></span>
     </div>

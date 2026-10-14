@@ -6,6 +6,9 @@ import type { SelectOption } from './types';
 /**
  * 原生 select 的统一皮肤。
  *
+ * size：sm = 28px（与 Button sm 同高，表格行内），手机上用 16px 字（iOS 聚焦小于 16px 的控件会整页放大）；md = 桌面 36 / 手机 44。
+ * 触屏（pointer: coarse）上 sm 40px、md 44px。
+ *
  * 表格行内、批量工具条这类高密度、可能同屏几十个的位置用它：
  * reka-ui 的 Select 每个都要挂 portal，成本不划算，而原生控件在移动端的
  * 滚轮选择器体验反而更好。表单里的单个选择仍然用 Select.vue。
@@ -38,7 +41,7 @@ const errorId = `${useId()}-error`;
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="error ? errorId : undefined"
         class="control appearance-none w-full cursor-pointer"
-        :class="size === 'sm' ? 'h-7 pl-2 pr-6 text-xs' : 'h-11 sm:h-9 pl-3 pr-9 text-base sm:text-sm'"
+        :class="size === 'sm' ? 'h-7 pointer-coarse:h-10 pl-2 pr-6 text-base sm:text-xs' : 'h-11 sm:h-9 sm:pointer-coarse:h-11 pl-3 pr-9 text-base sm:text-sm'"
         @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
       >
         <option v-if="placeholder" value="">{{ placeholder }}</option>

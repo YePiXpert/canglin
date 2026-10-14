@@ -81,4 +81,15 @@ describe('Disclosure', () => {
     await wrapper.trigger('toggle');
     expect(onToggle).toHaveBeenCalledOnce();
   });
+
+  it('开合时发 update:open（可以 v-model:open），调用方的 @toggle 照样收到', async () => {
+    const onToggle = vi.fn();
+    const wrapper = mount(Disclosure, { props: { summary: '标题' }, attrs: { onToggle } });
+    details(wrapper).open = true;
+    await wrapper.trigger('toggle');
+    details(wrapper).open = false;
+    await wrapper.trigger('toggle');
+    expect(wrapper.emitted('update:open')).toEqual([[true], [false]]);
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
 });

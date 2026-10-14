@@ -7,7 +7,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import { buttonClass, type ButtonVariant } from '@/components/ui/button';
-import { quantityLabel } from './presentation';
+import { quantityLabel, unitPriceLabel } from './presentation';
 import { stockIssueChoices, stockSourceChoices } from './commandChoices';
 
 /**
@@ -47,7 +47,7 @@ const summary = computed(() => {
   const list = active.length ? active : sources;
   if (!list.length) return '暂无来源记录';
   const names = [...new Set(list.map(sourceName))].join('、');
-  const text = list.length === 1 && list[0].unitPrice != null ? `${names} · ¥${list[0].unitPrice} / ${unit.value}` : `${list.length} 批 · ${names}`;
+  const text = list.length === 1 && list[0].unitPrice != null ? `${names} · ${unitPriceLabel(list[0].unitPrice, unit.value)}` : `${list.length} 批 · ${names}`;
   return active.length ? text : `已用完 · ${text}`;
 });
 
@@ -141,7 +141,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
       </div>
       <ul :aria-label="`${product.itemName} 的采购来源与数量`" class="divide-y divide-line sm:divide-y-0">
         <li v-for="source in product.sources" :key="source.originLineId" class="grid gap-1 py-2 text-[12.5px] text-muted sm:items-baseline sm:gap-x-3 sm:py-1" :class="SOURCE_GRID">
-          <span class="break-words text-text">{{ sourceName(source) }}<template v-if="source.unitPrice != null"> · ¥{{ source.unitPrice }} / {{ unit }}</template></span>
+          <span class="break-words text-text">{{ sourceName(source) }}<template v-if="source.unitPrice != null"> · {{ unitPriceLabel(source.unitPrice, unit) }}</template></span>
           <span class="flex flex-wrap gap-x-3 sm:contents">
             <span class="num sm:text-right"><span class="sm:sr-only">库存 </span>{{ quantityLabel(source.stockQuantity, product.unit) }}</span>
             <span class="num sm:text-right" :class="source.receivingQuantity !== '0' ? 'text-blue' : ''"><span class="sm:sr-only">待处理 </span>{{ quantityLabel(source.receivingQuantity, product.unit) }}</span>

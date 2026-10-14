@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { supplierUpsertSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi } from '@/api/workflow';
@@ -7,10 +7,10 @@ import { suppliersApi, type SupplierRow } from '@/api';
 import { useCatalogStore } from '@/stores/catalog';
 import { useToastStore } from '@/stores/toast';
 import { apiError } from '@/api/client';
-import { createRequestGuard } from '@/utils/request';
 import { issueText } from '@/utils/form';
 import { useUrlState } from '@/composables/useUrlState';
 import { useDialogForm } from '@/composables/useDialogForm';
+import { useResource } from '@/composables/useResource';
 import Button from '@/components/ui/Button.vue';
 import { buttonClass } from '@/components/ui/button';
 import Icon from '@/components/ui/Icon.vue';
@@ -26,39 +26,42 @@ import type { MenuItem } from '@/components/ui/types';
 import Dialog from '@/components/ui/Dialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import Notice from '@/components/ui/Notice.vue';
-import { webLink } from '@/components/workflow/presentation';
+import { unitPriceLabel, webLink } from '@/components/workflow/presentation';
 
 const router = useRouter(), catalog = useCatalogStore(), toast = useToastStore();
-const defaults = { tab: 'suppliers', priceSearch: '' };
+const defaults = { tab: 'suppliers', priceSearch: '', supplierSearch: '' };
 const state = reactive({ ...defaults });
 useUrlState(state, defaults);
-const suppliers = ref<SupplierRow[]>([]), prices = ref<WorkflowPriceRow[]>([]);
-const loading = ref(true), loadingPrices = ref(false);
-/** 成交价格已经成功查过一次：之后再查询时保留旧表格，只在工具栏显示「查询中…」，不换回骨架 */
-const pricesLoaded = ref(false);
-const loadError = ref(''), priceError = ref('');
-/** 「成交价格」最近一次查询用的搜索词：查询返回后才更新，空结果的标题复述的是这次查的条件 */
-const searchedFor = ref('');
+/* 供应商列表与成交价格各是一个 useResource：首次加载画骨架，之后刷新保留旧内容，过期响应丢弃 */
+const { data: supplierData, loading, error: loadError, load: loadSuppliers } = useResource(() => suppliersApi.list());
+const suppliers = computed<SupplierRow[]>(() => supplierData.value ?? []);
+/** 供应商搜索在前端做（名称、联系人、电话、备注，不分大小写）：接口一次返回全部供应商 */
+const supplierQuery = computed(() => state.supplierSearch.trim().toLowerCase());
+const filteredSuppliers = computed(() =>
+  supplierQuery.value
+    ? suppliers.value.filter((s) => [s.name, s.contact, s.phone, s.note].some((v) => v?.toLowerCase().includes(supplierQuery.value)))
+    : suppliers.value,
+);
+/** 成交价格：连同这次查询用的搜索词一起保存——空结果的标题复述的是这次查的条件，而不是框里正在改的字 */
+const {
+  data: priceData, loading: pricesFirstLoad, refreshing: pricesRefreshing, error: priceError, load: loadPrices,
+} = useResource(async () => {
+  const search = state.priceSearch.trim();
+  const rows = await workflowApi.prices({ search: state.priceSearch || undefined });
+  return { rows, search };
+});
+const prices = computed<WorkflowPriceRow[]>(() => priceData.value?.rows ?? []);
+const searchedFor = computed(() => priceData.value?.search ?? '');
+/** 成交价格接口一次返回全部结果：表格每次只画 50 条，「显示更多」再追加 50 条；每次重新查询回到前 50 条 */
+const PRICE_BATCH = 50;
+const priceVisible = ref(PRICE_BATCH);
+const shownPrices = computed(() => prices.value.slice(0, priceVisible.value));
+watch(priceData, () => { priceVisible.value = PRICE_BATCH; });
 const supplierDialogOpen = ref(false), supplierDialogTarget = ref<SupplierRow | null>(null);
 const supplierForm = reactive({ name: '', contact: '', phone: '', note: '' });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(() => JSON.stringify(supplierForm));
 const deleteTarget = ref<SupplierRow | null>(null), removingSupplierId = ref<number | null>(null);
 const openingPrice = ref<number | null>(null);
-const priceGuard = createRequestGuard();
-async function loadSuppliers() {
-  loading.value = suppliers.value.length === 0;
-  try { suppliers.value = await suppliersApi.list(); loadError.value = ''; }
-  catch (cause) { loadError.value = apiError(cause); }
-  finally { loading.value = false; }
-}
-async function loadPrices() {
-  const current = priceGuard.begin();
-  loadingPrices.value = true; priceError.value = '';
-  const search = state.priceSearch.trim();
-  try { const rows = await workflowApi.prices({ search: state.priceSearch || undefined }); if (current()) { prices.value = rows; searchedFor.value = search; pricesLoaded.value = true; } }
-  catch (cause) { if (current()) priceError.value = apiError(cause); }
-  finally { if (current()) loadingPrices.value = false; }
-}
 function switchTab(value: string) { state.tab = value; if (value === 'prices') void loadPrices(); }
 function openSupplierDialog(target: SupplierRow | null) {
   supplierDialogTarget.value = target;
@@ -94,7 +97,7 @@ async function openPurchase(lineId: number) {
   } catch (cause) { toast.error(apiError(cause)); }
   finally { openingPrice.value = null; }
 }
-const priceCount = computed(() => (loadingPrices.value || priceError.value ? null : prices.value.length));
+const priceCount = computed(() => (pricesFirstLoad.value || pricesRefreshing.value || priceError.value ? null : prices.value.length));
 /** 有关联单据的供应商：服务端一定拒绝删除，确认框里直接说明并禁用「删除」 */
 const deleteBlockedCount = computed(() => deleteTarget.value?._count?.businessDocuments ?? 0);
 const deleteMessage = computed(() => {
@@ -109,7 +112,6 @@ function moreActions(supplier: SupplierRow): MenuItem[] {
   return [{ label: '删除', icon: 'trash', danger: true, disabled: removingSupplierId.value === supplier.id, onSelect: () => (deleteTarget.value = supplier) }];
 }
 onMounted(() => { void loadSuppliers(); if (state.tab === 'prices') void loadPrices(); });
-onUnmounted(() => priceGuard.abandon());
 </script>
 
 <template>
@@ -119,9 +121,12 @@ onUnmounted(() => priceGuard.abandon());
       <template #toolbar>
         <Tabs :model-value="state.tab" variant="segmented" :tabs="[{ value: 'suppliers', label: '供应商' }, { value: 'prices', label: '成交价格' }]" aria-label="供应商与成交价格" @change="switchTab" />
         <SearchInput v-if="state.tab === 'prices'" v-model="state.priceSearch" class="w-full sm:w-72" placeholder="搜索品名或规格" aria-label="搜索成交价格" @search="loadPrices" />
+        <SearchInput v-else v-model="state.supplierSearch" class="w-full sm:w-72" placeholder="搜索名称、联系人或电话" aria-label="搜索供应商" />
         <div class="ml-auto flex items-center gap-3">
-          <p v-if="state.tab !== 'prices' && !loading && !loadError" class="text-meta num">共 {{ suppliers.length }} 家</p>
-          <p v-else-if="state.tab === 'prices' && loadingPrices && pricesLoaded" class="text-meta" role="status">查询中…</p>
+          <p v-if="state.tab !== 'prices' && !loading && !loadError" class="text-meta num">
+            {{ supplierQuery ? `找到 ${filteredSuppliers.length} 家 · 共 ${suppliers.length} 家` : `共 ${suppliers.length} 家` }}
+          </p>
+          <p v-else-if="state.tab === 'prices' && pricesRefreshing" class="text-meta" role="status">查询中…</p>
           <p v-else-if="state.tab === 'prices' && priceCount !== null" class="text-meta num">共 {{ priceCount }} 条</p>
           <Button variant="primary" size="sm" @click="openSupplierDialog(null)"><Icon name="plus" :size="14" />新增供应商</Button>
         </div>
@@ -133,6 +138,9 @@ onUnmounted(() => priceGuard.abandon());
         </div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="loadSuppliers" />
         <EmptyState v-else-if="suppliers.length === 0" icon="supplier" title="还没有供应商" description="把常用的几家加进来，登记采购时可以直接选择。" />
+        <EmptyState v-else-if="filteredSuppliers.length === 0" :icon="false" :title="`没有找到「${state.supplierSearch.trim()}」相关的供应商`" description="按名称、联系人、电话或备注搜索。">
+          <Button size="sm" @click="state.supplierSearch = ''">清除关键词</Button>
+        </EmptyState>
         <!-- 手机（< 640px）是卡片：名称整行作标题，其余各列一行，编辑与「…」在卡片底部 -->
         <div v-else class="overflow-x-auto">
           <table class="table-base table-cards min-w-[640px]">
@@ -146,7 +154,7 @@ onUnmounted(() => priceGuard.abandon());
               </tr>
             </thead>
             <tbody>
-              <tr v-for="s in suppliers" :key="s.id">
+              <tr v-for="s in filteredSuppliers" :key="s.id">
                 <td>
                   <p class="font-medium text-ink">{{ s.name }}</p>
                   <p v-if="s.note" class="text-meta sm:truncate sm:max-w-64" :title="s.note">{{ s.note }}</p>
@@ -173,8 +181,8 @@ onUnmounted(() => priceGuard.abandon());
       </template>
 
       <template v-else>
-        <div v-if="loadingPrices && !pricesLoaded" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
-        <ErrorState v-else-if="priceError" :message="priceError" :retrying="loadingPrices" @retry="loadPrices" />
+        <div v-if="pricesFirstLoad" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
+        <ErrorState v-else-if="priceError" :message="priceError" :loading="pricesRefreshing" @retry="loadPrices" />
         <!-- 有搜索词 = 无结果：复述条件并给出清除；没有搜索词 = 还没有成交记录 -->
         <EmptyState v-else-if="!prices.length && searchedFor" :icon="false" :title="`没有找到「${searchedFor}」的成交价格`" description="按品名或规格搜索；同名不同规格或单位分别展示。">
           <Button size="sm" @click="clearPriceSearch">清除关键词</Button>
@@ -182,8 +190,14 @@ onUnmounted(() => priceGuard.abandon());
         <EmptyState v-else-if="!prices.length" icon="receipt" title="还没有成交价格" description="登记采购后会自动保留成交价；同名不同规格或单位分别展示。" />
         <div v-else class="overflow-x-auto"><table class="table-base table-cards min-w-[640px]">
           <thead><tr><th scope="col">品名 / 规格</th><th scope="col" class="w-36">供应商</th><th scope="col" class="w-32 text-right">成交单价</th><th scope="col" class="w-28">日期</th><th scope="col" class="w-44 text-right">来源</th></tr></thead>
-          <tbody><tr v-for="price in prices" :key="price.purchaseLineId"><td><p class="font-medium text-ink">{{ price.itemName }}</p><p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">¥{{ price.unitPrice }} / {{ price.unit }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源" class="sm:whitespace-nowrap sm:py-2 sm:text-right"><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="mr-3 text-xs">商家链接</a><Button size="sm" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button></td></tr></tbody>
+          <tbody><tr v-for="price in shownPrices" :key="price.purchaseLineId"><td><p class="font-medium text-ink">{{ price.itemName }}</p><p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">{{ unitPriceLabel(price.unitPrice, price.unit) }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源" class="sm:whitespace-nowrap sm:py-2 sm:text-right"><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="mr-3 text-xs">商家链接</a><Button size="sm" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button></td></tr></tbody>
         </table></div>
+      </template>
+      <template v-if="state.tab === 'prices' && !pricesFirstLoad && !priceError && prices.length > PRICE_BATCH" #footer>
+        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p class="text-meta num">已显示 {{ shownPrices.length }} 条 · 共 {{ prices.length }} 条</p>
+          <Button v-if="prices.length > shownPrices.length" variant="ghost" size="sm" class="-mr-2" @click="priceVisible += PRICE_BATCH">显示更多（共 {{ prices.length }} 条）</Button>
+        </div>
       </template>
     </Panel>
     <!-- 供应商对话框 -->

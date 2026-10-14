@@ -46,7 +46,7 @@ const task = ctx.task as Ref<ImportTaskView>;
         <img
           :src="`/api/imports/tasks/${taskId}/pages/${page}`"
           alt="单据原件页面"
-          class="block h-auto max-w-full rounded-lg border border-line bg-white lg:max-h-[calc(100dvh_-_var(--main-pt)_-_10rem)]"
+          class="block h-auto max-w-full rounded-lg border border-line bg-paper lg:max-h-[calc(100dvh_-_var(--main-pt)_-_10rem)]"
           @error="previewFailed = true"
         /><svg
           v-if="box?.length"

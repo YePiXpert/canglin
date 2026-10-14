@@ -18,7 +18,7 @@ describe('ErrorState', () => {
 
   it('重试中按钮转圈并禁用；默认插槽追加在「重新加载」之后', () => {
     const wrapper = mount(ErrorState, {
-      props: { title: '申请列表加载失败', retrying: true },
+      props: { title: '申请列表加载失败', loading: true },
       slots: { default: () => h('button', { type: 'button' }, '查看系统状态') },
     });
     const [retry, extra] = wrapper.findAll('button');

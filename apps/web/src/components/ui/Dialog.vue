@@ -96,7 +96,7 @@ function onBackdropPointerDown(e: PointerEvent): void {
 <template>
   <DialogRoot :open="props.open" @update:open="(v) => { if (!v) requestClose(); }">
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-40 bg-ink/40 dark:bg-black/60 data-[state=open]:animate-fade-in" />
+      <DialogOverlay class="overlay fixed inset-0 z-40 data-[state=open]:animate-fade-in" />
       <!--
         DialogContent 是全屏透明容器（滚动 + 关闭手势都挂在它上面），面板才是视觉卡片。
         不能给 DialogContent 加 translate 居中：transform/translate 会让它成为 fixed
@@ -166,7 +166,7 @@ function onBackdropPointerDown(e: PointerEvent): void {
         <!-- 放弃未保存内容的二次确认：盖满全屏，弹窗外的点击也进不来 -->
         <div
           v-if="confirmDiscard"
-          class="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 dark:bg-black/60 animate-fade-in"
+          class="overlay fixed inset-0 z-[60] flex items-center justify-center animate-fade-in"
           role="alertdialog"
           aria-modal="true"
           aria-label="放弃未保存的修改"

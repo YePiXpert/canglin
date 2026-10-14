@@ -17,6 +17,7 @@ import Notice from '@/components/ui/Notice.vue';
 import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
 import RegisterLineTable from './RegisterLineTable.vue';
+import { useRegisterLines } from './useRegisterLines';
 import { quantityError, quantityLabel } from './presentation';
 
 export type QuantityCommand = 'STOCK_IN' | 'DIRECT' | 'STOCK' | 'SUPPLIER_RETURN' | 'EMPLOYEE_RETURN' | 'PURCHASE_CANCEL' | 'REQUEST_CANCEL';
@@ -39,12 +40,8 @@ type Line = QuantityChoice & { key: number; selected: boolean; quantity: string;
 const lines = ref<Line[]>([]);
 const snapshot = () => JSON.stringify({ form, lines: lines.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
-const selectedCount = computed(() => lines.value.filter((line) => line.selected).length);
-/** 表下汇总的行级错误（单元格里只标红框）；顺序与列一致：本次数量在前、领用人在后 */
-const rowErrors = computed(() => lines.value.flatMap((line, index) => {
-  const reasons = [errors.value[`quantity.${line.key}`], errors.value[`recipient.${line.key}`]].filter(Boolean);
-  return reasons.length ? [`第 ${index + 1} 行 · ${line.itemName}：${reasons.join('；')}`] : [];
-}));
+/** 行级错误的顺序与列一致：本次数量在前、领用人在后 */
+const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.key}`, `recipient.${line.key}`]);
 watch(() => props.open, (open) => {
   if (!open) return;
   Object.assign(form, { date: todayString(), department: props.department || '', note: '', reason: '', returnMode: 'REFUND' });
@@ -56,9 +53,7 @@ const sourceKey = (line: Line) => `${line.id}:${line.location ?? ''}`;
 function lineMeta(line: Line): string {
   return [line.specification, line.sourceHint].filter(Boolean).join(' · ');
 }
-function selectAll(value: boolean) {
-  for (const line of lines.value) line.selected = value;
-}
+
 /** 拆出的行紧跟在同一来源的最后一行之后：表格里同一来源的几行挨在一起 */
 function split(key: number) {
   const index = lines.value.findIndex((item) => item.key === key);
@@ -113,7 +108,7 @@ async function save() {
       <Input v-if="distribution" v-model="form.department" label="领用部门" :disabled="saving" />
       <div v-else-if="action === 'SUPPLIER_RETURN'">
         <span class="mb-1.5 block text-[12.5px] leading-[18px] font-medium text-text" aria-hidden="true">退货处理方式</span>
-        <Tabs v-model="form.returnMode" variant="segmented" aria-label="退货处理方式" :tabs="returnModes" />
+        <Tabs v-model="form.returnMode" variant="segmented" aria-label="退货处理方式" :tabs="returnModes" :disabled="saving" />
         <p class="mt-1.5 text-xs text-muted">{{ form.returnMode === 'REFUND' ? '扣减这批采购的净成交数量与金额，保留原成交记录。' : '保留成交金额，退回数量重新成为该采购的待到货量。' }}</p>
       </div>
     </div>

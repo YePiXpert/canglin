@@ -6,6 +6,7 @@ import {
   priceError,
   quantityError,
   quantityLabel,
+  unitPriceLabel,
 } from './presentation';
 
 describe('quantityLabel', () => {
@@ -32,6 +33,15 @@ describe('moneyLabel', () => {
     expect(moneyLabel('1234567.5')).toBe('¥1,234,567.5');
     expect(moneyLabel('-0.34')).toBe('¥-0.34');
     expect(moneyLabel('-12500')).toBe('¥-12,500');
+  });
+});
+
+describe('unitPriceLabel', () => {
+  it('「¥单价 / 单位」：千分位、小数位原样保留（四位单价不截断），单位缺失时写明', () => {
+    expect(unitPriceLabel('0.335', '包')).toBe('¥0.335 / 包');
+    expect(unitPriceLabel('20', '盒')).toBe('¥20 / 盒');
+    expect(unitPriceLabel('1680.5000', '台')).toBe('¥1,680.5000 / 台');
+    expect(unitPriceLabel('3', null)).toBe('¥3 / （单位未填写）');
   });
 });
 

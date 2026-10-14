@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed, inject, type Ref } from 'vue';
-import { useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import { buttonClass } from '@/components/ui/button';
 import type { ImportTaskView } from '@/api';
 import { importTaskKey } from './useImportTask';
 
 const ctx = inject(importTaskKey);
 if (!ctx) throw new Error('ImportStatusBar 只能放在 ImportView 里：缺少 useImportTask() 提供的上下文（importTaskKey）');
-const router = useRouter();
 const { active, stateDot, localState, aiState, pageCount, saved, cancel, retry } = ctx;
 /** 只在 ImportView 的 v-else-if="task" 里渲染：task 变回 null 时父组件先更新、卸载本组件，所以收窄为非空 */
 const task = ctx.task as Ref<ImportTaskView>;
@@ -71,7 +70,8 @@ const saveLive = computed(() => (saved.value ? '已保存草稿' : ''));
         </p>
       </div>
     </div>
-    <Button v-if="task.confirmed && task.requestId" size="sm" variant="primary" @click="router.push(`/requests/${task!.requestId}`)">查看已入账申请</Button>
+    <!-- 跳转用链接（按钮样式），不是 button + router.push：可以新标签打开、读屏读作链接 -->
+    <router-link v-if="task.confirmed && task.requestId" :to="`/requests/${task.requestId}`" :class="buttonClass({ variant: 'primary', size: 'sm' })">查看已入账申请</router-link>
     <div v-if="active || !task.confirmed" class="flex flex-wrap items-center gap-2">
       <Button v-if="active" variant="secondary" size="sm" @click="cancel"
         >停止处理，人工核对</Button

@@ -11,8 +11,9 @@ import { buttonClass } from '@/components/ui/button';
 import type { TabItem } from '@/components/ui/tabs';
 import { importsApi, type ImportTaskSummary, type ImportTaskView } from '@/api';
 import { apiError } from '@/api/client';
-import { formatDateTime } from '@/utils/datetime';
+import { formatDateTime, shortDateTime } from '@/utils/datetime';
 import { createRequestGuard } from '@/utils/request';
+import { TASK_KIND_STYLES, taskKind as kind, taskStatusLabel as statusLabel } from './status';
 
 const props = withDefaults(defineProps<{ currentTaskId?: string; currentTask?: ImportTaskView | null }>(), { currentTaskId: '', currentTask: null });
 const emit = defineEmits<{ current: [] }>();
@@ -47,46 +48,12 @@ function switchTab(value: string): void {
   total.value = 0;
   void refresh();
 }
-function statusLabel(task: ImportTaskSummary): string {
-  const running = (s: string) => s === 'PENDING' || s === 'RUNNING';
-  return task.confirmed ? '已入账'
-    : running(task.aiStatus) ? 'AI 原件识别中'
-      : running(task.status) ? '识别中'
-        : task.status === 'FAILED' ? '识别失败，待人工核对' : '待核对入账';
-}
-/** 与 statusLabel 同一套判断，只决定外观与动作：识别中、待核对、识别失败、已入账 */
-type Kind = 'running' | 'review' | 'failed' | 'confirmed';
-function kind(task: ImportTaskSummary): Kind {
-  const running = (s: string) => s === 'PENDING' || s === 'RUNNING';
-  return task.confirmed ? 'confirmed'
-    : running(task.aiStatus) || running(task.status) ? 'running'
-      : task.status === 'FAILED' ? 'failed' : 'review';
-}
-/** 行首图标与状态字的颜色：识别中 = 蓝色转圈（模板里单独画，不用图标）；待核对 = 蓝字（轮到你处理）；识别失败 = 琥珀；已入账 = 绿 */
-const KINDS: Record<Kind, { icon: string; iconClass: string; text: string }> = {
-  running: { icon: '', iconClass: '', text: '' },
-  review: { icon: 'file', iconClass: 'text-faint', text: 'text-blue' },
-  failed: { icon: 'alert', iconClass: 'text-amber', text: 'text-amber' },
-  confirmed: { icon: 'check-circle', iconClass: 'text-teal', text: 'text-teal' },
-};
+/** 状态文案、阶段与颜色来自 ./status（与工作台「未完成的导入」同一口径）；识别中在模板里画蓝色转圈，不用图标 */
+const KINDS = TASK_KIND_STYLES;
 /** 待核对、识别失败要你接着处理（描边按钮「继续处理」）；识别中、已入账只是查看（ghost「查看」） */
 function needsYou(task: ImportTaskSummary): boolean {
   const k = kind(task);
   return k === 'review' || k === 'failed';
-}
-/** 列表里的时间尽量短：今天只写时刻，昨天写「昨天 HH:mm」，今年省略年份；完整时间放在 title 里 */
-function shortTime(input: string): string {
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return input;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const now = new Date();
-  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.round((day(now) - day(d)) / 86_400_000);
-  if (days === 0) return time;
-  if (days === 1) return `昨天 ${time}`;
-  if (d.getFullYear() === now.getFullYear()) return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${time}`;
-  return formatDateTime(d);
 }
 /**
  * 分段筛选。「未完成」后的朱砂数字是等你处理的任务数：只有正在看「未完成」时才知道准确的总数，
@@ -136,7 +103,7 @@ defineExpose({ refresh });
             <span class="truncate text-[13px] font-medium text-ink" :title="task.filename">{{ task.filename }}</span>
             <Badge v-if="task.id === props.currentTaskId" tone="gray" class="shrink-0">当前</Badge>
           </p>
-          <p class="mt-0.5 text-meta"><time class="num whitespace-nowrap" :datetime="task.createdAt" :title="formatDateTime(task.createdAt)">{{ shortTime(task.createdAt) }}</time> · <span :class="KINDS[kind(task)].text">{{ statusLabel(task) }}</span><template v-if="!task.originalAvailable"> · <span class="whitespace-nowrap text-amber">原件缺失</span></template></p>
+          <p class="mt-0.5 text-meta"><time class="num whitespace-nowrap" :datetime="task.createdAt" :title="formatDateTime(task.createdAt)">{{ shortDateTime(task.createdAt) }}</time> · <span :class="KINDS[kind(task)].textClass">{{ statusLabel(task) }}</span><template v-if="!task.originalAvailable"> · <span class="whitespace-nowrap text-amber">原件缺失</span></template></p>
         </div>
         <router-link v-slot="{ href, navigate }" :to="{ path: '/import', query: { task: task.id } }" custom>
           <a :href="href" :class="buttonClass({ variant: needsYou(task) ? 'secondary' : 'ghost', size: 'sm' })" @click="navigate($event); task.id === props.currentTaskId && emit('current')">{{ needsYou(task) ? '继续处理' : '查看' }}</a>

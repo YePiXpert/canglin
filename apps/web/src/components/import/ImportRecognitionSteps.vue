@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import Icon from '@/components/ui/Icon.vue';
 import type { ImportTaskView } from '@/api';
+import { isTaskActive } from './status';
 
 const props = defineProps<{ task: ImportTaskView | null; taskId: string; missing: boolean; finished: boolean }>();
 type State = 'done' | 'current' | 'todo' | 'warn';
@@ -17,7 +18,7 @@ const styles: Record<State, { dot: string; text: string }> = {
 };
 const steps = computed(() => {
   const task = props.task;
-  const active = task && ([task.status, task.aiStatus].some((s) => s === 'PENDING' || s === 'RUNNING'));
+  const active = task && isTaskActive(task);
   const states: State[] = [
     task || (props.taskId && !props.missing) ? 'done' : 'current',
     !task ? 'todo' : active ? 'current' : task.status === 'FAILED' ? 'warn' : 'done',

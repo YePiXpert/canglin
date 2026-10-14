@@ -5,6 +5,7 @@ import { importsApi, type ImportTaskView, type AiImportPage } from '@/api';
 import { apiError } from '@/api/client';
 import { aiSuggestionKey, workflowImportConfirmSchema, type ImportDraft, type ParseResult } from '@canglin/shared';
 import type ImportTaskList from './ImportTaskList.vue';
+import { isRunning, isTaskActive } from './status';
 
 /** 导入只核对原件上的品名、规格、数量和单位；成交单价与采购链接在登记采购时填写 */
 export type Line = {
@@ -59,12 +60,7 @@ export function useImportTask() {
   const discardOpen = ref(false), discarding = ref(false), discardError = ref('');
   /** 「重新载入已保存版本」的确认框（ImportView 渲染）：替换掉未保存的编辑前先问一句 */
   const reloadOpen = ref(false);
-  const active = computed(
-    () =>
-      task.value &&
-      (['PENDING', 'RUNNING'].includes(task.value.status) ||
-        ['PENDING', 'RUNNING'].includes(task.value.aiStatus)),
-  );
+  const active = computed(() => task.value && isTaskActive(task.value));
   const selectedLine = computed(() => lines.value.find((l) => l.lineId === selected.value));
   const box = computed(() =>
     selectedLine.value?.source?.page === page.value ? selectedLine.value.source.box : null,
@@ -269,7 +265,7 @@ export function useImportTask() {
       if (task.value && loaded.value) next.version = task.value.version; // autosave owns the optimistic version
       task.value = next;
       error.value = next.error ?? '';
-      if (!loaded.value && !['PENDING', 'RUNNING'].includes(next.status)) {
+      if (!loaded.value && !isRunning(next.status)) {
         hydrating = true;
         const d = next.draft;
         for (const f of fields) form[f] = d?.[f] ?? '';

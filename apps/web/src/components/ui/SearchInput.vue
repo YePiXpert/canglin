@@ -11,6 +11,7 @@ const props = withDefaults(
     /** 停止输入多久后自动搜索；设 0 表示只在回车/失焦时搜 */
     delay?: number;
     ariaLabel?: string;
+    disabled?: boolean;
   }>(),
   { placeholder: '搜索', icon: 'search', delay: 350 },
 );
@@ -57,21 +58,23 @@ onBeforeUnmount(() => fire.cancel());
       搜索图标固定在左侧。图标与清除按钮按输入框高度（手机 44 / 桌面 36）定位，不用 top-1/2：
       根元素被 grid / flex 拉高时也不会错位。外观来自全局 .control。
     -->
-    <Icon :name="icon" :size="16" class="absolute left-3 top-3.5 sm:top-2.5 text-faint pointer-events-none" />
+    <Icon :name="icon" :size="16" class="absolute left-3 top-3.5 sm:top-2.5 sm:pointer-coarse:top-3.5 text-faint pointer-events-none" />
+    <!-- 触屏（pointer: coarse）在宽屏上也保持 44px，与 Input / Select 一致 -->
     <input
       :value="draft"
       type="search"
       :placeholder="placeholder"
       :aria-label="ariaLabel ?? placeholder"
-      class="control w-full h-11 sm:h-9 pl-9 pr-9 text-base sm:text-sm [&::-webkit-search-cancel-button]:hidden"
+      :disabled="disabled"
+      class="control w-full h-11 sm:h-9 sm:pointer-coarse:h-11 pl-9 pr-9 text-base sm:text-sm [&::-webkit-search-cancel-button]:hidden"
       @input="onInput"
       @keyup.enter="submit"
       @keyup.escape="clear"
     />
     <button
-      v-if="draft"
+      v-if="draft && !disabled"
       type="button"
-      class="absolute right-1.5 top-2.5 sm:top-1.5 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer pointer-coarse:before:absolute pointer-coarse:before:-inset-2"
+      class="absolute right-1.5 top-2.5 sm:top-1.5 sm:pointer-coarse:top-2.5 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer pointer-coarse:before:absolute pointer-coarse:before:-inset-2"
       aria-label="清除搜索"
       @click="clear"
     >

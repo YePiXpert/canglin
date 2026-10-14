@@ -7,6 +7,7 @@ import Button from './Button.vue';
  * danger = 朱砂实心确认按钮（删除、撤销、恢复备份）；否则是墨色主按钮。
  * 默认插槽追加在 message 之后（下游依赖提示、撤销原因输入框）；
  * confirmDisabled：有下游依赖、不能直接执行时禁用确认按钮，并在插槽里指出先处理哪条。
+ * loading：确认进行中——确认按钮转圈，「取消」禁用，Esc 与点遮罩也关不掉（内部传 persistent），结果出来前不会被误关。
  */
 withDefaults(
   defineProps<{
@@ -26,7 +27,7 @@ const emit = defineEmits<{ 'update:open': [v: boolean]; confirm: [] }>();
 <template>
   <!-- 确认框在手机上保持居中小卡片：全屏只放一句话和两个按钮反而更难读 -->
   <!-- message 走 Dialog 的 #description（reka 的 DialogDescription）：确认框经 aria-describedby 朗读后果 -->
-  <Dialog :open="open" :title="title" width="420px" :mobile-fullscreen="false" compact @update:open="emit('update:open', $event)">
+  <Dialog :open="open" :title="title" width="420px" :mobile-fullscreen="false" compact :persistent="loading" @update:open="emit('update:open', $event)">
     <template #description>
       <p class="text-[13px] text-muted leading-relaxed">{{ message }}</p>
     </template>
@@ -34,7 +35,7 @@ const emit = defineEmits<{ 'update:open': [v: boolean]; confirm: [] }>();
       <slot />
     </div>
     <template #footer>
-      <Button variant="ghost" @click="emit('update:open', false)">取消</Button>
+      <Button variant="ghost" :disabled="loading" @click="emit('update:open', false)">取消</Button>
       <Button :variant="danger ? 'danger' : 'primary'" :loading="loading" :disabled="confirmDisabled" @click="emit('confirm')">
         {{ confirmText }}
       </Button>

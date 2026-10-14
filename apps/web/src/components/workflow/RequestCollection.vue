@@ -84,7 +84,7 @@ defineExpose({ refresh: load });
         <Skeleton class="h-5.5 w-20 shrink-0 max-sm:hidden" />
       </div>
     </div>
-    <ErrorState v-else-if="error" title="申请列表加载失败" :message="error" :retrying="refreshing" @retry="load" />
+    <ErrorState v-else-if="error" title="申请列表加载失败" :message="error" :loading="refreshing" @retry="load" />
     <template v-else-if="!data?.items.length">
       <!-- 搜索 / 筛选无结果：复述条件，给清除的入口 -->
       <EmptyState v-if="filtered" :icon="false" :title="noResult.title" :description="noResult.description">

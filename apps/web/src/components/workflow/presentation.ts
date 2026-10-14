@@ -16,6 +16,11 @@ export function moneyLabel(value: string | null | undefined): string {
   return `¥${negative ? '-' : ''}${grouped}${fraction === undefined ? '' : `.${fraction}`}`;
 }
 
+/** 成交单价「¥20 / 盒」：金额写法同 moneyLabel（千分位、小数位原样保留），单位缺失时写明 */
+export function unitPriceLabel(price: string, unit: string | null | undefined): string {
+  return `${moneyLabel(price)} / ${unit || '（单位未填写）'}`;
+}
+
 export function draftLineAmount(quantity: string, price: string): string | null {
   if (!quantity.trim() || !price.trim()) return null;
   try {

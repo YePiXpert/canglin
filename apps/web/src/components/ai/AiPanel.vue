@@ -134,7 +134,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
   -->
   <DialogRoot :open="props.open" @update:open="(v) => { if (!v) emit('close'); }">
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-50 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
+      <DialogOverlay class="overlay fixed inset-0 z-50 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
       <!-- 抽屉：面板色底，深色下左侧发丝线分层；打开时从右侧轻推入（@starting-style） -->
       <DialogContent
         aria-label="AI 助手"

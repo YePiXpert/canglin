@@ -11,25 +11,27 @@ import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import Panel from '@/components/ui/Panel.vue';
 import { auditApi, type AuditRow } from '@/api';
-import { apiError } from '@/api/client';
-import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
 import { useUrlState } from '@/composables/useUrlState';
-import { createRequestGuard } from '@/utils/request';
+import { useResource } from '@/composables/useResource';
 import { ITEM_FIELD_LABELS } from '@canglin/shared';
-
-const toast = useToastStore();
-const guard = createRequestGuard();
 
 const DEFAULTS = { search: '', action: '', page: 1 };
 const filters = reactive({ ...DEFAULTS });
 useUrlState(filters, DEFAULTS);
 
-const logs = ref<AuditRow[]>([]);
-const total = ref(0);
 const pageSize = 30;
-const loading = ref(true);
-const loadError = ref('');
+/* 首次加载画骨架；换筛选、翻页时保留旧表格，失败原位 ErrorState（过期响应丢弃） */
+const { data, loading, error: loadError, load } = useResource(() =>
+  auditApi.list({
+    ...(filters.search ? { search: filters.search } : {}),
+    ...(filters.action ? { action: filters.action } : {}),
+    page: filters.page,
+    pageSize,
+  }),
+);
+const logs = computed<AuditRow[]>(() => data.value?.logs ?? []);
+const total = computed(() => data.value?.total ?? 0);
 const expanded = ref<Set<number>>(new Set());
 
 /**
@@ -102,34 +104,11 @@ const actionOptions = computed(() =>
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
 );
 
-async function load(silent = false): Promise<void> {
-  const isCurrent = guard.begin();
-  loading.value = logs.value.length === 0;
-  try {
-    const res = await auditApi.list({
-      ...(filters.search ? { search: filters.search } : {}),
-      ...(filters.action ? { action: filters.action } : {}),
-      page: filters.page,
-      pageSize,
-    });
-    if (!isCurrent()) return;
-    logs.value = res.logs;
-    total.value = res.total;
-    loadError.value = '';
-  } catch (e) {
-    if (!isCurrent()) return;
-    loadError.value = apiError(e);
-    // 首次加载失败时页面上有 ErrorState，不必再弹 toast
-    if (silent) toast.error(loadError.value);
-  } finally {
-    if (isCurrent()) loading.value = false;
-  }
-}
 onMounted(load);
 
 function applyFilters(): void {
   filters.page = 1;
-  void load(true);
+  void load();
 }
 
 /**
@@ -200,9 +179,37 @@ const DETAIL_KEY_LABELS: Record<string, string> = {
   mismatches: '不一致处数',
 };
 
-/** 列表里给一行摘要，展开看全部 */
+/**
+ * 列表里给一行摘要，展开看全部。摘要会被截断，所以有用的字段排前面：流水号、文件名、明细行数优先
+ * （业务登记的这两项在 input 里，提出来单列），提交内容的整段 JSON 与操作编号（UUID）放最后。
+ */
+const SUMMARY_FIRST = ['流水号', '文件名', '明细行数'];
+const SUMMARY_LAST = ['提交内容', '操作编号'];
+function liftedEntries(log: AuditRow): DetailEntry[] {
+  let parsed: unknown;
+  try {
+    parsed = log.detail ? JSON.parse(log.detail) : null;
+  } catch {
+    return [];
+  }
+  const input = (parsed as { input?: unknown } | null)?.input;
+  if (!input || typeof input !== 'object') return [];
+  const out: DetailEntry[] = [];
+  const { serialNumber, lines } = input as { serialNumber?: unknown; lines?: unknown };
+  if (typeof serialNumber === 'string' && serialNumber) out.push({ key: '流水号', value: serialNumber });
+  if (Array.isArray(lines)) out.push({ key: '明细行数', value: String(lines.length) });
+  return out;
+}
+function summaryRank(key: string): number {
+  if (SUMMARY_FIRST.includes(key)) return SUMMARY_FIRST.indexOf(key) - SUMMARY_FIRST.length;
+  return SUMMARY_LAST.includes(key) ? 1 + SUMMARY_LAST.indexOf(key) : 0;
+}
 function detailSummary(log: AuditRow): string {
-  const entries = detailEntries(log);
+  const seen = new Set<string>();
+  const entries = [...liftedEntries(log), ...detailEntries(log)]
+    .filter((e) => (seen.has(e.key) ? false : (seen.add(e.key), true)))
+    .map((e, index) => ({ ...e, index }))
+    .sort((a, b) => summaryRank(a.key) - summaryRank(b.key) || a.index - b.index);
   if (entries.length === 0) return '—';
   return entries.map((e) => `${e.key}：${e.value}`).join(' · ');
 }
@@ -341,7 +348,7 @@ function clearSearch(): void {
     </div>
 
     <template v-if="!loading && !loadError && logs.length > 0" #footer>
-      <Pagination :page="filters.page" :page-size="pageSize" :total="total" @change="(p) => { filters.page = p; load(true); }" />
+      <Pagination :page="filters.page" :page-size="pageSize" :total="total" @change="(p) => { filters.page = p; load(); }" />
     </template>
   </Panel>
 </template>

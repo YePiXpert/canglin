@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { mount, RouterLinkStub } from '@vue/test-utils';
 import type { WorkflowRequestLineRow, WorkflowRequestRow } from '@/api/workflow';
 import WorkbenchRequestRow from './WorkbenchRequestRow.vue';
-import { nextStep, shortDateTime, sortByNextStep, todayLabel } from './workbench';
+import { nextStep, sortByNextStep, todayLabel } from './workbench';
+import { shortDateTime } from '@/utils/datetime';
 
 function line(over: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRow {
   return {
@@ -43,9 +44,9 @@ describe('工作台的处理顺序', () => {
     expect(input.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('短时间：今天 / 昨天 / 今年 / 往年（本地时区）', () => {
+  it('短时间：今天只写时刻 / 昨天 / 今年 / 往年（本地时区，DESIGN.md §8）', () => {
     const now = new Date(2026, 9, 10, 12, 0);
-    expect(shortDateTime(new Date(2026, 9, 10, 9, 12).toISOString(), now)).toBe('今天 09:12');
+    expect(shortDateTime(new Date(2026, 9, 10, 9, 12).toISOString(), now)).toBe('09:12');
     expect(shortDateTime(new Date(2026, 9, 9, 17, 40).toISOString(), now)).toBe('昨天 17:40');
     expect(shortDateTime(new Date(2026, 9, 8, 8, 5).toISOString(), now)).toBe('10-08 08:05');
     expect(shortDateTime(new Date(2025, 11, 30, 14, 20).toISOString(), now)).toBe('2025-12-30 14:20');

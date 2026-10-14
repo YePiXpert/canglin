@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { workflowApi, type WorkflowStockRow } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
 import { useUrlState } from '@/composables/useUrlState';
@@ -41,6 +41,14 @@ const isEmptied = (product: WorkflowStockRow) => product.stockQuantity === '0' &
 const emptyCount = computed(() => tabProducts.value.filter(isEmptied).length);
 const inStockCount = computed(() => tabProducts.value.filter((product) => product.stockQuantity !== '0').length);
 const products = computed(() => tabProducts.value.filter((product) => !stockFilter.value || (stockFilter.value === 'empty' ? isEmptied(product) : product.stockQuantity !== '0')));
+/**
+ * 接口一次返回全部物品（按品名排序），列表每次只画 50 种，底部「显示更多」再追加 50 种；
+ * 换页签、筛选或搜索时回到前 50 种。
+ */
+const BATCH = 50;
+const visibleCount = ref(BATCH);
+const shownProducts = computed(() => products.value.slice(0, visibleCount.value));
+watch(() => [state.tab, state.stock, state.search], () => { visibleCount.value = BATCH; });
 /* 页签计数跟着当前搜索：库存物品 = 物品种数，到货待处理 = 有待处理数量的种数；没加载完不显示 */
 const tabs = computed(() => [
   { value: 'products', label: '库存物品', count: stock.value?.length },
@@ -123,9 +131,15 @@ function clearAll() { state.stock = ''; clearSearch(); }
             <span>来源</span>
             <span class="text-right">操作</span>
           </div>
-          <StockProductCard v-for="product in products" :key="product.productId" :product="product" :receiving="receivingTab" layout="row" @command="(action, choices, context) => actions?.command(action, choices, context)" @adjust="actions?.adjust($event)" @source="actions?.inspectLine($event)" />
+          <StockProductCard v-for="product in shownProducts" :key="product.productId" :product="product" :receiving="receivingTab" layout="row" @command="(action, choices, context) => actions?.command(action, choices, context)" @adjust="actions?.adjust($event)" @source="actions?.inspectLine($event)" />
         </div>
       </div>
+      <template v-if="!loading && !error && products.length > BATCH" #footer>
+        <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p class="text-meta num">已显示 {{ shownProducts.length }} 种 · 共 {{ products.length }} 种</p>
+          <Button v-if="products.length > shownProducts.length" variant="ghost" size="sm" class="-mr-2" @click="visibleCount += BATCH">显示更多（共 {{ products.length }} 种）</Button>
+        </div>
+      </template>
     </Panel>
     <DocumentCollection v-else-if="state.tab === 'distributions'" ref="documents" initial-kind="DISTRIBUTION" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" />
     <StockEntriesTable v-else-if="state.tab === 'entries'" :entries="entries" :loading="entriesLoading" :error="entriesError" :page="state.page" @retry="loadEntries" @page="page" @inspect-document="actions?.inspectDocument($event)" @inspect-line="actions?.inspectLine($event)" />
