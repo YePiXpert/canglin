@@ -41,7 +41,7 @@ services:
     environment:
       LLM_API_KEY_FILE: /run/secrets/llm_api_key
     volumes:
-      - /etc/canglin/llm_api_key:/run/secrets/llm_api_key:ro
+      - /opt/canglin/secrets/llm_api_key:/run/secrets/llm_api_key:ro
 ```
 
 `store:false` 只是请求参数，不代表第三方零留存。模型名称不代表能力。设置页不再提供计价和预算项；未配置时只记录用量，预算默认关闭。历史单价与预算记录保留兼容，币种由服务商决定。月预算按已记录的导入估算费用停止后续请求，单页请求可能跨过阈值；它不是第三方账单硬限额。问答和搜索不计入导入预算。
@@ -235,3 +235,14 @@ docker compose --env-file .env -p canglin --project-directory "$PWD" \
 验收记录见 git 历史（提交 `ce8fe2e` 前的 `docs/upgrade-acceptance.md`）。真实第三方地址/密钥、30—50 份脱敏业务单据以及生产数据库未提供。模拟测试和合成样例不能代替第三方能力、业务准确率、真实页面 P95/持续内存、历史精度差异或目标部署环境回退演练。因此发布验收保持未通过。
 
 协议参考：[Responses 迁移](https://developers.openai.com/api/docs/guides/migrate-to-responses)、[结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)、[无状态推理条目回传](https://developers.openai.com/api/docs/guides/reasoning)。使用 SDK 的 `toResponseInputItems` 保留可回传条目及不透明的加密推理内容。
+
+
+## 2026-10-14 统一部署数据目录
+
+正式部署使用 `<部署目录>/data/`（默认 `/opt/canglin/data`），通过 local bind 卷保留 `canglin_state` 名称；容器内仍为 `/app/state`。部署和升级脚本把绝对路径写入 `.env` 的 `CANGLIN_DATA_DIR`。首次部署会准备 uid 1000 可写的目录。不要把 data/ 提交 Git。
+
+旧实例运行 `bash deploy/upgrade.sh /opt/canglin`：脚本先下载镜像，停机后备份完整旧卷，再复制到 data/ 和独立的 `canglin_state_legacy_*` 卷，逐文件核对后重新创建指向 data/ 的卷。原权限、附件和 SQLite WAL 一起保留。新目录非空或现有卷指向其他目录时，脚本拒绝自动迁移。迁移中断后不要删除任一副本；根据发布记录、归档及旧卷确认完整数据后恢复。不要用 `docker volume prune` 清掉尚未确认可删除的回退卷。
+
+备份应包括 `data/`、`.env`、`docker-compose.override.yml`、`secrets/` 及所需的 `pre-upgrade-backups/`。外部 secret 仍需单独备份。直接复制 data/ 前先停止 server，复制完成后启动；应用内备份可以在服务运行时使用。恢复到另一台主机时先恢复这些文件，再按新部署目录调整 `CANGLIN_DATA_DIR`，保留 uid/gid 与权限。卷名本身不是备份数据。
+
+`rollback.sh` 恢复旧镜像和数据时继续使用当前 data/ 路径，并在发布目录生成 `storage.yml`。回退后手动 Compose 管理也必须追加 `-f <发布目录>/storage.yml`（存在时），以及原说明中的旧配置、机器 override 和旧镜像文件，不能漏掉存储配置。

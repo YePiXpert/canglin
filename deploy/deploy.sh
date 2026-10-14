@@ -60,6 +60,19 @@ else
   fi
 fi
 
+# New installations store data beside the deployment configuration.
+source deploy/storage.sh
+prepare_storage_path
+if docker volume inspect canglin_state >/dev/null 2>&1; then
+  check_storage_volume
+  device=$(docker volume inspect canglin_state --format '{{if .Options}}{{index .Options "device"}}{{end}}')
+  [ -n "$device" ] || die "检测到旧数据卷，请先运行 deploy/upgrade.sh 完成备份和迁移"
+else
+  # The server image runs as uid 1000; unlike managed volumes a bind directory
+  # does not inherit /app/state ownership from the image.
+  docker run --rm -v "$CANGLIN_DATA_DIR:/state" alpine chown 1000:1000 /state
+fi
+
 # ---------- 获取镜像：三个服务必须来自同一源码版本 ----------
 SOURCE_REVISION=$(git rev-parse HEAD)
 export RELEASE_TAG="sha-$(git rev-parse --short=7 HEAD)"

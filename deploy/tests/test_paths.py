@@ -7,12 +7,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 
 REPO = Path(__file__).resolve().parents[2]
 STUB = r'''#!/usr/bin/env python3
-import json, os, pathlib, sys
+import json, os, pathlib, sys, shutil
 tool = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ["COMMAND_LOG"], "a") as out:
@@ -23,6 +24,8 @@ if tool == "git":
         p.mkdir(parents=True)
         (p / ".git").mkdir()
         (p / "docker-compose.yml").write_text("services: {}\n")
+        (p / "deploy").mkdir()
+        shutil.copy(os.environ["STORAGE_HELPER"], p / "deploy/storage.sh")
     elif args[0] == "diff" and os.environ.get("DIRTY_TRACKED") == "1":
         sys.exit(1)
     elif args[0] == "rev-parse":
@@ -34,6 +37,11 @@ elif tool == "docker":
         sys.exit(23)
     if args[:2] == ["volume", "inspect"] and os.environ.get("MISSING_VOLUME") == "1":
         sys.exit(1)
+    if args[:2] == ["volume", "inspect"] and "--format" in args:
+        if args[-1] == "{{.Driver}}":
+            print("local")
+        elif os.environ.get("LEGACY_VOLUME") != "1":
+            print(os.environ.get("VOLUME_DEVICE", str(pathlib.Path.cwd() / "data")))
     if args[:2] == ["image", "inspect"] and os.environ.get("MISSING_IMAGE") == "1":
         sys.exit(1)
     if args[0] == "compose" and "images" in args:
@@ -67,7 +75,8 @@ class DeploymentPaths(unittest.TestCase):
             p.chmod(0o755)
         self.log = self.root / "commands.jsonl"
         self.env = {**os.environ, "PATH": str(self.bin) + ":" + os.environ["PATH"],
-                    "COMMAND_LOG": str(self.log), "HOME": str(self.root)}
+                    "COMMAND_LOG": str(self.log), "HOME": str(self.root),
+                    "STORAGE_HELPER": str(REPO / "deploy/storage.sh")}
         self.env.pop("CANGLIN_REPO", None)
         self.env.pop("RELEASE_TAG", None)
 
@@ -95,6 +104,8 @@ class DeploymentPaths(unittest.TestCase):
         (p / "apps/ocr/models.sha256").write_text("test")
         (p / "apps/ocr/requirements.lock").write_text("test")
         (p / ".env").write_text("OCR_API_KEY=keep-me\nWEB_PORT=8080\n")
+        (p / "deploy").mkdir()
+        shutil.copy(REPO / "deploy/storage.sh", p / "deploy/storage.sh")
         return p
 
     def commands(self):
@@ -214,6 +225,39 @@ class DeploymentPaths(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
 
+    def test_legacy_volume_migration_happens_after_backup(self):
+        target = self.repository("legacy")
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", LEGACY_VOLUME="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        calls = [c[2] for c in self.commands() if c[0] == "docker"]
+        backup = next(i for i,c in enumerate(calls) if "czf" in c)
+        copy = next(i for i,c in enumerate(calls) if any("cp -a /source" in a for a in c))
+        remove = next(i for i,c in enumerate(calls) if c[:2] == ["volume", "rm"])
+        self.assertLess(backup, copy)
+        self.assertLess(copy, remove)
+        self.assertTrue(any("device=" + str(target / "data") in c for c in calls))
+
+    def test_legacy_and_populated_directory_refused_before_stop(self):
+        target = self.repository("conflicting-data")
+        (target / "data").mkdir()
+        (target / "data/keep").write_text("important")
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", LEGACY_VOLUME="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
+        self.assertEqual((target / "data/keep").read_text(), "important")
+
+    def test_foreign_volume_directory_refused_before_stop(self):
+        target = self.repository("foreign-data")
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", VOLUME_DEVICE="/unrelated")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
+
+    def test_install_requires_upgrade_for_legacy_volume(self):
+        target = self.repository("legacy-install")
+        r = self.run_script("deploy.sh", "8080", str(target), LEGACY_VOLUME="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(any(c[2][:2] == ["compose", "up"] for c in self.commands()))
+
     def rollback_artifacts(self, target):
         release = target / "pre-upgrade-backups/release-test"
         release.mkdir(parents=True)
@@ -251,6 +295,7 @@ class DeploymentPaths(unittest.TestCase):
         up = next(c for c in commands if "up" in c)
         self.assertIn(str(target / "docker-compose.override.yml"), up)
         self.assertIn(str(release / "old-images.yml"), up)
+        self.assertIn(str(release / "storage.yml"), up)
         self.assertEqual(up[up.index("-p") + 1], "canglin")
 
 if __name__ == "__main__":

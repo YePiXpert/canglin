@@ -28,6 +28,22 @@ docker run --rm -v "$VOLUME:/state:ro" -v "$RELEASE_DIR:/backup" alpine \
 docker run --rm -v "$RELEASE_DIR:/backup:ro" alpine tar tzf "/backup/$ROLLBACK_SNAPSHOT" >/dev/null
 docker run --rm -v "$VOLUME:/state" -v "$RELEASE_DIR:/backup:ro" alpine \
   sh -ec 'find /state -mindepth 1 -maxdepth 1 -exec rm -rf {} +; tar xzf /backup/state.tar.gz -C /state'
+# Keep the current storage location even when the old Compose predates data/.
+STORAGE_ARGS=()
+device=$(docker volume inspect "$VOLUME" --format '{{if .Options}}{{index .Options "device"}}{{end}}')
+if [ -n "$device" ]; then
+  export CANGLIN_DATA_DIR="$device"
+  cat > "$RELEASE_DIR/storage.yml" <<'YAML'
+volumes:
+  state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CANGLIN_DATA_DIR}
+YAML
+  STORAGE_ARGS=(-f "$RELEASE_DIR/storage.yml")
+fi
 # Explicit -f disables automatic override discovery: preserve the local deployment override.
 OVERRIDE_ARGS=()
 for override in docker-compose.override.yml docker-compose.override.yaml; do
@@ -37,7 +53,7 @@ for override in docker-compose.override.yml docker-compose.override.yaml; do
   fi
 done
 docker compose --env-file .env -p "$PROJECT" --project-directory "$REPO_DIR" \
-  -f "$RELEASE_DIR/old-compose.yml" "${OVERRIDE_ARGS[@]}" -f "$RELEASE_DIR/old-images.yml" up -d --no-build --pull never
+  -f "$RELEASE_DIR/old-compose.yml" "${OVERRIDE_ARGS[@]}" "${STORAGE_ARGS[@]}" -f "$RELEASE_DIR/old-images.yml" up -d --no-build --pull never
 echo "已恢复旧数据及旧镜像。请检查 API、数据库和 OCR 就绪状态；发布记录：$RELEASE_DIR/release.txt"
 echo "回退前数据已保留：$RELEASE_DIR/$ROLLBACK_SNAPSHOT"
 echo "回退后的 Compose 管理必须继续使用上述旧配置和旧镜像文件；勿直接运行 docker compose up。参见 docs/upgrade-2026-09.md。"

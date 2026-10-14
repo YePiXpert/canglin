@@ -120,6 +120,8 @@ bash deploy/upgrade.sh --build     # 不等 CI，直接本地构建全部三个�
 bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像，不拉取代码
 ```
 
+数据统一保存在部署目录的 `data/`（默认 `/opt/canglin/data`），`canglin_state` 仅作为映射该目录的 Docker 卷名。首次部署脚本会准备目录权限；旧版升级会在停机备份后自动迁移并核对数据，保留独立旧卷副本。不要直接用 `docker compose up` 代替旧版首次升级。自定义部署目录由脚本写入 `.env` 的 `CANGLIN_DATA_DIR`。
+
 升级脚本只做快进更新（已跟踪文件有本机改动时退出），三个服务绑定同一源码的 `sha-xxxxxxx` 标签并写入 `.env` 的 `RELEASE_TAG`；新镜像就绪后才停机，停机后先把整个数据卷和三个旧镜像引用保存到 `pre-upgrade-backups/release-TIMESTAMP/` 再启动新版本。这些回退点不会自动删除，稳定后由管理员归档；回退必须同时恢复旧数据和旧镜像，回退与回退后的管理命令见 [升级说明](docs/upgrade-2026-09.md#备份恢复与回退)。推送源码和发布 GHCR 镜像不会自动更新 VPS。
 
 ## 数据与安全提醒
@@ -129,7 +131,7 @@ bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像�
 - **备份**：系统设置里的备份包含数据库与 `uploads/`（附清单和逐文件哈希），不含 `.env`、`session-secret` 和外部 secret；备份就放在同一个数据卷里，请下载后异地保存。自动备份默认关闭。
 - **恢复**会覆盖当前数据库与附件，恢复前先创建一份备份；恢复后现有登录会话失效。升级回退点见上文「版本升级」。
 - 未确认入账的导入原件保留 30 天后自动清理；已确认的原件作为申请附件长期保留。
-- `.env`、`secrets/`、`docker-compose.override.yml`、`state/`、`pre-upgrade-backups/` 已在 `.gitignore` 中；密钥文件放在仓库之外（如 `/etc/canglin/`），不要提交到仓库，也不要放进 `uploads/`。
+- `.env`、`secrets/`、`docker-compose.override.yml`、`state/`、`pre-upgrade-backups/` 已在 `.gitignore` 中；密钥文件放在部署目录的 `secrets/`（或外部 `/etc/canglin/`），不要提交到仓库，也不要放进 `uploads/`。
 
 ## 安全模型
 

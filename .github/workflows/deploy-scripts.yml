@@ -20,5 +20,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n deploy/deploy.sh deploy/upgrade.sh deploy/rollback.sh deploy/trial.sh
+      - run: bash -n deploy/deploy.sh deploy/upgrade.sh deploy/rollback.sh deploy/trial.sh deploy/storage.sh
       - run: python3 -m unittest discover -s deploy/tests -v

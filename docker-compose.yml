@@ -60,5 +60,10 @@ services:
     restart: unless-stopped
 
 volumes:
-  # 完整卷名 canglin_state
+  # 卷名兼容升级/回退工具，数据实际位于部署目录的 data/。
   state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CANGLIN_DATA_DIR:-/opt/canglin/data}

@@ -78,6 +78,9 @@ if [ "$GIT_PULL" = 1 ]; then
   git fetch origin main --tags
   git merge --ff-only origin/main
 fi
+source deploy/storage.sh
+prepare_storage_path
+check_storage_volume || die "数据目录检查失败；服务未停止"
 NEW_COMMIT=$(git rev-parse HEAD)
 export RELEASE_TAG="sha-$(git rev-parse --short=7 HEAD)"
 printf 'new_source=%s\nrelease_tag=%s\nocr_model=PP-OCRv6_medium\n' "$NEW_COMMIT" "$RELEASE_TAG" >> "$RELEASE_DIR/release.txt"
@@ -115,6 +118,9 @@ docker run --rm \
   alpine tar czf "/backup/state.tar.gz" -C /state .
 docker run --rm -v "$(pwd)/$RELEASE_DIR:/backup:ro" alpine tar tzf /backup/state.tar.gz >/dev/null
 info "已备份：$RELEASE_DIR/state.tar.gz（数据库 + 附件；外部 secret 保持外部管理）"
+
+# The stopped volume backup is complete; migrate legacy Docker-managed storage.
+migrate_storage_volume
 
 # 回退点不会自动删除；确认发布稳定后由管理员归档。
 
