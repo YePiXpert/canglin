@@ -28,9 +28,12 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
 </script>
 
 <template>
-  <!-- 草稿：单据头 + 明细表（fieldset 在已确认时整体只读） -->
+  <!--
+    草稿：单据头 + 明细表。fieldset 在已确认时整体只读；草稿载入前（识别中）也只读：
+    载入会整份替换单据头与明细，之前的输入既不会保存也会被覆盖。
+  -->
   <fieldset
-    :disabled="task.confirmed"
+    :disabled="task.confirmed || !loaded"
     :class="[mobileTab === 'draft' ? 'block' : 'hidden', 'min-w-0 space-y-4 lg:block']"
   >
     <section class="card p-5">
@@ -40,7 +43,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
             :label="labels[f]"
             v-model="form[f]"
             :type="f === 'requestDate' ? 'date' : 'text'"
-            :disabled="task.confirmed"
+            :disabled="task.confirmed || !loaded"
           /><template v-for="p in task.aiResult" :key="p.page"
             ><Button
               v-if="p[f] && p[f] !== form[f]"

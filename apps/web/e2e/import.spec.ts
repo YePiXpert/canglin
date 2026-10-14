@@ -85,6 +85,39 @@ test('放弃草稿会删除原件并退出任务，保存失败也可以主动�
   await expect(page.getByText('discard-draft.png', { exact: true })).toHaveCount(0);
 });
 
+test('草稿载入前草稿区只读：识别中的输入不会被载入的草稿悄悄覆盖', async ({ page, request }) => {
+  const password = 'browser-test-password';
+  await request.post('/api/auth/setup', { data: { password } });
+  await page.goto('/login');
+  await page.locator('input[type=password]').fill(password);
+  await page.getByRole('button', { name: /^登\s*录$/ }).click();
+  await expect(page).toHaveURL(/workbench/);
+  await page.request.put('/api/ai/config', { data: { enabled: false, baseUrl: 'https://example.invalid/v1', model: 'gemini-3.8-flash-high', semanticSearch: false, autoImport: false } });
+  // 页面前两次查询任务时看到「识别中」（模拟识别慢），之后看到真实状态
+  let running = 2;
+  await page.route(/\/api\/imports\/tasks\/[^/?]+(\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET' || running === 0) return route.continue();
+    running--;
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), status: 'RUNNING' } });
+  });
+  await page.goto('/import');
+  await page.locator('input[type=file]').setInputFiles({ name: 'hydration-race.png', mimeType: 'image/png', buffer: imageFile('hydration-race') });
+  await expect(page).toHaveURL(/task=/);
+  const id = new URL(page.url()).searchParams.get('task')!;
+  const department = page.getByRole('textbox', { name: '申领部门', exact: true });
+  await expect(department).toBeDisabled();
+  // fill 等到草稿载入、输入框可编辑后才输入，这次修改会正常自动保存
+  const saved = page.waitForResponse((r) => r.url().endsWith(`/api/imports/tasks/${id}/draft`) && r.request().method() === 'PUT');
+  await department.fill('识别中填写的部门');
+  expect((await saved).ok()).toBeTruthy();
+  await expect(department).toHaveValue('识别中填写的部门');
+  const task = await (await page.request.get(`/api/imports/tasks/${id}`)).json();
+  expect(task.draft.department).toBe('识别中填写的部门');
+  const discarded = await page.request.post(`/api/imports/tasks/${id}/discard`, { data: { version: task.version }, headers: { 'Idempotency-Key': crypto.randomUUID() } });
+  expect(discarded.ok(), await discarded.text()).toBeTruthy();
+});
+
 for (const scenario of ['local', 'gpt', 'timeout']) {
   const ai = scenario !== 'local';
   const timeout = scenario === 'timeout';
