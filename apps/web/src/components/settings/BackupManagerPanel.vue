@@ -5,6 +5,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Menu from '@/components/ui/Menu.vue';
+import Notice from '@/components/ui/Notice.vue';
 import Panel from '@/components/ui/Panel.vue';
 import type { MenuItem } from '@/components/ui/types';
 import { systemApi, downloadFile, type BackupInfo } from '@/api';
@@ -18,26 +19,44 @@ defineOptions({ inheritAttrs: false });
 
 /** 首屏由设置页 load() 拉取（骨架屏消失前就绪）；创建、删除备份后由本面板重新拉取并回写 */
 const backups = defineModel<BackupInfo[]>('backups', { required: true });
+/** 列表读取失败的原因（设置页首屏或本面板重新拉取时写入）：有错误且没有旧列表时显示错误与重试，而不是「还没有备份」 */
+const listError = defineModel<string>('error', { default: '' });
 const toast = useToastStore();
 
 /* 备份操作 */
 const creating = ref(false);
+const reloading = ref(false);
 const restoring = ref(false);
 const restoreTarget = ref<BackupInfo | null>(null);
 const deleteBackupTarget = ref<BackupInfo | null>(null);
+const deleting = ref(false);
 const downloadingBackup = ref('');
+
+/** 重新拉取列表；失败只记在 listError，不弹 Toast（创建、删除本身已经成功时不该报成失败） */
+async function reloadList(): Promise<void> {
+  reloading.value = true;
+  try {
+    backups.value = await systemApi.backups();
+    listError.value = '';
+  } catch (e) {
+    listError.value = apiError(e);
+  } finally {
+    reloading.value = false;
+  }
+}
 
 async function createBackup(): Promise<void> {
   creating.value = true;
   try {
     await systemApi.createBackup();
     toast.success('备份已创建');
-    backups.value = await systemApi.backups();
   } catch (e) {
     toast.error(apiError(e));
+    return;
   } finally {
     creating.value = false;
   }
+  await reloadList();
 }
 
 async function restore(): Promise<void> {
@@ -55,16 +74,21 @@ async function restore(): Promise<void> {
   }
 }
 
+/** 删除在途时忽略重复点击（确认按钮转圈禁用、确认框不可关），只发一个请求 */
 async function removeBackup(): Promise<void> {
-  if (!deleteBackupTarget.value) return;
+  if (!deleteBackupTarget.value || deleting.value) return;
+  deleting.value = true;
   try {
     await systemApi.deleteBackup(deleteBackupTarget.value.name);
     toast.success('备份已删除');
     deleteBackupTarget.value = null;
-    backups.value = await systemApi.backups();
   } catch (e) {
     toast.error(apiError(e));
+    return;
+  } finally {
+    deleting.value = false;
   }
+  await reloadList();
 }
 
 /** 走带 Cookie 的 XHR，会话过期时能给出提示，而不是新开一个显示 401 JSON 的空标签页 */
@@ -98,7 +122,15 @@ function moreActions(backup: BackupInfo): MenuItem[] {
         <Icon name="plus" :size="14" /> 立即备份
       </Button>
     </template>
-    <EmptyState v-if="backups.length === 0" icon="history" title="还没有备份" description="点「立即备份」留一份当前数据；开启自动备份后会按间隔生成。" />
+    <div v-if="listError && backups.length === 0" class="px-5 py-4">
+      <Notice tone="red" variant="inline">
+        备份列表读取失败：{{ listError }}
+        <template #actions>
+          <Button variant="link" :loading="reloading" @click="reloadList">重试</Button>
+        </template>
+      </Notice>
+    </div>
+    <EmptyState v-else-if="backups.length === 0" icon="history" title="还没有备份" description="点「立即备份」留一份当前数据；开启自动备份后会按间隔生成。" />
     <!-- 桌面：最高 384px 内部滚动、表头钉在滚动框顶边；手机卡片不设高度上限，随页面滚动 -->
     <div v-else class="overflow-auto sm:max-h-96">
       <table class="table-base table-sticky table-cards">
@@ -132,6 +164,12 @@ function moreActions(backup: BackupInfo): MenuItem[] {
     </div>
     <template v-if="backups.length > 0" #footer>
       <p class="text-meta num">{{ backups.length }} 份 · 共 {{ formatBytes(totalBackupSize) }}</p>
+      <Notice v-if="listError" tone="red" variant="inline" size="sm" class="mt-1">
+        列表刷新失败：{{ listError }}
+        <template #actions>
+          <Button variant="link" :loading="reloading" @click="reloadList">重试</Button>
+        </template>
+      </Notice>
     </template>
   </Panel>
 
@@ -162,6 +200,7 @@ function moreActions(backup: BackupInfo): MenuItem[] {
     :message="`「${deleteBackupTarget?.name}」将被永久删除。`"
     confirm-text="删除"
     danger
+    :loading="deleting"
     @update:open="deleteBackupTarget = null"
     @confirm="removeBackup"
   />

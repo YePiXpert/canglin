@@ -18,9 +18,14 @@ import type { AiConfigView, ReasoningSetting } from '@canglin/shared';
 import { AI_MODELS } from '@canglin/shared';
 
 const props = defineProps<{
-  /** 设置页 load() 读到的配置（读取失败为 null）；每次 load 都是新对象，非空时覆盖表单 */
+  /** 设置页整页载入（或读取失败后重试）得到的配置；读取失败为 null。换成新的非空对象时回填表单 */
   initial: AiConfigView | null;
+  /** 配置读取失败的原因：只显示错误与「重试」，不显示一张会被误当成「尚未配置」的空表单 */
+  loadError?: string;
+  /** 「重试」进行中 */
+  retrying?: boolean;
 }>();
+const emit = defineEmits<{ retry: [] }>();
 const toast = useToastStore();
 
 /* AI 助手 */
@@ -187,7 +192,15 @@ async function testAi(): Promise<void> {
     e2e 依赖的文案：「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」。
   -->
   <Panel title="AI 助手" description="原件识别与 AI 问答共用这里的连接和模型；密钥只保存在服务端，页面不显示明文。" flush>
-    <div class="divide-y divide-line">
+    <div v-if="loadError && !initial" class="px-5 py-4">
+      <Notice tone="red" variant="inline">
+        AI 配置读取失败：{{ loadError }}
+        <template #actions>
+          <Button variant="link" :loading="retrying" @click="emit('retry')">重试</Button>
+        </template>
+      </Notice>
+    </div>
+    <div v-else class="divide-y divide-line">
       <Disclosure
         :open="!aiKeySet"
         chevron="end"

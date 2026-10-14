@@ -34,6 +34,8 @@ const state = reactive({ ...defaults });
 useUrlState(state, defaults);
 const suppliers = ref<SupplierRow[]>([]), prices = ref<WorkflowPriceRow[]>([]);
 const loading = ref(true), loadingPrices = ref(false);
+/** 成交价格已经成功查过一次：之后再查询时保留旧表格，只在工具栏显示「查询中…」，不换回骨架 */
+const pricesLoaded = ref(false);
 const loadError = ref(''), priceError = ref('');
 /** 「成交价格」最近一次查询用的搜索词：查询返回后才更新，空结果的标题复述的是这次查的条件 */
 const searchedFor = ref('');
@@ -53,7 +55,7 @@ async function loadPrices() {
   const current = priceGuard.begin();
   loadingPrices.value = true; priceError.value = '';
   const search = state.priceSearch.trim();
-  try { const rows = await workflowApi.prices({ search: state.priceSearch || undefined }); if (current()) { prices.value = rows; searchedFor.value = search; } }
+  try { const rows = await workflowApi.prices({ search: state.priceSearch || undefined }); if (current()) { prices.value = rows; searchedFor.value = search; pricesLoaded.value = true; } }
   catch (cause) { if (current()) priceError.value = apiError(cause); }
   finally { if (current()) loadingPrices.value = false; }
 }
@@ -93,6 +95,14 @@ async function openPurchase(lineId: number) {
   finally { openingPrice.value = null; }
 }
 const priceCount = computed(() => (loadingPrices.value || priceError.value ? null : prices.value.length));
+/** 有关联单据的供应商：服务端一定拒绝删除，确认框里直接说明并禁用「删除」 */
+const deleteBlockedCount = computed(() => deleteTarget.value?._count?.businessDocuments ?? 0);
+const deleteMessage = computed(() => {
+  const name = deleteTarget.value?.name ?? '';
+  return deleteBlockedCount.value > 0
+    ? `「${name}」已有 ${deleteBlockedCount.value} 份单据，不能删除：关联的采购与到货记录需要保留这家供应商以便追溯。`
+    : `「${name}」将被删除。已关联业务记录的供应商须保留。`;
+});
 function clearPriceSearch() { state.priceSearch = ''; void loadPrices(); }
 /** 行内只放「编辑」；删除收进「…」并走确认框 */
 function moreActions(supplier: SupplierRow): MenuItem[] {
@@ -111,6 +121,7 @@ onUnmounted(() => priceGuard.abandon());
         <SearchInput v-if="state.tab === 'prices'" v-model="state.priceSearch" class="w-full sm:w-72" placeholder="搜索品名或规格" aria-label="搜索成交价格" @search="loadPrices" />
         <div class="ml-auto flex items-center gap-3">
           <p v-if="state.tab !== 'prices' && !loading && !loadError" class="text-meta num">共 {{ suppliers.length }} 家</p>
+          <p v-else-if="state.tab === 'prices' && loadingPrices && pricesLoaded" class="text-meta" role="status">查询中…</p>
           <p v-else-if="state.tab === 'prices' && priceCount !== null" class="text-meta num">共 {{ priceCount }} 条</p>
           <Button variant="primary" size="sm" @click="openSupplierDialog(null)"><Icon name="plus" :size="14" />新增供应商</Button>
         </div>
@@ -162,8 +173,8 @@ onUnmounted(() => priceGuard.abandon());
       </template>
 
       <template v-else>
-        <div v-if="loadingPrices" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
-        <ErrorState v-else-if="priceError" :message="priceError" @retry="loadPrices" />
+        <div v-if="loadingPrices && !pricesLoaded" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
+        <ErrorState v-else-if="priceError" :message="priceError" :retrying="loadingPrices" @retry="loadPrices" />
         <!-- 有搜索词 = 无结果：复述条件并给出清除；没有搜索词 = 还没有成交记录 -->
         <EmptyState v-else-if="!prices.length && searchedFor" :icon="false" :title="`没有找到「${searchedFor}」的成交价格`" description="按品名或规格搜索；同名不同规格或单位分别展示。">
           <Button size="sm" @click="clearPriceSearch">清除关键词</Button>
@@ -190,6 +201,6 @@ onUnmounted(() => priceGuard.abandon());
       </template>
     </Dialog>
 
-    <ConfirmDialog :open="!!deleteTarget" title="删除供应商" :message="`「${deleteTarget?.name}」将被删除。已关联业务记录的供应商须保留。`" confirm-text="删除" danger :loading="removingSupplierId !== null" @update:open="deleteTarget = null" @confirm="removeSupplier" />
+    <ConfirmDialog :open="!!deleteTarget" title="删除供应商" :message="deleteMessage" confirm-text="删除" danger :loading="removingSupplierId !== null" :confirm-disabled="deleteBlockedCount > 0" @update:open="deleteTarget = null" @confirm="removeSupplier" />
   </div>
 </template>

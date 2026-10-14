@@ -55,7 +55,10 @@ export function useImportTask() {
     disposed = false;
   /** 草稿已从任务载入：载入前的改动不算编辑、不自动保存，明细区显示骨架；模板与子组件也要读，所以是 ref */
   const loaded = ref(false);
-  const discardOpen = ref(false), discarding = ref(false);
+  /** 放弃草稿的确认框；discardError 只显示在确认框里，不和底部操作条的 error 重复 */
+  const discardOpen = ref(false), discarding = ref(false), discardError = ref('');
+  /** 「重新载入已保存版本」的确认框（ImportView 渲染）：替换掉未保存的编辑前先问一句 */
+  const reloadOpen = ref(false);
   const active = computed(
     () =>
       task.value &&
@@ -72,21 +75,44 @@ export function useImportTask() {
     { id: number; kind: string; version: number; snapshot: string; createdAt: string }[]
   >([]);
   /**
+   * 修改历史只在展开时加载：historyVersion 记下加载时的草稿版本，版本没变（没有新的保存）就不重复请求；
+   * 切换任务时三者一起清空。
+   */
+  const historyLoading = ref(false),
+    historyError = ref(''),
+    historyVersion = ref<number | null>(null);
+  /**
    * 迟到的响应只属于发出它时的任务：每个异步函数在 await 之前记下任务编号，
    * 回来后任务已切换（或页面已卸载）就直接丢弃，不改任何状态。
    */
   function stale(id: string) {
     return disposed || taskId.value !== id;
   }
-  async function loadHistory() {
+  /** force：失败后的「重试」；否则已按当前版本加载过就不再请求 */
+  async function loadHistory(force = false) {
     const id = taskId.value;
-    if (!id) return;
-    const rows = await importsApi.revisions(id);
-    if (stale(id)) return;
-    revisions.value = rows;
+    const version = task.value?.version ?? null;
+    if (!id || historyLoading.value) return;
+    if (!force && historyVersion.value !== null && historyVersion.value === version && !historyError.value) return;
+    historyLoading.value = true;
+    historyError.value = '';
+    try {
+      const rows = await importsApi.revisions(id);
+      if (stale(id)) return;
+      revisions.value = rows;
+      historyVersion.value = version;
+    } catch (e) {
+      if (!stale(id)) historyError.value = apiError(e);
+    } finally {
+      if (!stale(id)) historyLoading.value = false;
+    }
   }
-  async function reloadDraft() {
-    if (!window.confirm('重新载入将替换当前未保存的编辑，是否继续？')) return;
+  /** 底部「重新载入已保存版本」：只打开确认框，确认后由 confirmReloadDraft 执行 */
+  function reloadDraft() {
+    reloadOpen.value = true;
+  }
+  async function confirmReloadDraft() {
+    reloadOpen.value = false;
     const id = taskId.value;
     clearTimeout(saveTimer);
     await saveChain;
@@ -135,18 +161,24 @@ export function useImportTask() {
         task.value?.status ?? 'PENDING'
       ],
   );
+  /**
+   * AI 建议与首次识别的品名、规格、单位或数量不同（或首次识别里没有这一行），且还没有人工确认。
+   * 与服务端确认入账时的检查同一口径；空值按空串比较，只会比服务端宽松，不会拦下服务端能通过的草稿。
+   */
+  function aiPending(s: AiImportPage['items'][number]) {
+    if (reviewedAi.value.includes(aiSuggestionKey(s))) return false;
+    const original = task.value?.result?.items.find((i) => i.lineId === s.lineId);
+    return (
+      !original ||
+      original.itemName !== s.itemName ||
+      (original.spec ?? '') !== (s.spec ?? '') ||
+      (original.unit ?? '') !== (s.unit ?? '') ||
+      original.quantity !== s.quantity
+    );
+  }
   function needsReview(l: Line) {
     const s = suggestion(l);
-    if (!s) return false;
-    const original = task.value?.result?.items.find((i) => i.lineId === l.lineId);
-    return (
-      (!original ||
-        original.itemName !== s.itemName ||
-        (original.spec ?? '') !== (s.spec ?? '') ||
-        (original.unit ?? '') !== (s.unit ?? '') ||
-        original.quantity !== s.quantity) &&
-      !reviewedAi.value.includes(aiSuggestionKey(s))
-    );
+    return !!s && aiPending(s);
   }
   const aiState = computed(
     () =>
@@ -327,6 +359,7 @@ export function useImportTask() {
     const id = taskId.value;
     if (!task.value || task.value.confirmed || discarding.value) return;
     discarding.value = true;
+    discardError.value = '';
     clearTimeout(saveTimer);
     try {
       await saveChain;
@@ -345,11 +378,14 @@ export function useImportTask() {
       await router.replace({ query });
       await taskList.value?.refresh();
     } catch (e) {
-      if (!stale(id)) error.value = apiError(e);
+      if (!stale(id)) discardError.value = apiError(e);
     } finally {
       discarding.value = false;
     }
   }
+  watch(discardOpen, (open) => {
+    if (open) discardError.value = '';
+  });
   async function retry(stage: 'local' | 'ai', pages?: number[]) {
     const id = taskId.value;
     await persist();
@@ -419,6 +455,48 @@ export function useImportTask() {
     reviewedPages.value = reviewedPages.value.filter((r) => r.page !== p);
     if (checked) reviewedPages.value.push({ page: p, note: '已查看原件并人工核对该页全部明细' });
   }
+  /**
+   * 确认入账前还要处理的事项：底部操作条左侧汇总，有任何一项时「确认全部内容并导入」禁用。
+   * 规则与服务端确认一致——workflowImportConfirmSchema（单据头四项、至少一条明细、品名 / 数量 / 单位）、
+   * 逐页核对、AI 建议的人工确认、原件存在；只列服务端一定会拒绝的情况，点确认时的报错逻辑照旧保留。
+   */
+  const confirmBlockers = computed<string[]>(() => {
+    const t = task.value;
+    if (!t || t.confirmed || !loaded.value || finished.value) return [];
+    const out: string[] = [];
+    if (!t.originalAvailable) out.push('原件缺失，不能入账');
+    const parsed = workflowImportConfirmSchema.safeParse({ ...snapshot(), taskId: taskId.value, version: t.version });
+    if (!parsed.success) {
+      const header = new Map<(typeof fields)[number], string>();
+      const rows = { itemName: new Set<number>(), quantity: new Set<number>(), unit: new Set<number>() };
+      const other: string[] = [];
+      for (const issue of parsed.error.issues) {
+        const [head, index, key] = issue.path;
+        if (head === 'items') {
+          if (typeof index !== 'number') other.push(lines.value.length ? `明细：${issue.message}` : '还没有明细');
+          else if (key === 'quantity') rows.quantity.add(index);
+          else if ((key === 'itemName' || key === 'unit') && !(lines.value[index]?.[key] ?? '').trim()) rows[key].add(index);
+          else other.push(`明细 ${index + 1}：${issue.message}`);
+        } else {
+          const field = fields.find((f) => f === head);
+          // taskId / version 由页面维护，不是要用户处理的事项
+          if (field && !header.has(field)) header.set(field, issue.message);
+        }
+      }
+      const blank = fields.filter((f) => header.has(f) && !form[f].trim());
+      if (blank.length) out.push(`${blank.map((f) => labels[f]).join('、')}未填`);
+      for (const f of fields) if (header.has(f) && form[f].trim()) out.push(`${labels[f]}：${header.get(f)}`);
+      if (rows.itemName.size) out.push(`${rows.itemName.size} 条明细品名未填`);
+      if (rows.quantity.size) out.push(`还有 ${rows.quantity.size} 条明细数量未确认`);
+      if (rows.unit.size) out.push(`${rows.unit.size} 条明细单位未确认`);
+      out.push(...other);
+    }
+    const unreviewed = issuePages.value.filter((p) => !reviewedPages.value.some((r) => r.page === p.page)).length;
+    if (unreviewed) out.push(`${unreviewed} 页未核对`);
+    const pendingAi = suggestions.value.filter(aiPending).length;
+    if (pendingAi) out.push(`${pendingAi} 条 AI 建议待核对`);
+    return out;
+  });
   async function confirm() {
     const id = taskId.value;
     if (!task.value || active.value) return;
@@ -467,6 +545,7 @@ export function useImportTask() {
       clearTimeout(saveTimer);
       loaded.value = false; // 先关掉自动保存：下面清空表单不算编辑
       discardOpen.value = false;
+      reloadOpen.value = false;
       hydrating = false;
       revision = 0;
       taskId.value = typeof value === 'string' ? value : '';
@@ -483,6 +562,9 @@ export function useImportTask() {
       saveError.value = '';
       saved.value = true;
       revisions.value = [];
+      historyLoading.value = false;
+      historyError.value = '';
+      historyVersion.value = null;
       previewFailed.value = false;
       mobileTab.value = 'draft';
       scrollToTask();
@@ -504,12 +586,15 @@ export function useImportTask() {
   return {
     // 状态；rootEl、taskList 由 ImportView 绑定为模板 ref
     task, taskId, busy, error, saveError, saved, loaded, form, reviewedAi, lines, reviewedPages, page, selected,
-    discardOpen, discarding,
+    discardOpen, discarding, discardError, reloadOpen,
     finished, duplicateFile, duplicateTaskId, missing, previewFailed, mobileTab, rootEl, taskList, revisions,
+    historyLoading, historyError,
     // 派生值与常量
     active, box, pageCount, issuePages, suggestions, localState, aiState, fields, labels, stateDot, stackedLabel,
+    confirmBlockers,
     // 动作
-    loadHistory, reloadDraft, revisionRows, needsReview, line, persist, upload, uploadFile, openDuplicate, cancel,
+    loadHistory, reloadDraft, confirmReloadDraft, revisionRows, needsReview, line, persist, upload, uploadFile,
+    openDuplicate, cancel,
     discard,
     retry, focusLine, suggestion, acknowledge, apply, catalogMatch, applyCatalog, addSuggestion, localValue, applyLocal,
     reviewed, confirm,

@@ -44,6 +44,8 @@ function selectAll(value: boolean) {
 }
 
 async function save() {
+  // 上一次的提交失败先清掉：否则页脚的旧 alert 会和这次的行级错误同时出现
+  failure.value = '';
   const selected = lines.value.filter((line) => line.selected);
   const invalid: Record<string, string> = {};
   if (!selected.length) invalid.lines = '请至少选择一条到货明细';

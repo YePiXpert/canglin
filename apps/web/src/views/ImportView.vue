@@ -29,8 +29,8 @@ provide(importTaskKey, ctx);
 const router = useRouter();
 // rootEl、taskList 要绑定模板里的 ref="rootEl" / ref="taskList"，所以解构成顶层绑定
 const { task, taskId, busy, error, saveError, loaded, finished, missing, mobileTab, rootEl, taskList } = ctx;
-const { active, persist, reloadDraft, confirm, scrollToTask } = ctx;
-const { discardOpen, discarding, discard } = ctx;
+const { active, persist, reloadDraft, confirm, scrollToTask, confirmBlockers } = ctx;
+const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloadDraft } = ctx;
 </script>
 
 <template>
@@ -116,6 +116,13 @@ const { discardOpen, discarding, discard } = ctx;
             </template>
           </Notice>
           <Notice v-if="error" variant="inline" role="alert">{{ error }}</Notice>
+          <!--
+            还不能入账的原因（与确认时的校验同一套规则）：长单子不用滚回去逐行找「数量未确认」。
+            不是 alert（随编辑变化，不该反复打断读屏）；确认按钮经 aria-describedby 指向它。
+          -->
+          <Notice v-if="confirmBlockers.length && !active" id="import-confirm-blockers" variant="inline" size="sm">
+            还不能导入：{{ confirmBlockers.join('；') }}
+          </Notice>
         </template>
         <Button v-if="!task.confirmed" variant="danger-ghost" class="max-sm:basis-full" :disabled="busy || discarding" @click="discardOpen = true">放弃草稿</Button>
         <Button
@@ -128,8 +135,9 @@ const { discardOpen, discarding, discard } = ctx;
         <Button
           variant="primary"
           class="max-sm:flex-1"
-          :disabled="!!active || task.confirmed || !loaded"
+          :disabled="!!active || task.confirmed || !loaded || confirmBlockers.length > 0"
           :loading="busy"
+          :aria-describedby="confirmBlockers.length && !active ? 'import-confirm-blockers' : undefined"
           @click="confirm"
           >确认全部内容并导入</Button
         >
@@ -162,7 +170,10 @@ const { discardOpen, discarding, discard } = ctx;
     <ConfirmDialog v-model:open="discardOpen" title="放弃草稿？"
       :message="`将删除「${task?.filename ?? ''}」的草稿和原件，并停止识别。不会创建申请；需要时可重新上传原件。`"
       confirm-text="放弃草稿" danger :loading="discarding" @confirm="discard">
-      <Notice v-if="error" tone="red" role="alert">{{ error }}</Notice>
+      <Notice v-if="discardError" tone="red" role="alert">{{ discardError }}</Notice>
     </ConfirmDialog>
+    <ConfirmDialog v-model:open="reloadOpen" title="重新载入已保存版本？"
+      message="当前未保存的编辑会被替换成上次成功保存的草稿，替换后不能找回。"
+      confirm-text="重新载入" danger @confirm="confirmReloadDraft" />
   </div>
 </template>

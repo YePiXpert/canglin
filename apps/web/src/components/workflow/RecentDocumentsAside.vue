@@ -71,22 +71,31 @@ const rows = computed(() => (data.value?.items ?? []).map((document) => ({
         <template #actions><Button variant="link" @click="load()">重新加载</Button></template>
       </Notice>
       <p v-else-if="!rows.length" class="px-4 py-3.5 text-[13px] text-muted">还没有业务记录</p>
-      <ul v-else class="divide-y divide-line">
-        <li v-for="row in rows" :key="row.document.id" class="flex items-center gap-3 px-4 py-3">
-          <Badge :tone="row.tone" class="min-w-16 shrink-0 justify-center">{{ documentKindLabels[row.document.kind] }}</Badge>
-          <div class="min-w-0 flex-1">
-            <router-link
-              v-if="row.requestId"
-              :to="`/requests/${row.requestId}`"
-              class="block truncate text-[13px] underline-offset-[3px] hover:underline"
-              :class="row.textClass"
-              :title="row.summary"
-            >{{ row.summary }}</router-link>
-            <p v-else class="truncate text-[13px]" :class="row.textClass" :title="row.summary">{{ row.summary }}</p>
-            <p class="mt-0.5 text-meta num">{{ row.meta }}</p>
-          </div>
-        </li>
-      </ul>
+      <template v-else>
+        <ul class="divide-y divide-line">
+          <li v-for="row in rows" :key="row.document.id" class="flex items-center gap-3 px-4 py-3">
+            <Badge :tone="row.tone" class="min-w-16 shrink-0 justify-center">{{ documentKindLabels[row.document.kind] }}</Badge>
+            <div class="min-w-0 flex-1">
+              <router-link
+                v-if="row.requestId"
+                :to="`/requests/${row.requestId}`"
+                class="block truncate text-[13px] underline-offset-[3px] hover:underline"
+                :class="row.textClass"
+                :title="row.summary"
+              >{{ row.summary }}</router-link>
+              <p v-else class="truncate text-[13px]" :class="row.textClass" :title="row.summary">{{ row.summary }}</p>
+              <p class="mt-0.5 text-meta num">{{ row.meta }}</p>
+            </div>
+          </li>
+        </ul>
+        <!-- 已有内容时刷新失败：保留旧列表，底部一行说明并可重试（与「未完成的导入」一致） -->
+        <div v-if="error" class="border-t border-line px-4 py-2.5">
+          <Notice tone="red" variant="inline" size="sm">
+            刷新失败：{{ error }}
+            <template #actions><Button variant="link" class="text-xs" @click="load()">重试</Button></template>
+          </Notice>
+        </div>
+      </template>
     </div>
   </section>
 </template>

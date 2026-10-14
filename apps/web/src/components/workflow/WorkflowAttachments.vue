@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { ATTACHMENT_KIND_LABELS, type AttachmentKind, type WorkflowAttachment } from '@canglin/shared';
 import { attachmentsApi, apiError } from '@/api';
 import Button from '@/components/ui/Button.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Notice from '@/components/ui/Notice.vue';
 import { buttonClass } from '@/components/ui/button';
@@ -23,6 +24,8 @@ const emit = defineEmits<{ changed: [] }>();
 const picker = ref<HTMLInputElement>();
 const uploading = ref(false);
 const removing = ref<number>();
+/** 等待确认删除的附件：垃圾桶只打开确认框，确认后才删除 */
+const removeTarget = ref<WorkflowAttachment | null>(null);
 const failure = ref('');
 async function upload(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -41,12 +44,13 @@ async function upload(event: Event) {
   } catch (cause) { failure.value = apiError(cause); }
   finally { uploading.value = false; }
 }
-async function remove(id: number) {
-  if (removing.value) return;
-  removing.value = id;
+async function remove() {
+  const target = removeTarget.value;
+  if (!target || removing.value) return;
+  removing.value = target.id;
   failure.value = '';
-  try { await attachmentsApi.remove(id); emit('changed'); }
-  catch (cause) { failure.value = apiError(cause); }
+  try { await attachmentsApi.remove(target.id); removeTarget.value = null; emit('changed'); }
+  catch (cause) { removeTarget.value = null; failure.value = apiError(cause); }
   finally { removing.value = undefined; }
 }
 /* 纸样图标上的扩展名（PDF / PNG / JPG）与类型名（OA 原件 / 发票 / 签收单） */
@@ -69,9 +73,19 @@ function kindLabel(kind: string) { return ATTACHMENT_KIND_LABELS[kind as Attachm
           <a :href="`/api/attachments/${attachment.id}/download`" class="max-w-full text-[13px] font-medium" :class="buttonClass({ variant: 'link' })" target="_blank" rel="noopener"><span class="truncate">{{ attachment.filename }}</span></a>
           <p class="text-meta">{{ kindLabel(attachment.kind) }}</p>
         </div>
-        <Button v-if="attachment.kind !== 'OA_DOC'" size="sm" variant="ghost" icon-only :loading="removing === attachment.id" :aria-label="`删除附件 ${attachment.filename}`" @click="remove(attachment.id)"><Icon v-if="removing !== attachment.id" name="trash" :size="14" /></Button>
+        <Button v-if="attachment.kind !== 'OA_DOC'" size="sm" variant="ghost" icon-only :loading="removing === attachment.id" :aria-label="`删除附件 ${attachment.filename}`" @click="removeTarget = attachment"><Icon v-if="removing !== attachment.id" name="trash" :size="14" /></Button>
       </li>
     </ul>
     <Notice v-if="failure" tone="red" variant="inline" size="sm" role="alert" :class="sheet ? 'border-t border-line px-4 py-2.5' : 'mt-3'">{{ failure }}</Notice>
+    <ConfirmDialog
+      :open="!!removeTarget"
+      title="删除附件"
+      :message="`「${removeTarget?.filename ?? ''}」将从${requestId ? '这张申请' : '这条业务记录'}中删除，文件不会保留，删除后不能恢复。`"
+      confirm-text="删除"
+      danger
+      :loading="removing !== undefined"
+      @update:open="removeTarget = null"
+      @confirm="remove"
+    />
   </section>
 </template>

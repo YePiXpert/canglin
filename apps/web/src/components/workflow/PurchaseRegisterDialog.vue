@@ -24,6 +24,9 @@ const catalog = useCatalogStore();
 const form = reactive({ date: todayString(), supplierId: '', note: '' });
 const suppliers = ref<SupplierRow[]>([]);
 const loadingSuppliers = ref(false);
+/** 供应商清单读取失败：贴在「本次供应商」下方并给「重试」，与页脚的提交失败分开（重试成功即消失） */
+const supplierError = ref('');
+let supplierRequest = 0;
 const loadingQuotes = ref(false);
 const clearedPrices = ref(0);
 const newSupplierName = ref('');
@@ -54,11 +57,8 @@ watch(() => props.open, async (open, _previous, onCleanup) => {
   newSupplierOpen.value = false;
   clearedPrices.value = 0;
   reset();
-  loadingSuppliers.value = true;
   loadingQuotes.value = true;
-  try { const rows = await suppliersApi.list(); if (current) suppliers.value = rows; }
-  catch (cause) { if (current) failure.value = `供应商清单未能加载：${apiError(cause)}`; }
-  finally { if (current) loadingSuppliers.value = false; }
+  await loadSuppliers();
   if (!current) return;
   const productIds = [...new Set(lines.value.map((line) => line.productId))];
   const results = await Promise.allSettled(productIds.map((productId) => workflowApi.prices({ productId })));
@@ -70,6 +70,21 @@ watch(() => props.open, async (open, _previous, onCleanup) => {
   }
   loadingQuotes.value = false;
 }, { immediate: true });
+
+/** 只认最后一次请求的结果：重新打开弹窗或连点「重试」时，迟到的旧响应不覆盖新的 */
+async function loadSuppliers(): Promise<void> {
+  const request = ++supplierRequest;
+  loadingSuppliers.value = true;
+  supplierError.value = '';
+  try {
+    const rows = await suppliersApi.list();
+    if (request === supplierRequest) suppliers.value = rows;
+  } catch (cause) {
+    if (request === supplierRequest) supplierError.value = `供应商清单未能加载：${apiError(cause)}`;
+  } finally {
+    if (request === supplierRequest) loadingSuppliers.value = false;
+  }
+}
 
 watch(() => form.supplierId, (value) => {
   clearedPrices.value = 0;
@@ -132,6 +147,8 @@ async function createSupplier() {
 
 async function save() {
   if (saving.value || creatingSupplier.value) return;
+  // 上一次的提交失败先清掉：否则页脚的旧 alert 会和这次的行级错误同时出现
+  failure.value = '';
   const invalid: Record<string, string> = {};
   if (!form.supplierId) invalid.supplierId = '请选择或新增本次成交的供应商';
   const selected = lines.value.filter((line) => line.selected);
@@ -169,6 +186,10 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
       <Input v-model="form.date" label="采购日期" type="date" required :disabled="saving" />
       <div class="min-w-0">
         <Select v-model="form.supplierId" label="本次供应商" required :options="supplierOptions" :disabled="saving || loadingSuppliers" :error="errors.supplierId" :placeholder="loadingSuppliers ? '正在加载供应商…' : '选择本次成交供应商'" />
+        <Notice v-if="supplierError" tone="red" variant="inline" size="sm" role="alert" class="mt-1.5">
+          {{ supplierError }}
+          <template #actions><Button variant="link" class="text-xs" :loading="loadingSuppliers" @click="loadSuppliers">重试</Button></template>
+        </Notice>
         <div v-if="newSupplierOpen" class="mt-3 flex flex-wrap items-start gap-2">
           <Input v-model="newSupplierName" label="新供应商名称" :error="errors.newSupplier" :disabled="creatingSupplier" class="w-full sm:w-auto sm:min-w-0 sm:flex-1" />
           <Button :loading="creatingSupplier" class="sm:mt-6" @click="createSupplier">保存供应商</Button>

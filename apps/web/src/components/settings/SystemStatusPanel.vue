@@ -10,8 +10,8 @@ import type { SystemStatus } from '@/api';
 import { formatDateTime } from '@/utils/datetime';
 import { formatBytes } from '@/utils/format';
 
-const props = defineProps<{ status: SystemStatus | null; ocrOk: boolean | null; ocrChecking: boolean }>();
-/** refresh：设置页重新 load()；recheckOcr：设置页重测 OCR 并提示结果 */
+const props = defineProps<{ status: SystemStatus | null; ocrOk: boolean | null; ocrChecking: boolean; refreshing?: boolean }>();
+/** refresh：设置页重拉系统状态与 OCR 健康（不回填其它面板的表单）；recheckOcr：设置页重测 OCR 并提示结果 */
 const emit = defineEmits<{ refresh: []; recheckOcr: [] }>();
 
 function fmtUptime(sec: number): string {
@@ -37,8 +37,8 @@ const figures = computed(() => [
   <!-- 系统状态：版本与运行时长在标题说明里；四格数字；库存核对与 OCR 两行状态 -->
   <Panel :description="description" title="系统状态" flush>
     <template #actions>
-      <Button variant="ghost" size="sm" class="-mr-2" @click="emit('refresh')">
-        <Icon name="refresh" :size="14" /> 刷新
+      <Button variant="ghost" size="sm" class="-mr-2" :loading="refreshing" @click="emit('refresh')">
+        <Icon v-if="!refreshing" name="refresh" :size="14" /> 刷新
       </Button>
     </template>
     <!-- gap-px + line 底色画出格子之间的发丝线 -->

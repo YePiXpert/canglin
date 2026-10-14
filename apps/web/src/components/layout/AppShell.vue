@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   DialogContent,
@@ -13,6 +13,8 @@ import Menu from '@/components/ui/Menu.vue';
 import { buttonClass } from '@/components/ui/button';
 import type { MenuItem } from '@/components/ui/types';
 import AiPanel from '@/components/ai/AiPanel.vue';
+import SessionExpiredDialog from './SessionExpiredDialog.vue';
+import { onSessionExpired } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import { useThemeStore } from '@/stores/theme';
 
@@ -91,6 +93,19 @@ async function logout(): Promise<void> {
 }
 
 const accountItems: MenuItem[] = [{ label: '退出登录', icon: 'logout', onSelect: () => void logout() }];
+
+/*
+ * 会话过期：还在登录态（不是刚退出或刚改密）时先原地重新登录，成功后由拦截器重放请求；
+ * 外壳卸载（去了登录页）时把还在等的请求都按「放弃」处理。
+ */
+const sessionDialog = ref<InstanceType<typeof SessionExpiredDialog>>();
+onMounted(() => {
+  onSessionExpired(() => (auth.loggedIn && sessionDialog.value ? sessionDialog.value.ask() : Promise.resolve(false)));
+});
+onBeforeUnmount(() => {
+  onSessionExpired(null);
+  sessionDialog.value?.cancel();
+});
 
 /* 朱砂方印：品牌唯一的实心朱砂色块（实心底上的字用 primary-fg：浅色白字，深色墨字） */
 const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent font-bold leading-none text-primary-fg select-none';
@@ -286,5 +301,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
 
     <!-- 全局 AI 助手抽屉 -->
     <AiPanel :open="aiOpen" @close="aiOpen = false" />
+    <!-- 会话过期时原地重新登录 -->
+    <SessionExpiredDialog ref="sessionDialog" />
   </div>
 </template>

@@ -82,19 +82,29 @@ async function changePassword(): Promise<void> {
 /* --------------------------------- 恢复码 --------------------------------- */
 
 const recoveryPassword = ref('');
+/** 空密码、密码错误等原因贴在「当前密码」字段下方（不再只弹 Toast） */
+const recoveryError = ref('');
 const recoveryCodeIssued = ref('');
 const recoveryDialogOpen = ref(false);
 const generating = ref(false);
 const copied = ref(false);
 
-/** 「重置恢复码」弹窗一关（取消、×、遮罩、Esc 或生成成功）就清掉输入的密码 */
+/** 「重置恢复码」弹窗一关（取消、×、遮罩、Esc 或生成成功）就清掉输入的密码与错误 */
 watch(recoveryDialogOpen, (open) => {
-  if (!open) recoveryPassword.value = '';
+  if (!open) {
+    recoveryPassword.value = '';
+    recoveryError.value = '';
+  }
+});
+/** 重新输入时去掉旧的错误 */
+watch(recoveryPassword, () => {
+  recoveryError.value = '';
 });
 
 async function regenerateRecovery(): Promise<void> {
+  if (generating.value) return;
   if (!recoveryPassword.value) {
-    toast.error('请输入当前密码');
+    recoveryError.value = '请输入当前密码';
     return;
   }
   generating.value = true;
@@ -107,7 +117,7 @@ async function regenerateRecovery(): Promise<void> {
     recoveryDialogOpen.value = false;
     recoveryPassword.value = '';
   } catch (e) {
-    toast.error(apiError(e));
+    recoveryError.value = apiError(e);
   } finally {
     generating.value = false;
   }
@@ -207,6 +217,7 @@ async function copyRecoveryCode(): Promise<void> {
     width="420px"
     :mobile-fullscreen="false"
     :dirty="recoveryPassword.length > 0 && !generating"
+    :persistent="generating"
     @update:open="recoveryDialogOpen = $event"
   >
     <p class="text-sm text-muted mb-4">输入当前密码以生成新的恢复码，旧恢复码将失效。</p>
@@ -216,10 +227,12 @@ async function copyRecoveryCode(): Promise<void> {
       label="当前密码"
       autocomplete="current-password"
       required
+      :error="recoveryError"
+      :disabled="generating"
       @enter="regenerateRecovery"
     />
     <template #footer="{ close }">
-      <Button variant="ghost" @click="close">取消</Button>
+      <Button variant="ghost" :disabled="generating" @click="close">取消</Button>
       <Button variant="primary" :loading="generating" @click="regenerateRecovery">生成</Button>
     </template>
   </Dialog>
