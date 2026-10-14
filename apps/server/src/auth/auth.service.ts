@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   Injectable,
   UnauthorizedException,
@@ -127,7 +128,8 @@ export class AuthService {
     const row = await this.prisma.systemSecurity.findUnique({ where: { id: 1 } });
     if (!row) throw new UnauthorizedException('系统尚未初始化');
     const ok = await argonVerify(row.passwordHash, currentPassword).catch(() => false);
-    if (!ok) throw new UnauthorizedException('当前密码错误');
+    // 已登录时核对密码失败用 403：401 只表示会话失效，前端据此弹重新登录
+    if (!ok) throw new ForbiddenException('当前密码错误');
     await this.prisma.systemSecurity.update({
       where: { id: 1 },
       data: {
@@ -143,7 +145,7 @@ export class AuthService {
     const row = await this.prisma.systemSecurity.findUnique({ where: { id: 1 } });
     if (!row) throw new UnauthorizedException('系统尚未初始化');
     const ok = await argonVerify(row.passwordHash, password).catch(() => false);
-    if (!ok) throw new UnauthorizedException('密码错误');
+    if (!ok) throw new ForbiddenException('密码错误');
     const recoveryCode = this.generateRecoveryCode();
     await this.prisma.systemSecurity.update({
       where: { id: 1 },

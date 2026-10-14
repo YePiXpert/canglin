@@ -64,10 +64,10 @@ export function apiError(e: unknown): string {
 }
 
 /**
- * 这几个接口的 401 表示「密码 / 恢复码不对」，不是会话过期：交给调用方在字段旁边说明，
- * 不清登录态、不跳登录页（否则在设置页输错一次当前密码就会被踢回登录页）。
+ * 未登录时核对凭据的接口：它们的 401 表示「密码 / 恢复码不对」，不是会话过期，交给登录页在字段旁边说明。
+ * 已登录后核对密码（改密、重置恢复码）输错时服务端返回 403，不在此列；这些接口的 401 就是会话失效。
  */
-const CREDENTIAL_CHECKS = ['/auth/login', '/auth/setup', '/auth/recover', '/auth/change-password', '/auth/recovery-code'];
+const CREDENTIAL_CHECKS = ['/auth/login', '/auth/setup', '/auth/recover'];
 function apiPath(url: string | undefined): string {
   return (url ?? '').split('?')[0].replace(/^\/api(?=\/)/, '');
 }

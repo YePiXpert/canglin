@@ -74,6 +74,37 @@ describe('认证流程', () => {
     expect(forged.statusCode).toBe(401);
   });
 
+  it('改密、重置恢复码时密码错误返回 403，会话不受影响', async () => {
+    const headers = { cookie: ctx.cookie };
+    const change = await ctx.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers,
+      payload: { currentPassword: 'wrong-pass', newPassword: 'brand-new-pass-8' },
+    });
+    expect(change.statusCode).toBe(403);
+    expect(change.json().message).toBe('当前密码错误');
+
+    const recovery = await ctx.inject({
+      method: 'POST',
+      url: '/api/auth/recovery-code',
+      headers,
+      payload: { password: 'wrong-pass' },
+    });
+    expect(recovery.statusCode).toBe(403);
+    expect(recovery.json().message).toBe('密码错误');
+
+    // 401 只留给会话失效：输错密码后原会话照常可用，密码也没变
+    const still = await ctx.inject({ method: 'GET', url: '/api/workflow/requests', headers });
+    expect(still.statusCode).toBe(200);
+    const relogin = await ctx.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { password: 'super-secret-8' },
+    });
+    expect(relogin.statusCode).toBe(200);
+  });
+
   it('弱密码（<8 位）校验失败返回 400', async () => {
     const res = await ctx.inject({
       method: 'POST',
