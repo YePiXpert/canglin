@@ -135,9 +135,10 @@ onBeforeUnmount(() => {
 });
 
 /* 同一个链接在两种排法下的样子：< lg 药丸，≥ lg 竖排列表项 */
+/* 手机药丸在触屏（pointer: coarse）上加高到 40px（触控目标 ≥ 40px，DESIGN.md §4） */
 const ITEM =
-  'inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[13px] transition-colors duration-150 ' +
-  'lg:flex lg:h-8.5 lg:rounded-(--radius-control) lg:border-0 lg:px-2.5 lg:text-[13.5px]';
+  'inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[13px] transition-colors duration-150 pointer-coarse:h-10 pointer-coarse:px-3.5 ' +
+  'lg:flex lg:h-8.5 lg:rounded-(--radius-control) lg:border-0 lg:px-2.5 lg:text-[13.5px] lg:pointer-coarse:h-10';
 function itemClass(current: boolean): string[] {
   return [
     ITEM,

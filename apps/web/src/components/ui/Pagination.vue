@@ -42,11 +42,12 @@ const pages = computed<(number | '…')[]>(() => {
         <Icon name="chevron-left" :size="16" />
       </Button>
       <template v-for="(p, i) in pages" :key="i">
-        <span v-if="p === '…'" class="inline-flex size-7 items-center justify-center text-xs text-faint" aria-hidden="true">…</span>
+        <span v-if="p === '…'" class="inline-flex size-7 items-center justify-center text-xs text-faint pointer-coarse:h-10" aria-hidden="true">…</span>
+        <!-- 触屏（pointer: coarse）页码按钮到 40px，与上一页 / 下一页（Button sm 已自动加高）一致 -->
         <button
           v-else
           type="button"
-          class="h-7 min-w-7 px-1.5 rounded-[5px] text-xs font-medium tabular-nums cursor-pointer transition-colors duration-150"
+          class="h-7 min-w-7 px-1.5 rounded-[5px] text-xs font-medium tabular-nums cursor-pointer transition-colors duration-150 pointer-coarse:h-10 pointer-coarse:min-w-10"
           :class="p === page ? 'bg-primary text-primary-fg' : 'text-muted hover:bg-surface-2 hover:text-ink'"
           :aria-current="p === page ? 'page' : undefined"
           @click="emit('change', p)"

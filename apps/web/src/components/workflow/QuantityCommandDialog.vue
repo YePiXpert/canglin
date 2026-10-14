@@ -119,9 +119,9 @@ async function save() {
     </div>
     <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
       <template #head>
-        <th class="w-28 text-right">可操作</th>
-        <th class="w-40">本次数量</th>
-        <th v-if="distribution" class="w-44">领用人</th>
+        <th scope="col" class="w-28 text-right">可操作</th>
+        <th scope="col" class="w-40">本次数量</th>
+        <th v-if="distribution" scope="col" class="w-44">领用人</th>
       </template>
       <tbody>
         <tr v-for="line in lines" :key="line.key" :data-command-line="line.id">

@@ -72,8 +72,8 @@ async function save() {
     </div>
     <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
       <template #head>
-        <th class="w-28 text-right">尚欠</th>
-        <th class="w-40">本次到货</th>
+        <th scope="col" class="w-28 text-right">尚欠</th>
+        <th scope="col" class="w-40">本次到货</th>
       </template>
       <tbody>
         <tr v-for="line in lines" :key="line.id" :data-receipt-line="line.id">

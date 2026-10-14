@@ -11,14 +11,18 @@ import { lineProgress } from './lineProgress';
  * - ≥ 640px 是表格，放不下时在自己的容器里横向滚动并钉住首列；< 640px 走 .table-cards，进度条整行显示。
  */
 const props = defineProps<{ lines: WorkflowRequestLineRow[]; compact?: boolean }>();
+/**
+ * optional：< 640px 的卡片里数值为 0 时隐藏的次要列（只用 CSS 隐藏，格子照样渲染——e2e 按 data-label 找格子）。
+ * 申请、待处理、尚待办理与进度条始终显示，免得一条「待采购 20 个」的明细在手机上列出一串「0 个」。
+ */
 const columns = [
-  { key: 'quantity', label: '申请' },
-  { key: 'orderedQuantity', label: '已采购' },
-  { key: 'receivedQuantity', label: '已到货' },
-  { key: 'pendingAllocationQuantity', label: '待处理' },
-  { key: 'directQuantity', label: '直发' },
-  { key: 'stockedQuantity', label: '累计入库' },
-  { key: 'stockQuantity', label: '当前库存' },
+  { key: 'quantity', label: '申请', optional: false },
+  { key: 'orderedQuantity', label: '已采购', optional: true },
+  { key: 'receivedQuantity', label: '已到货', optional: true },
+  { key: 'pendingAllocationQuantity', label: '待处理', optional: false },
+  { key: 'directQuantity', label: '直发', optional: true },
+  { key: 'stockedQuantity', label: '累计入库', optional: true },
+  { key: 'stockQuantity', label: '当前库存', optional: true },
 ] as const;
 const rows = computed(() => props.lines.map((line) => ({ line, progress: lineProgress(line) })));
 /*
@@ -33,10 +37,10 @@ const pinned = 'sm:sticky sm:left-0 sm:z-1 sm:@max-[940px]:shadow-[inset_-1px_0_
     <table class="table-base table-cards" :class="compact ? '' : 'min-w-[940px]'">
       <thead>
         <tr>
-          <th :class="pinned">申请明细</th>
-          <th v-if="!compact" class="w-48">进度</th>
-          <th v-for="column in columns" :key="column.key" class="text-right">{{ column.label }}</th>
-          <th v-if="!compact">尚待办理</th>
+          <th scope="col" :class="pinned">申请明细</th>
+          <th v-if="!compact" scope="col" class="w-48">进度</th>
+          <th v-for="column in columns" :key="column.key" scope="col" class="text-right">{{ column.label }}</th>
+          <th v-if="!compact" scope="col">尚待办理</th>
         </tr>
       </thead>
       <tbody>
@@ -52,7 +56,7 @@ const pinned = 'sm:sticky sm:left-0 sm:z-1 sm:@max-[940px]:shadow-[inset_-1px_0_
             </div>
             <p class="mt-1.5 text-meta num">{{ progress.summary }}</p>
           </td>
-          <td v-for="column in columns" :key="column.key" :data-label="column.label" class="text-right num"><span :class="column.key === 'pendingAllocationQuantity' && line[column.key] !== '0' ? 'font-semibold text-blue' : ''">{{ quantityLabel(line[column.key], line.unit) }}</span></td>
+          <td v-for="column in columns" :key="column.key" :data-label="column.label" class="text-right num" :class="column.optional && line[column.key] === '0' ? 'max-sm:hidden' : ''"><span :class="column.key === 'pendingAllocationQuantity' && line[column.key] !== '0' ? 'font-semibold text-blue' : ''">{{ quantityLabel(line[column.key], line.unit) }}</span></td>
           <td v-if="!compact" data-label="尚待办理" class="text-[13px] text-muted">
             <p v-if="line.pendingPurchaseQuantity !== '0'">待采购 {{ quantityLabel(line.pendingPurchaseQuantity, line.unit) }}</p>
             <p v-if="line.pendingReceiptQuantity !== '0'">待到货 {{ quantityLabel(line.pendingReceiptQuantity, line.unit) }}</p>

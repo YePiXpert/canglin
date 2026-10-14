@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import {
   SelectContent,
   SelectItem,
@@ -45,6 +45,8 @@ const placeholderText = computed(() => props.options.find((o) => o.value === '')
  * 弹层未打开时（如编辑表单回填、URL 带筛选进入）会一直显示占位文字。
  */
 const selectedLabel = computed(() => items.value.find((o) => o.value === props.modelValue)?.label);
+/** 字段错误经 aria-describedby 关联到触发框，读屏能听到原因 */
+const errorId = `${useId()}-error`;
 </script>
 
 <template>
@@ -68,6 +70,7 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
           :disabled="disabled"
           :aria-label="label"
           :aria-invalid="error ? 'true' : undefined"
+          :aria-describedby="error ? errorId : undefined"
         >
           <span class="truncate">
             <SelectValue :placeholder="placeholderText">{{ selectedLabel ?? placeholderText }}</SelectValue>
@@ -82,7 +85,7 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
         <button
           v-if="clearable && modelValue"
           type="button"
-          class="absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer disabled:pointer-events-none"
+          class="absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer disabled:pointer-events-none pointer-coarse:before:absolute pointer-coarse:before:-inset-2"
           :class="size === 'sm' ? 'right-1' : 'right-1.5'"
           aria-label="清除选择"
           :disabled="disabled"
@@ -91,7 +94,7 @@ const selectedLabel = computed(() => items.value.find((o) => o.value === props.m
           <Icon name="close" :size="13" />
         </button>
       </div>
-      <span v-if="error" class="field-error">
+      <span v-if="error" :id="errorId" class="field-error">
         <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
       </span>
       <SelectPortal>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from 'vue';
 import Icon from './Icon.vue';
 import type { SelectOption } from './types';
 
@@ -23,6 +24,8 @@ withDefaults(
   { size: 'md' },
 );
 const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
+/** 字段错误经 aria-describedby 关联到下拉框 */
+const errorId = `${useId()}-error`;
 </script>
 
 <template>
@@ -33,6 +36,7 @@ const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
         :disabled="disabled"
         :aria-label="ariaLabel"
         :aria-invalid="error ? 'true' : undefined"
+        :aria-describedby="error ? errorId : undefined"
         class="control appearance-none w-full cursor-pointer"
         :class="size === 'sm' ? 'h-7 pl-2 pr-6 text-xs' : 'h-11 sm:h-9 pl-3 pr-9 text-base sm:text-sm'"
         @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
@@ -47,7 +51,7 @@ const emit = defineEmits<{ 'update:modelValue': [v: string] }>();
         :class="size === 'sm' ? 'right-1.5' : 'right-2.5'"
       />
     </div>
-    <span v-if="error" class="field-error">
+    <span v-if="error" :id="errorId" class="field-error">
       <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
     </span>
   </div>

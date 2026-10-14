@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, useSlots, watch } from 'vue';
 import {
   DialogContent,
   DialogOverlay,
@@ -35,8 +35,15 @@ const props = withDefaults(
   { width: '560px', persistent: false, dirty: false, mobileFullscreen: true, compact: false },
 );
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
+const slots = useSlots();
 
 const fullscreen = computed(() => props.mobileFullscreen);
+/**
+ * 说明文字：description（头部 13px 一行）或 #description 插槽（正文开头，ConfirmDialog 的 message），
+ * 都包在 reka 的 DialogDescription 里，弹窗经 aria-describedby 朗读它。两者都没有时显式去掉 aria-describedby，
+ * 不指向不存在的节点（reka 的「Missing Description」警告）。
+ */
+const describedByAttrs = computed(() => (props.description || slots.description ? {} : { 'aria-describedby': undefined }));
 
 const confirmDiscard = ref(false);
 const keepEditingBtn = ref<HTMLButtonElement | null>(null);
@@ -97,6 +104,7 @@ function onBackdropPointerDown(e: PointerEvent): void {
       -->
       <DialogContent
         class="group/dialog fixed inset-0 z-50 overflow-y-auto focus:outline-hidden"
+        v-bind="describedByAttrs"
         @escape-key-down="onEscapeKeyDown"
       >
         <div
@@ -139,6 +147,7 @@ function onBackdropPointerDown(e: PointerEvent): void {
               class="flex-1 min-h-0 overflow-y-auto"
               :class="compact ? ['px-5 pt-1.5', $slots.footer ? 'pb-1' : 'pb-5'] : ['px-5 sm:px-6 pt-5', $slots.footer ? 'pb-5' : 'pb-6']"
             >
+              <DialogDescription v-if="$slots.description" as="div"><slot name="description" /></DialogDescription>
               <slot />
             </div>
             <div

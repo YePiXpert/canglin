@@ -21,6 +21,8 @@ const intro = computed(() => !task.value && (!taskId.value || missing.value));
 
 <template>
   <section class="min-w-0 space-y-3">
+    <!-- 上传进度给读屏（转圈本身 aria-hidden）；元素常驻、只换文字 -->
+    <p class="sr-only" role="status">{{ busy ? '正在上传原件…' : '' }}</p>
     <!--
       整块虚线框是一个 <label>，里面只有 FileDropzone 自己的那个 input[type=file]（e2e 直接对它 setInputFiles）。
       「选择文件」只是长得像主按钮的提示（pointer-events-none，点击落在 label 上照常打开文件选择），不进读屏；

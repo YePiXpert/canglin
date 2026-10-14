@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui';
 import Icon from '@/components/ui/Icon.vue';
 import { buttonClass } from '@/components/ui/button';
 import { aiApi, apiError } from '@/api';
@@ -26,6 +27,7 @@ const config = ref<AiConfigView | null>(null);
 const configLoaded = ref(false);
 const listEl = ref<HTMLElement | null>(null);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
+const settingsLink = ref<{ $el: HTMLElement } | null>(null);
 
 /** 配置过（已启用且有 Key）才展示对话；否则显示引导 */
 const configured = computed(() => config.value?.enabled && config.value.apiKeySet);
@@ -42,35 +44,39 @@ let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 watch(
   () => props.open,
   (open) => {
-    // 监听随开关增减：常驻的话面板关着时按 Escape 也会触发一次多余的 close
-    if (open) {
-      window.addEventListener('keydown', onEscape);
-      if (!configLoaded.value) {
-        aiApi
-          .config()
-          .then((cfg) => {
-            config.value = cfg;
-            configLoaded.value = true;
-          })
-          .catch(() => {
-            // 401 已由拦截器统一处理；其他错误按未配置展示引导
-            configLoaded.value = true;
-          });
-      }
-      void nextTick(() => inputEl.value?.focus());
-    } else {
-      window.removeEventListener('keydown', onEscape);
+    if (open && !configLoaded.value) {
+      aiApi
+        .config()
+        .then((cfg) => {
+          config.value = cfg;
+          configLoaded.value = true;
+          focusPrimary();
+        })
+        .catch(() => {
+          // 401 已由拦截器统一处理；其他错误按未配置展示引导
+          configLoaded.value = true;
+          focusPrimary();
+        });
     }
   },
 );
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onEscape);
   stopElapsed();
 });
 
-function onEscape(e: KeyboardEvent): void {
-  if (e.key === 'Escape') emit('close');
+/**
+ * 打开后焦点给输入框；配置读回来发现未启用（输入框随之消失）时交给「前往设置」。
+ * Escape、点遮罩由 reka 交给 update:open；关闭后焦点回到打开它的顶栏按钮。
+ */
+function onOpenAutoFocus(event: Event): void {
+  if (!inputEl.value) return;
+  event.preventDefault();
+  inputEl.value.focus();
+}
+function focusPrimary(): void {
+  if (!props.open) return;
+  void nextTick(() => (configured.value ? inputEl.value?.focus() : settingsLink.value?.$el?.focus()));
 }
 
 async function send(preset?: string): Promise<void> {
@@ -122,34 +128,28 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition
-      enter-active-class="transition-opacity duration-200 ease-out"
-      enter-from-class="opacity-0"
-      leave-active-class="transition-opacity duration-150 ease-in"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="props.open"
-        class="fixed inset-0 z-50 flex justify-end"
-        role="dialog"
-        aria-modal="true"
+  <!--
+    reka 的 Dialog 原语（与手机「更多」抽屉同款）：焦点圈定在抽屉里，Escape / 点遮罩关闭，关闭后焦点回到触发按钮。
+    可访问名称「AI 助手」、关闭按钮「关闭」、Enter 发送 / Shift+Enter 换行保持不变。
+  -->
+  <DialogRoot :open="props.open" @update:open="(v) => { if (!v) emit('close'); }">
+    <DialogPortal>
+      <DialogOverlay class="fixed inset-0 z-50 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
+      <!-- 抽屉：面板色底，深色下左侧发丝线分层；打开时从右侧轻推入（@starting-style） -->
+      <DialogContent
         aria-label="AI 助手"
+        class="fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col bg-surface shadow-(--shadow-pop) focus:outline-hidden sm:max-w-[440px] sm:border-l sm:border-line transition-transform duration-200 ease-out starting:translate-x-6"
+        @open-auto-focus="onOpenAutoFocus"
       >
-        <div class="absolute inset-0 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px]" @click="emit('close')" />
-        <!-- 抽屉：面板色底，深色下左侧发丝线分层；打开时从右侧轻推入（@starting-style） -->
-        <div
-          class="relative flex h-full w-full flex-col bg-surface shadow-(--shadow-pop) sm:max-w-[440px] sm:border-l sm:border-line transition-transform duration-200 ease-out starting:translate-x-6"
-        >
           <!-- 头部 -->
           <div class="flex h-14 shrink-0 items-center gap-3 px-4 border-b border-line">
-            <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-ink">
+            <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-ink" aria-hidden="true">
               <Icon name="sparkles" :size="16" />
             </span>
             <div class="min-w-0 leading-tight">
-              <p class="text-[15px] leading-5 font-semibold text-ink">AI 助手</p>
-              <p v-if="configured" class="text-meta truncate">{{ config?.model }} · 问答内容会发送给模型服务商</p>
-              <p v-else class="text-meta">自然语言查询申请、单据与库存</p>
+              <DialogTitle class="text-[15px] leading-5 font-semibold text-ink">AI 助手</DialogTitle>
+              <DialogDescription v-if="configured" class="text-meta truncate">{{ config?.model }} · 问答内容会发送给模型服务商</DialogDescription>
+              <DialogDescription v-else class="text-meta">自然语言查询申请、单据与库存</DialogDescription>
             </div>
             <button
               type="button"
@@ -174,6 +174,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
               在系统设置选择 Gemini、GPT 或 Grok 并配置接口后，即可用自然语言查询申请、采购与领用单据和库存。
             </p>
             <router-link
+              ref="settingsLink"
               to="/settings#ai"
               class="mt-5"
               :class="buttonClass({ variant: 'primary', size: 'sm' })"
@@ -267,8 +268,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
               </button>
             </div>
           </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>

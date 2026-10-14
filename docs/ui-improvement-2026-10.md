@@ -269,3 +269,26 @@ pnpm --filter @canglin/web test:e2e
 - 改动的测试接口：无（未改 e2e / spec 依赖的文案与名称）。新增可见文案与名称：「重试」（备份、AI 配置、历史、最近登记、供应商清单）、「删除附件」确认框、「重新载入已保存版本？」确认框（按钮「重新载入」）、「会话已过期，请重新登录」弹窗（「重新登录」「去登录页」）、`#import-confirm-blockers`。
 - 浏览器实测（隔离 API + vite，Playwright 脚本）：A6 401 弹框、错密码留在框内、重登后重放成功且只登记一次（4/4）；A5 空密码 / 错密码字段错误且留在设置页；A1 刷新后 AI 地址仍在、备份与 AI 配置失败显示错误并能重试；A2 备份删除连点只发 1 个 DELETE、附件删除在「付款与发票」弹窗里嵌套确认正常；A4 阻塞项与禁用、历史开合只请求一次、重新载入确认、放弃失败只显示一次。
 - 校验：typecheck ✓ lint ✓ test 213 passed（36 个文件，原 213）
+
+### 批次 B（2026-10-14）
+
+- 完成：
+  - B1 `Input` / `Textarea` / `Select` / `NativeSelect`：错误与提示用 `useId()` 生成 id，控件 `aria-describedby` 指向它们（有错误时只指向错误）；`Input` 的 datalist id 也改用 `useId()`。DESIGN.md §5.2 补充。
+  - B2 `Dialog` 新增 `#description` 插槽（包在 reka `DialogDescription` 里，放在正文开头）；`description` 与插槽都没有时显式去掉 `aria-describedby`。`ConfirmDialog` 的 message 改走 `#description`（外观不变）；「更多」抽屉加 sr-only `DialogDescription`；`AccountSecurityPanel` 两个弹窗传 `description`（正文里重复的那句删掉）。浏览器实测控制台不再有 Description 警告。DESIGN.md §5.8 补充。
+  - B3 `AiPanel` 改用 reka `DialogRoot / DialogPortal / DialogOverlay / DialogContent`，保留 `aria-label="AI 助手"`、「关闭」、Enter 发送 / Shift+Enter 换行；`@open-auto-focus` 聚焦输入框，配置读回为未启用时聚焦「前往设置」；去掉手写的 window Escape 监听。`BackupManagerPanel` 恢复中的遮罩改为 `Dialog persistent compact`「正在恢复备份」+ `role="status"` 进度文字。
+  - B4 sr-only `role="status"`（元素常驻、只换文字）：`ImportStatusBar`（识别 / AI 状态一条，保存只播报「已保存草稿」）、`ImportUploadSection`（上传中）、`WorkflowAttachments`（上传中）、`DocumentCollection`（刷新中，接上了 `useWorkflowResource` 的 `refreshing`）。
+  - B5 `pointer: coarse`：`Pagination` 页码 40px、`Select` / `SearchInput` 清空按钮用伪元素把点击区扩到 40px（视觉不变）、`PurchaseRegisterDialog` 历史价药丸与 `SettingsLayout` 手机药丸 40px。DESIGN.md §4 补充。
+  - B6 `ImportDraftEditor`：品名 / 规格 / 数量 / 单位的 label 改为「第 N 行…」（`hide-label`），删除按钮 `aria-label`「删除第 N 行」（可见文字仍是「删除」）。
+  - B7 13 个文件共 67 个 `th` 加 `scope="col"`；`RequestProgress` 在 < 640px 用 `max-sm:hidden` 隐藏为 0 的次要列（已采购、已到货、直发、累计入库、当前库存），申请、待处理、尚待办理与进度条始终显示。DESIGN.md §8 补充。
+  - B8 `utils/title.ts` + `router.afterEach`：「{meta.title} · 仓廪」，登录页「登录 · 仓廪」，404「页面不存在 · 仓廪」；`RequestDetailView` 数据到位后改为「{流水号} · 仓廪」。
+  - B9 新组件 `components/layout/RouteErrorBoundary.vue` 包住 `AppShell` 的 `<router-view>`：渲染 / setup 抛错时显示 `ErrorState`「页面出现异常」+「重新加载」（`location.reload()`），`console.error` 保留，路由变化时重置。
+- 跳过：无。
+- 与方案不同：
+  - B9 只接管渲染与 setup 的错误（Vue 错误来源为 render / setup，生产版按 `#runtime-0/1` 判断）；事件处理、异步回调与生命周期里的错误仍交给 `main.ts` 的全局 toast。原因：`onErrorCaptured` 也会收到 async 点击处理的 Promise 拒绝，全部接管会让一次失败的点击把整页换成错误页。
+  - B4 保存状态只在保存完成时播报（「已保存草稿」，保存中留空），避免打字时每次念两句；播报措辞刻意不同于可见文字（不写「草稿已保存」「AI：…」），因为 e2e 用 `getByText` 精确 / 包含匹配这些文字，多一个匹配会触发严格模式错误。
+- 改动的测试接口：
+  - `src/components/ai/AiPanel.spec.ts`：挂载改为 `attachTo: document.body` + `findComponent(DialogContent)` 读取传送出去的内容（原来用 `Teleport` 桩），新增 1 个用例（role / 名称 / 说明、打开聚焦输入框、Escape 关闭）。
+  - 导入明细的可访问名称由「规格 / 数量 / 单位」（无行号，品名原来没有）改为「第 N 行品名 / 规格 / 数量 / 单位」，删除按钮名由「删除」改为「删除第 N 行」；e2e 按占位文字找这些格子，不受影响。
+  - 新增 `src/components/layout/RouteErrorBoundary.spec.ts`（2 个用例）。
+- 浏览器实测：申请详情 / 到货弹窗 / 账号弹窗 / 供应商弹窗 / 「更多」抽屉无 Description 警告；到货数量错误的 `aria-describedby` 指向「数量必须大于 0」；AI 抽屉打开聚焦输入框（未启用时「前往设置」），Tab 6 次仍在抽屉内，Esc 关闭后焦点回到「AI 助手」按钮；标题「工作台 · 仓廪」「OA-… · 仓廪」「登录 · 仓廪」「页面不存在 · 仓廪」；390px 申请详情卡片里为 0 的次要列 `display: none`。
+- 校验：typecheck ✓ lint ✓ test 216 passed（37 个文件，原 213）

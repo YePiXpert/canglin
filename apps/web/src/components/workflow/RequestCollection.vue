@@ -109,12 +109,12 @@ defineExpose({ refresh: load });
       <table class="table-base table-cards min-w-[920px] sm:table-fixed">
         <thead>
           <tr>
-            <th class="w-40">流水号</th>
-            <th class="w-36">部门 / 经办人</th>
-            <th class="w-26">申请日期</th>
-            <th>申请明细</th>
-            <th class="w-52">进度</th>
-            <th class="w-36 text-right">操作</th>
+            <th scope="col" class="w-40">流水号</th>
+            <th scope="col" class="w-36">部门 / 经办人</th>
+            <th scope="col" class="w-26">申请日期</th>
+            <th scope="col">申请明细</th>
+            <th scope="col" class="w-52">进度</th>
+            <th scope="col" class="w-36 text-right">操作</th>
           </tr>
         </thead>
         <tbody>

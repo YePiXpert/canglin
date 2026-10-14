@@ -213,12 +213,12 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
           <table class="table-base table-cards min-w-[720px]">
             <thead>
               <tr>
-                <th class="w-40">{{ groupColumn }}</th>
-                <th>净成交</th>
-                <th class="w-32 text-right">成交原额</th>
-                <th class="w-28 text-right">取消金额</th>
-                <th class="w-28 text-right">退款金额</th>
-                <th class="w-24 text-right">采购单数</th>
+                <th scope="col" class="w-40">{{ groupColumn }}</th>
+                <th scope="col">净成交</th>
+                <th scope="col" class="w-32 text-right">成交原额</th>
+                <th scope="col" class="w-28 text-right">取消金额</th>
+                <th scope="col" class="w-28 text-right">退款金额</th>
+                <th scope="col" class="w-24 text-right">采购单数</th>
               </tr>
             </thead>
             <tbody>
@@ -268,13 +268,13 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
           <table class="table-base table-cards min-w-[720px]">
             <thead>
               <tr>
-                <th class="w-40">领用人 / 部门</th>
-                <th>物品 / 规格</th>
-                <th class="w-16">单位</th>
-                <th class="w-24 text-right">发放数量</th>
-                <th class="w-24 text-right">归还数量</th>
-                <th class="w-24 text-right">净领用</th>
-                <th class="w-24 text-right">发放单数</th>
+                <th scope="col" class="w-40">领用人 / 部门</th>
+                <th scope="col">物品 / 规格</th>
+                <th scope="col" class="w-16">单位</th>
+                <th scope="col" class="w-24 text-right">发放数量</th>
+                <th scope="col" class="w-24 text-right">归还数量</th>
+                <th scope="col" class="w-24 text-right">净领用</th>
+                <th scope="col" class="w-24 text-right">发放单数</th>
               </tr>
             </thead>
             <tbody>

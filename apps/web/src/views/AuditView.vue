@@ -268,11 +268,11 @@ function clearSearch(): void {
       <table class="table-base table-cards min-w-[700px]">
         <thead>
           <tr>
-            <th class="w-36">时间</th>
-            <th class="w-32">操作</th>
-            <th class="w-28">对象</th>
-            <th>详情</th>
-            <th class="w-32">来源 IP</th>
+            <th scope="col" class="w-36">时间</th>
+            <th scope="col" class="w-32">操作</th>
+            <th scope="col" class="w-28">对象</th>
+            <th scope="col">详情</th>
+            <th scope="col" class="w-32">来源 IP</th>
           </tr>
         </thead>
         <tbody>

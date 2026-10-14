@@ -60,6 +60,7 @@ function kindLabel(kind: string) { return ATTACHMENT_KIND_LABELS[kind as Attachm
 
 <template>
   <section :class="sheet ? '' : 'mt-5 border-t border-line pt-4 first:mt-0 first:border-t-0 first:pt-0'" aria-label="单据附件">
+    <p class="sr-only" role="status">{{ uploading ? '正在上传附件…' : '' }}</p>
     <div class="flex items-center justify-between gap-3" :class="sheet ? 'border-b border-line py-2 pr-2 pl-4' : ''">
       <div class="flex min-w-0 items-baseline gap-1.5"><h3 class="text-[13px] font-medium text-ink">{{ requestId ? '申请原件' : kind === 'SIGNOFF' ? '签收凭证' : '发票附件' }}</h3><span v-if="attachments.length" class="text-meta num">{{ attachments.length }} 份</span></div>
       <Button size="sm" :variant="sheet ? 'ghost' : 'secondary'" :loading="uploading" @click="picker?.click()"><Icon v-if="!uploading" name="upload" :size="14" />上传附件</Button>

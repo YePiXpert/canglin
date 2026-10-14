@@ -177,7 +177,7 @@ async function save() {
 const LINE_CARD = 'group/line max-sm:mb-3 max-sm:last:mb-0 max-sm:rounded-(--radius-card) max-sm:border max-sm:border-line max-sm:bg-surface max-sm:p-4';
 const MAIN_ROW = 'sm:group-hover/line:bg-surface-2/40 max-sm:mb-0 max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent max-sm:p-0';
 const EXTRA_ROW = 'sm:group-hover/line:bg-surface-2/40 max-sm:mt-3 max-sm:mb-0 max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0 max-sm:bg-transparent max-sm:px-0 max-sm:pt-3 max-sm:pb-0';
-const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-xs text-text transition-colors duration-150 enabled:cursor-pointer enabled:hover:border-blue enabled:hover:text-blue disabled:cursor-default disabled:text-faint';
+const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-xs text-text transition-colors duration-150 enabled:cursor-pointer enabled:hover:border-blue enabled:hover:text-blue disabled:cursor-default disabled:text-faint pointer-coarse:h-10 pointer-coarse:px-3.5';
 </script>
 
 <template>
@@ -201,10 +201,10 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
     <Notice v-if="clearedPrices" tone="amber" variant="inline" size="sm" :icon="false" class="mt-3">已清空 {{ clearedPrices }} 条来自其他供应商的历史成交价，请填写本次实际单价。</Notice>
     <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
       <template #head>
-        <th class="w-24 text-right">待采购</th>
-        <th class="w-36">本次数量</th>
-        <th class="w-44">成交单价</th>
-        <th class="w-28 text-right">本行金额</th>
+        <th scope="col" class="w-24 text-right">待采购</th>
+        <th scope="col" class="w-36">本次数量</th>
+        <th scope="col" class="w-44">成交单价</th>
+        <th scope="col" class="w-28 text-right">本行金额</th>
       </template>
       <tbody v-for="(line, index) in lines" :key="line.id" :data-purchase-line="line.id" :class="[LINE_CARD, index ? 'sm:border-t sm:border-line' : '']">
         <tr :class="[MAIN_ROW, line.selected ? 'sm:[&>td]:border-b-0' : '']">

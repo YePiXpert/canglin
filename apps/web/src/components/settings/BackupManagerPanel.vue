@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import Button from '@/components/ui/Button.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import Dialog from '@/components/ui/Dialog.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Menu from '@/components/ui/Menu.vue';
@@ -136,10 +137,10 @@ function moreActions(backup: BackupInfo): MenuItem[] {
       <table class="table-base table-sticky table-cards">
         <thead>
           <tr>
-            <th class="pl-5">备份文件</th>
-            <th>创建时间</th>
-            <th class="text-right">大小</th>
-            <th class="pr-5 text-right"><span class="sr-only">操作</span></th>
+            <th scope="col" class="pl-5">备份文件</th>
+            <th scope="col">创建时间</th>
+            <th scope="col" class="text-right">大小</th>
+            <th scope="col" class="pr-5 text-right"><span class="sr-only">操作</span></th>
           </tr>
         </thead>
         <tbody>
@@ -173,17 +174,24 @@ function moreActions(backup: BackupInfo): MenuItem[] {
     </template>
   </Panel>
 
-  <!-- 恢复中：全屏挡住，避免用户在数据被覆盖的过程中继续操作 -->
-  <div
-    v-if="restoring"
-    class="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-ink/40 dark:bg-black/60 backdrop-blur-[2px]"
+  <!--
+    恢复中：persistent 的模态弹窗挡住整页（焦点圈在弹窗里，键盘也点不到「立即备份」），
+    数据被覆盖的过程中不能继续操作；进度文字是 role="status"，读屏能听到。
+  -->
+  <Dialog
+    :open="restoring"
+    title="正在恢复备份"
+    description="服务短暂不可用，请不要关闭页面。"
+    width="360px"
+    :mobile-fullscreen="false"
+    compact
+    persistent
   >
-    <div class="flex flex-col items-center gap-3 w-full max-w-xs px-6 py-6 text-center bg-surface border border-line rounded-xl shadow-(--shadow-pop)">
-      <span class="size-8 border-[3px] border-line-strong border-t-ink rounded-full animate-spin" />
-      <p class="text-[15px] font-semibold text-ink">正在恢复备份…</p>
-      <p class="text-[13px] text-muted">服务短暂不可用，请不要关闭页面</p>
+    <div class="flex items-center gap-3 pt-2 pb-1" role="status">
+      <span class="size-5 shrink-0 border-2 border-line-strong border-t-ink rounded-full animate-spin" aria-hidden="true" />
+      <span class="text-[13px] text-muted">正在用备份覆盖数据库与附件，完成后页面会自动刷新…</span>
     </div>
-  </div>
+  </Dialog>
 
   <ConfirmDialog
     :open="!!restoreTarget"

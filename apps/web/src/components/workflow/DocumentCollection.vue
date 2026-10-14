@@ -24,7 +24,7 @@ const titleId = useId();
 const filters = reactive({ kind: (props.initialKind || '') as WorkflowDocumentKind | '', page: 1 });
 const pageSize = 15;
 const kindOptions = Object.entries(documentKindLabels).map(([value, label]) => ({ value, label }));
-const { data, loading, error, load, reset } = useWorkflowResource(() => workflowApi.documents({ requestId: props.requestId, kind: props.kind || filters.kind || undefined, page: filters.page, pageSize }));
+const { data, loading, refreshing, error, load, reset } = useWorkflowResource(() => workflowApi.documents({ requestId: props.requestId, kind: props.kind || filters.kind || undefined, page: filters.page, pageSize }));
 /* 只有页面上的类型筛选造成的「没有结果」才给「查看全部类型」 */
 const filteredKind = computed(() => (!props.kind && filters.kind ? documentKindLabels[filters.kind] : ''));
 onMounted(load);
@@ -44,6 +44,8 @@ defineExpose({ refresh: load });
       </div>
       <NativeSelect v-if="!kind" v-model="filters.kind" :options="kindOptions" placeholder="全部类型" aria-label="业务记录类型" class="w-40" @update:model-value="filter" />
     </div>
+    <!-- 刷新时保留旧记录；进度只给读屏（元素常驻、只换文字） -->
+    <p class="sr-only" role="status">{{ refreshing ? '正在刷新业务记录…' : '' }}</p>
     <Panel flush>
       <div v-if="loading" class="divide-y divide-line" aria-hidden="true">
         <div v-for="n in 3" :key="n" class="space-y-2.5 px-4 py-3.5"><Skeleton class="h-5 w-56" /><Skeleton class="h-4 w-full" /><Skeleton class="h-4 w-2/3" /></div>

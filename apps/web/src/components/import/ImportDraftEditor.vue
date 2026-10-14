@@ -72,9 +72,9 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
       <table v-else-if="lines.length" class="table-base table-fixed @max-xl:block">
         <thead class="@max-xl:hidden">
           <tr>
-            <th class="pl-4 pr-1.5">品名</th>
-            <th class="w-28 px-1.5">数量</th>
-            <th class="w-20 pl-1.5 pr-4">单位</th>
+            <th scope="col" class="pl-4 pr-1.5">品名</th>
+            <th scope="col" class="w-28 px-1.5">数量</th>
+            <th scope="col" class="w-20 pl-1.5 pr-4">单位</th>
           </tr>
         </thead>
         <tbody
@@ -91,20 +91,23 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
             class="[&:hover]:bg-transparent @max-xl:grid @max-xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)] @max-xl:gap-2 @max-xl:px-4 @max-xl:pt-3"
           >
             <td class="border-b-0 pb-2 pl-4 pr-1.5 pt-3 @max-xl:col-span-2 @max-xl:p-0">
+              <!-- 可访问名称带行号（「第 N 行品名 / 规格 / 数量 / 单位」）：每行同名时读屏分不清是哪一行 -->
               <Input
                 v-model="l.itemName"
                 size="sm"
+                :label="`第 ${i + 1} 行品名`"
+                hide-label
                 placeholder="品名（同名不同规格请明确区分）"
                 :title="l.source?.rawText && l.source.rawText !== l.itemName ? `原文：${l.source.rawText}` : undefined"
               />
-              <Input v-model="l.spec" size="sm" label="规格" hide-label placeholder="规格（可空）" class="mt-1.5" />
+              <Input v-model="l.spec" size="sm" :label="`第 ${i + 1} 行规格`" hide-label placeholder="规格（可空）" class="mt-1.5" />
             </td>
             <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
               <span aria-hidden="true" :class="stackedLabel">数量</span>
               <Input
                 v-model="l.quantity"
                 size="sm"
-                label="数量"
+                :label="`第 ${i + 1} 行数量`"
                 hide-label
                 type="number"
                 step="any"
@@ -113,7 +116,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
             </td>
             <td class="border-b-0 pb-2 pl-1.5 pr-4 pt-3 @max-xl:p-0">
               <span aria-hidden="true" :class="stackedLabel">单位</span>
-              <Input v-model="l.unit" size="sm" label="单位" hide-label placeholder="单位" />
+              <Input v-model="l.unit" size="sm" :label="`第 ${i + 1} 行单位`" hide-label placeholder="单位" />
             </td>
           </tr>
           <tr class="[&:hover]:bg-transparent @max-xl:block">
@@ -139,6 +142,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                   variant="danger-ghost"
                   size="sm"
                   :disabled="task.confirmed"
+                  :aria-label="`删除第 ${i + 1} 行`"
                   @click="lines.splice(i, 1)"
                   ><Icon name="trash" :size="14" />删除</Button
                 >

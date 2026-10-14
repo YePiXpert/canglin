@@ -39,7 +39,7 @@ const decrease = (entry: WorkflowStockEntryRow) => entry.quantity.startsWith('-'
     <EmptyState v-else-if="!entries?.items.length" icon="layers" title="还没有库存流水" description="登记入库、库存领用、退货和盘点调整之后，每一笔数量变化都会记在这里" />
     <div v-else class="overflow-x-auto">
       <table class="table-base table-cards min-w-[760px]">
-        <thead><tr><th>日期</th><th>物品</th><th>业务类型</th><th>位置</th><th class="text-right">数量变化</th><th>来源</th></tr></thead>
+        <thead><tr><th scope="col">日期</th><th scope="col">物品</th><th scope="col">业务类型</th><th scope="col">位置</th><th scope="col" class="text-right">数量变化</th><th scope="col">来源</th></tr></thead>
         <tbody>
           <tr v-for="entry in entries.items" :key="entry.id">
             <td data-label="日期" class="num text-muted">{{ entry.date }}</td>

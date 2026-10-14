@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   DialogContent,
+  DialogDescription,
   DialogOverlay,
   DialogPortal,
   DialogRoot,
@@ -13,6 +14,7 @@ import Menu from '@/components/ui/Menu.vue';
 import { buttonClass } from '@/components/ui/button';
 import type { MenuItem } from '@/components/ui/types';
 import AiPanel from '@/components/ai/AiPanel.vue';
+import RouteErrorBoundary from './RouteErrorBoundary.vue';
 import SessionExpiredDialog from './SessionExpiredDialog.vue';
 import { onSessionExpired } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
@@ -208,7 +210,9 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
       ref="mainEl"
       class="relative min-h-0 flex-1 overflow-y-auto px-(--main-px) pt-(--main-pt) pb-[calc(var(--main-pb)+env(safe-area-inset-bottom))] lg:pb-(--main-pb)"
     >
-      <router-view />
+      <RouteErrorBoundary>
+        <router-view />
+      </RouteErrorBoundary>
     </main>
 
     <!-- 手机底部标签栏：当前项墨色 600、图标朱砂 -->
@@ -252,6 +256,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
           <div class="mx-auto mb-2 h-1 w-9 rounded-full bg-line-strong" aria-hidden="true" />
           <div class="flex items-center justify-between mb-4">
             <DialogTitle class="text-[15px] font-semibold text-ink">更多功能</DialogTitle>
+            <DialogDescription class="sr-only">底部标签栏放不下的导航，以及深浅色切换和退出登录</DialogDescription>
             <button
               type="button"
               :class="buttonClass({ variant: 'ghost', iconOnly: true })"

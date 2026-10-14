@@ -25,8 +25,11 @@ const emit = defineEmits<{ 'update:open': [v: boolean]; confirm: [] }>();
 
 <template>
   <!-- 确认框在手机上保持居中小卡片：全屏只放一句话和两个按钮反而更难读 -->
+  <!-- message 走 Dialog 的 #description（reka 的 DialogDescription）：确认框经 aria-describedby 朗读后果 -->
   <Dialog :open="open" :title="title" width="420px" :mobile-fullscreen="false" compact @update:open="emit('update:open', $event)">
-    <p class="text-[13px] text-muted leading-relaxed">{{ message }}</p>
+    <template #description>
+      <p class="text-[13px] text-muted leading-relaxed">{{ message }}</p>
+    </template>
     <div v-if="$slots.default" class="mt-3">
       <slot />
     </div>

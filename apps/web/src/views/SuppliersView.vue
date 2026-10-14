@@ -138,11 +138,11 @@ onUnmounted(() => priceGuard.abandon());
           <table class="table-base table-cards min-w-[640px]">
             <thead>
               <tr>
-                <th>名称</th>
-                <th class="w-32">联系人</th>
-                <th class="w-36">电话</th>
-                <th class="w-24 text-right">关联单据</th>
-                <th class="w-28 text-right"><span class="sr-only">操作</span></th>
+                <th scope="col">名称</th>
+                <th scope="col" class="w-32">联系人</th>
+                <th scope="col" class="w-36">电话</th>
+                <th scope="col" class="w-24 text-right">关联单据</th>
+                <th scope="col" class="w-28 text-right"><span class="sr-only">操作</span></th>
               </tr>
             </thead>
             <tbody>
@@ -181,7 +181,7 @@ onUnmounted(() => priceGuard.abandon());
         </EmptyState>
         <EmptyState v-else-if="!prices.length" icon="receipt" title="还没有成交价格" description="登记采购后会自动保留成交价；同名不同规格或单位分别展示。" />
         <div v-else class="overflow-x-auto"><table class="table-base table-cards min-w-[640px]">
-          <thead><tr><th>品名 / 规格</th><th class="w-36">供应商</th><th class="w-32 text-right">成交单价</th><th class="w-28">日期</th><th class="w-44 text-right">来源</th></tr></thead>
+          <thead><tr><th scope="col">品名 / 规格</th><th scope="col" class="w-36">供应商</th><th scope="col" class="w-32 text-right">成交单价</th><th scope="col" class="w-28">日期</th><th scope="col" class="w-44 text-right">来源</th></tr></thead>
           <tbody><tr v-for="price in prices" :key="price.purchaseLineId"><td><p class="font-medium text-ink">{{ price.itemName }}</p><p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">¥{{ price.unitPrice }} / {{ price.unit }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源" class="sm:whitespace-nowrap sm:py-2 sm:text-right"><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="mr-3 text-xs">商家链接</a><Button size="sm" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button></td></tr></tbody>
         </table></div>
       </template>

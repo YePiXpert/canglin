@@ -48,7 +48,7 @@ function selectAll(value: boolean): void {
         <table class="table-base table-cards table-sticky max-sm:p-0 [&_.field-error]:hidden">
           <thead>
             <tr>
-              <th>
+              <th scope="col">
                 <span class="inline-flex items-center gap-2">
                   <Checkbox size="sm" aria-label="全选" class="max-sm:hidden" :model-value="allSelected" :indeterminate="partlySelected" :disabled="disabled" @update:model-value="selectAll" />
                   明细

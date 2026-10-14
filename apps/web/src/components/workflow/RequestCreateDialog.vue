@@ -134,12 +134,12 @@ async function save() {
         <table class="w-full border-collapse max-sm:block">
           <thead class="max-sm:hidden">
             <tr>
-              <th :class="[TH, 'w-10 text-left']">#</th>
-              <th :class="[TH, 'text-left']">品名</th>
-              <th :class="[TH, 'w-[200px] text-left']">规格</th>
-              <th :class="[TH, 'w-28 text-right']">申请数量</th>
-              <th :class="[TH, 'w-24 text-left']">单位</th>
-              <th :class="[TH, 'w-10']"><span class="sr-only">删除</span></th>
+              <th scope="col" :class="[TH, 'w-10 text-left']">#</th>
+              <th scope="col" :class="[TH, 'text-left']">品名</th>
+              <th scope="col" :class="[TH, 'w-[200px] text-left']">规格</th>
+              <th scope="col" :class="[TH, 'w-28 text-right']">申请数量</th>
+              <th scope="col" :class="[TH, 'w-24 text-left']">单位</th>
+              <th scope="col" :class="[TH, 'w-10']"><span class="sr-only">删除</span></th>
             </tr>
           </thead>
           <!--

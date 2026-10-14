@@ -1,10 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { setPageTitle } from '@/utils/title';
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
+    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true, title: '登录' } },
     {
       path: '/',
       component: () => import('@/components/layout/AppShell.vue'),
@@ -38,7 +39,7 @@ export const router = createRouter({
         { path: 'reports', redirect: '/insights' },
       ],
     },
-    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { public: true } },
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { public: true, title: '页面不存在' } },
   ],
   // 换页回到顶部；浏览器前进后退时恢复原来的位置
   scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
@@ -58,6 +59,12 @@ router.beforeEach(async (to) => {
   if (!auth.isInitialized) return { path: '/login' };
   if (!auth.loggedIn) return { path: '/login', query: { redirect: to.fullPath } };
   return true;
+});
+
+/** 标签页标题跟着路由走：「{meta.title} · 仓廪」；申请详情在数据到位后由页面改成「{流水号} · 仓廪」 */
+router.afterEach((to, _from, failure) => {
+  if (failure) return;
+  setPageTitle(typeof to.meta.title === 'string' ? to.meta.title : undefined);
 });
 
 /**

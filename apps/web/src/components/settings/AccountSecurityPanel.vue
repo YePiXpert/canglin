@@ -194,10 +194,16 @@ async function copyRecoveryCode(): Promise<void> {
 
   <!-- 恢复码结果 -->
   <!-- 两个小弹窗内容很短，手机上也保持居中小卡片（与 ConfirmDialog 一致），不铺满全屏 -->
-  <Dialog :open="!!recoveryCodeIssued" title="新的恢复码" width="420px" persistent :mobile-fullscreen="false">
-    <p class="text-sm text-muted">请立即保存，只显示这一次：</p>
+  <Dialog
+    :open="!!recoveryCodeIssued"
+    title="新的恢复码"
+    description="请立即保存，只显示这一次。"
+    width="420px"
+    persistent
+    :mobile-fullscreen="false"
+  >
     <p
-      class="mt-4 py-3 px-4 bg-surface-2 border border-line rounded-(--radius-control) text-center font-mono text-lg tracking-[0.2em] text-ink select-all break-all"
+      class="py-3 px-4 bg-surface-2 border border-line rounded-(--radius-control) text-center font-mono text-lg tracking-[0.2em] text-ink select-all break-all"
     >
       {{ recoveryCodeIssued }}
     </p>
@@ -214,13 +220,13 @@ async function copyRecoveryCode(): Promise<void> {
   <Dialog
     :open="recoveryDialogOpen"
     title="重置恢复码"
+    description="输入当前密码以生成新的恢复码，旧恢复码将失效。"
     width="420px"
     :mobile-fullscreen="false"
     :dirty="recoveryPassword.length > 0 && !generating"
     :persistent="generating"
     @update:open="recoveryDialogOpen = $event"
   >
-    <p class="text-sm text-muted mb-4">输入当前密码以生成新的恢复码，旧恢复码将失效。</p>
     <Input
       v-model="recoveryPassword"
       type="password"

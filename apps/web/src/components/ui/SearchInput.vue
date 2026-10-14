@@ -71,7 +71,7 @@ onBeforeUnmount(() => fire.cancel());
     <button
       v-if="draft"
       type="button"
-      class="absolute right-1.5 top-2.5 sm:top-1.5 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer"
+      class="absolute right-1.5 top-2.5 sm:top-1.5 flex items-center justify-center size-6 rounded-full text-faint hover:text-ink hover:bg-surface-2 transition-colors duration-150 cursor-pointer pointer-coarse:before:absolute pointer-coarse:before:-inset-2"
       aria-label="清除搜索"
       @click="clear"
     >

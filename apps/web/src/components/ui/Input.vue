@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import Icon from './Icon.vue';
 
 const props = withDefaults(
@@ -37,7 +37,12 @@ const emit = defineEmits<{
   enter: [];
 }>();
 
-const listId = `dl-${Math.random().toString(36).slice(2, 9)}`;
+const uid = useId();
+const listId = `${uid}-list`;
+/** 错误与提示的 id：输入框经 aria-describedby 指向它们（有错误时只指向错误），读屏能听到原因而不只是「无效」 */
+const errorId = `${uid}-error`;
+const hintId = `${uid}-hint`;
+const describedBy = computed(() => (props.error ? errorId : props.hint ? hintId : undefined));
 
 const isDate = computed(() => props.type === 'date');
 const isEmpty = computed(() => props.modelValue === null || props.modelValue === undefined || props.modelValue === '');
@@ -74,6 +79,7 @@ const sizeClass = computed(() => {
       :list="suggestions?.length ? listId : undefined"
       :aria-label="label"
       :aria-invalid="error ? 'true' : undefined"
+      :aria-describedby="describedBy"
       :data-empty="isDate && isEmpty ? '' : undefined"
       class="control w-full"
       :class="[sizeClass, isDate ? 'input-date' : '', variant === 'cell' ? 'control-cell' : '']"
@@ -84,9 +90,9 @@ const sizeClass = computed(() => {
     <datalist v-if="suggestions?.length" :id="listId">
       <option v-for="s in suggestions" :key="s" :value="s" />
     </datalist>
-    <span v-if="error" class="field-error">
+    <span v-if="error" :id="errorId" class="field-error">
       <Icon name="alert-circle" :size="13" class="mt-[2.5px] shrink-0" />{{ error }}
     </span>
-    <span v-else-if="hint" class="block mt-1.5 text-xs text-faint">{{ hint }}</span>
+    <span v-else-if="hint" :id="hintId" class="block mt-1.5 text-xs text-faint">{{ hint }}</span>
   </label>
 </template>

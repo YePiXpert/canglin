@@ -89,6 +89,9 @@
 - 52px 顶栏：方印 + 词标，右侧 AI 助手图标按钮和主动作（「导入」，导入页里换成「申请」）。
 - 60px 底部标签栏（另加安全区，`<nav aria-label="主导航">`）：工作台 / 申请 / 库存（可访问名称「库存与领用」）/ 报表 / 更多。当前项墨色 600、图标朱砂。「更多」是底部抽屉，放底栏放不下的导航（设置）以及深浅色切换、退出登录；当前页在设置里时「更多」也显示为当前项。
 - 路由路径变化时外壳收起「更多」，并把 `<main>` 滚回顶部。
+- AI 助手抽屉（`AiPanel`）与手机「更多」抽屉都用 reka 的 `DialogRoot / DialogPortal / DialogOverlay / DialogContent`：焦点圈在抽屉里，Esc 与点遮罩关闭，关闭后焦点回到触发按钮；都有 `DialogTitle` 与 `DialogDescription`（「更多」的说明是 sr-only）。AI 抽屉打开后聚焦输入框，未启用时聚焦「前往设置」。
+- 标签页标题由 `router.afterEach` 写成「{meta.title} · 仓廪」（`utils/title.ts`；登录页「登录 · 仓廪」），申请详情数据到位后改成「{流水号} · 仓廪」。
+- `<router-view>` 外包一层 `RouteErrorBoundary`：页面组件渲染或 setup 抛错时原位显示 `ErrorState`「页面出现异常」+「重新加载」，路由变化时重置；事件处理与异步回调的错误不接管，照旧由 `main.ts` 的全局兜底弹 toast。
 
 **会话过期**：外壳挂着 `SessionExpiredDialog`（经 `api/client` 的 `onSessionExpired` 注册）。请求返回 401 且前端仍是登录态时，先弹「会话已过期，请重新登录」（确认框排版 + 密码框，`persistent`），登录成功后拦截器把失败的请求重放一次，页面上填了一半的弹窗不丢；选「去登录页」、重放仍 401、上传（`FormData`）和 `/auth/*` 接口照旧跳登录页。登录、改密、重置恢复码这类核对密码的接口返回 401 表示密码不对，不当成会话过期（`isCredentialCheck`），由页面在字段旁说明。
 
@@ -112,7 +115,7 @@
 ## 4. 响应式与手机规则
 
 - 断点：`lg`（1024px）以上是桌面外壳；`sm`（640px）以上表单双列、表格按表格排；`< 640px` 表格改为卡片（`.table-cards`）。
-- 触控目标 ≥ 40px：`.row-action` 在触屏（`hover: none`）下放大到 40px 并常亮；底栏每项 60px 高；FileDropzone 的「拍照上传」是整宽 `lg` 按钮。
+- 触控目标 ≥ 40px：`.row-action` 在触屏（`hover: none`）下放大到 40px 并常亮；底栏每项 60px 高；FileDropzone 的「拍照上传」是整宽 `lg` 按钮。`pointer: coarse` 下 Pagination 页码按钮、登记采购的历史价药丸、设置子导航的手机药丸加高到 40px；Select / SearchInput 的清空按钮视觉仍是 24px，用伪元素（`pointer-coarse:before:absolute pointer-coarse:before:-inset-2`）把点击区扩到 40px。自己写的小按钮照此处理。
 - `.table-cards`：`<table class="table-base table-cards">`，每个 `td` 写 `data-label="列名"`（用列头原文）。
   - 没有 `data-label` 或为空串的格整行显示（品名这类主字段）；主字段不在第一列时给它加 `card-title` 排到卡片首行；操作格加 `card-actions`，成为卡片底部的操作行。
   - `td` 上桌面专用的工具类（`pl-5`、`py-*`、`w-full max-w-0`、`whitespace-nowrap` …）一律加 `sm:` 前缀，否则会压过卡片规则；卡片里要显示的列不要用 `hidden sm:table-cell`。
@@ -166,7 +169,7 @@
 
 ### 5.2 Input / Textarea / SearchInput / Select / NativeSelect
 
-- 外观统一来自全局类 `.control`（`main.css`）：surface 底 + line-strong 描边，悬停加深；聚焦（Select 展开时也算）= 墨色描边 + 3px 墨色淡环；`aria-invalid="true"` 时转错误态（红框 + 淡红底，聚焦环变红）；禁用 surface-2 底。组件传了 `error` 就会带上 `aria-invalid`。页面里手写的输入框（AI 对话框、导入明细单元格）也套 `class="control"`，不再手写 `border-* focus:ring-*`。
+- 外观统一来自全局类 `.control`（`main.css`）：surface 底 + line-strong 描边，悬停加深；聚焦（Select 展开时也算）= 墨色描边 + 3px 墨色淡环；`aria-invalid="true"` 时转错误态（红框 + 淡红底，聚焦环变红）；禁用 surface-2 底。组件传了 `error` 就会带上 `aria-invalid`，并经 `aria-describedby` 指向字段下方的错误（`useId()` 生成 id；没有错误时指向 `hint`，两者都没有就不加）——读屏能听到原因，不只是「无效」。表格式明细里隐藏的 `.field-error` 照样被引用。页面里手写的输入框（AI 对话框、导入明细单元格）也套 `class="control"`，不再手写 `border-* focus:ring-*`。
 - 高度：`md`（默认）桌面 36px、手机 44px 且 16px 字；`sm` = 32px（表格行内与明细行）。label 在字段上方，12.5px / 500；必填星号朱砂；占位 faint；字段错误贴在字段下方（`.field-error`：12.5px 红字 + `alert-circle` 图标）。
 - `Input`：`label`、`required`、`hint`、`error`、`suggestions`（datalist）、`size`、`hideLabel`（label 只留给读屏，列头已说明字段时用）、`variant`（`cell` = 表格式输入的单元格：平时无框无底，悬停显描边，聚焦墨色环，出错仍是红框；配 `size="sm"` 与 `hideLabel`，手写时是 `class="control control-cell"`）；事件 `update:modelValue`、`blur`、`enter`。根元素是 `<label>`，外部传的 `class`、`aria-label`、`@change` 落在 label 上。`type="date"` 自动套 `.input-date`（右侧日历图标、点整个框打开、空值占位变淡），不要再给它写 `px-*`。
 - `Textarea`：`label` / `hint` / `error` 与 Input 一致，`rows` 默认 3。
@@ -239,7 +242,7 @@
 
 ### 5.8 Dialog / ConfirmDialog
 
-- `Dialog`：`open`（`update:open`）、`title`、`description?`、`width`（默认 560px；带明细表的登记弹窗 760–880px）、`dirty`（有未保存改动时关闭前二次确认）、`persistent`（只能用明确的按钮关闭，如恢复码）、`mobileFullscreen`（默认 `true`）、`compact`（确认框排版，ConfirmDialog 用）；默认插槽 + `#footer`（按钮靠右，可先放一段 `mr-auto` 小字；插槽参数 `{ close }` 就是右上角 × 用的关闭入口，同样先过 `dirty` / `persistent`）。外观：12px 圆角、`shadow-pop`；头部 18px / 700 标题 + 13px 说明，底边发丝线；正文左右 24px；页脚 canvas 底、顶边发丝线。遮罩在 pointerdown 时关闭，从面板拖选文字到遮罩不会误关；Esc 先取消内层的放弃确认。手机上全屏、页脚钉底。
+- `Dialog`：`open`（`update:open`）、`title`、`description?`（头部一行说明）或 `#description` 插槽（放在正文开头，ConfirmDialog 的 message 走这里）——两者都包在 reka 的 `DialogDescription` 里由 `aria-describedby` 朗读；都没有时弹窗不带 `aria-describedby`（不指向不存在的节点）、`width`（默认 560px；带明细表的登记弹窗 760–880px）、`dirty`（有未保存改动时关闭前二次确认）、`persistent`（只能用明确的按钮关闭，如恢复码）、`mobileFullscreen`（默认 `true`）、`compact`（确认框排版，ConfirmDialog 用）；默认插槽 + `#footer`（按钮靠右，可先放一段 `mr-auto` 小字；插槽参数 `{ close }` 就是右上角 × 用的关闭入口，同样先过 `dirty` / `persistent`）。外观：12px 圆角、`shadow-pop`；头部 18px / 700 标题 + 13px 说明，底边发丝线；正文左右 24px；页脚 canvas 底、顶边发丝线。遮罩在 pointerdown 时关闭，从面板拖选文字到遮罩不会误关；Esc 先取消内层的放弃确认。手机上全屏、页脚钉底。
 - 表单弹窗的页脚从左到右：提示或失败原因（失败用 `Notice` inline + red + `role="alert"`，`class="mr-auto self-center"`）→「取消」（ghost，`@click="close"`，保存中 `disabled`）→ 主动作（primary）。「取消」必须走 `close`，直接 `emit('update:open', false)` 会绕过未保存确认。单测里替换 Dialog 的桩要给 `#footer` 传参（`slots.footer?.({ close })`），否则解构 `{ close }` 的插槽会抛错。
 - `ConfirmDialog`：一句话确认；`message`（写清后果与影响数量）、`confirmText`、`danger`（朱砂实心确认按钮）、`loading`、`confirmDisabled`（有下游依赖、不能直接执行时禁用确认按钮）；默认插槽追加在 message 之后（下游依赖的 Notice、撤销原因输入框）；事件 `confirm`、`update:open`。宽 420、16px / 700 标题、没有分隔线和 ×（「取消」、Esc、遮罩照样能关），手机上不全屏。
 
@@ -372,6 +375,8 @@
 - 键盘顺序跟随阅读顺序：导入页的 StickyActionBar 放在草稿之后、历史与上传区之前，Tab 顺序是「明细 → 保存 / 确认」。
 - 触屏没有悬停：行内操作在触屏上常亮，不要让可操作的控件只在 `:hover` 时出现。
 - 提示与错误区用 `role="alert"`；同一时刻不要出现多个意思重复的 alert（e2e 用 `getByRole('alert')` 定位）。
+- 异步进度（上传中、保存草稿、识别状态、列表刷新）给读屏：常驻一个 sr-only `role="status"` 元素、只换里面的文字（元素和文字一起插入时有的读屏不播报）；文字没变时 DOM 不更新，轮询不会重复播报同一句。措辞别和 e2e 依赖的可见文字重复（如「草稿已保存」「AI：已完成」），否则 `getByText` 会多出一个匹配。
+- 表格列头一律 `<th scope="col">`。
 - `prefers-reduced-motion`：全局把过渡与动画缩到近 0（写在所有 `@layer` 之外，不需要 `!important`），页面不必另写。
 - `forced-colors`（高对比度模式）：自绘复选框与单选框退回系统外观。
 - 文案、`aria-label`、`role` 和按钮名是测试接口：`e2e/import.spec.ts`、`src/**/*.spec.ts` 与服务端测试都依赖它们，改之前先搜测试。
@@ -387,12 +392,12 @@
 - **申请详情 `/requests/:id`**：
   - 页头：`#meta` 是面包屑「申请单 / 流水号」；标题只有流水号（`mono`，e2e 按 `h1` 的文字断言），状态 chip 放 `#status`（待处理 blue / 待到货 amber / 待采购 gray：单条明细写数量，多条写「N 项」；都没有时「实物已办结」teal，整张取消是删除线的「已取消」）；说明行「部门 · 经办人 · 申请日期 · 由 OA 原件导入 / 人工录入 · N 条明细」；动作依次「取消未采购量」ghost、刷新（secondary 图标）、「登记采购」primary。
   - 区块标题在面板外（15px / 600 + 13px 说明，标题到面板 10px，区块之间 28px）。从上到下：①「申请明细与数量进度」（`RequestProgress`，页脚是申请备注）②「已到货，待决定去向」（有到货待处理时出现，标题旁 blue chip「N 批」，`StockProductCard receiving` 单列排）③ 两栏 `lg:grid-cols-[minmax(0,1fr)_360px]`：左「业务记录」，右「OA 原件与附件」与「付款与开票」；`< lg` 单列。
-  - 进度表：第二列是四段进度条（已处理 = 直发 + 入库 teal / 待处理 blue / 待到货 `bg-amber/60` / 待采购 line-strong，段间 2px，按申请量折算，取消与退回的部分留空轨道）+ 一行说明，分段与页头 chip 的计算在 `lineProgress.ts`；条 `aria-hidden`，图例在区块标题右侧。其余数量列的 `data-label`、「6 盒」格式和 `tr[data-request-line]` 是 e2e 接口。≥ 640px 放不下时在自己的容器里横向滚动并钉住首列（真在滚动时首列右侧才有发丝线）；< 640px 走 `.table-cards`，进度条整行。
+  - 进度表：第二列是四段进度条（已处理 = 直发 + 入库 teal / 待处理 blue / 待到货 `bg-amber/60` / 待采购 line-strong，段间 2px，按申请量折算，取消与退回的部分留空轨道）+ 一行说明，分段与页头 chip 的计算在 `lineProgress.ts`；条 `aria-hidden`，图例在区块标题右侧。其余数量列的 `data-label`、「6 盒」格式和 `tr[data-request-line]` 是 e2e 接口。≥ 640px 放不下时在自己的容器里横向滚动并钉住首列（真在滚动时首列右侧才有发丝线）；< 640px 走 `.table-cards`，进度条整行，数值为 0 的次要列（已采购、已到货、直发、累计入库、当前库存）用 `max-sm:hidden` 隐藏——只用 CSS，格子照样渲染（e2e 按 `data-label` 找）；申请、待处理、尚待办理与进度条始终显示。
   - 业务记录（`DocumentCollection`，库存页「领用与归还」共用）：标题与类型筛选（`NativeSelect`，可访问名称「业务记录类型」）在面板外，面板里一条记录一行（`DocumentCard row`；不传 `row` 是「查看业务来源」弹窗里的独立卡片）。头行：类型 chip 与 #编号同在 `h3`（读作「采购成交 #117」，e2e 按 `/^采购成交/` 找）、日期、供应商或去向（直发 / 库存领用 · 部门）、已撤销（outline）/ 付款 / 开票 chip、右侧金额；动作行「登记到货」primary，其余 secondary，「撤销登记」ghost 靠右；`article[data-document-id]` 保留。
   - 右栏：「OA 原件与附件」是 `WorkflowAttachments sheet`（贴面板的文件行 + 顶部计数与「上传附件」）加一行说明与「查看原件识别与核对记录」；「付款与开票」（`RequestPayments`）列出本申请未撤销的采购单（编号 · 供应商、金额、付款与开票 chip），点整行打开「付款与发票」弹窗。
 - **导入 `/import`**：
   - 页头右侧是识别服务状态（`components/import/ImportServiceStatus`，只读 `aiApi.config` 与 `systemApi.ocrHealth`，各自取回后才显示）：「AI 原件识别 已启用 / 未启用 / 未配置」（已启用的条件与服务端自动识别一致：启用 + 上传后自动识别 + 有 Key + 识别检测通过）、「本地 OCR 正常 / 不可用」，文字前一个小圆点（正常 teal、未启用与未配置 faint、不可用 red）。
-  - 从上到下：步骤条（上传原件 → 识别单据 → 核对入账；当前步墨色实心数字、完成 teal 柔底对勾、识别失败琥珀提醒、未到描边数字，步骤之间 1px `line-strong` 线，手机只显示当前步骤名）、状态条（一张 sheet：文件名、「识别：…」「AI：…」、页数、「草稿已保存」（teal）、停止 / 重试）、页级核对复选框；桌面双栏（原件预览 : 草稿 = 5 : 7，`lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]`），手机用「明细 / 原件」分段切换。草稿明细的表头只写一次（品名 / 数量 / 单位；面板窄时逐条堆叠，字段名改写在字段上方），行内 `Input size="sm"`，正在核对的明细 `bg-primary-soft`，「删除」是 `danger-ghost`，识别依据与 AI 建议收在 `Disclosure` 里。
+  - 从上到下：步骤条（上传原件 → 识别单据 → 核对入账；当前步墨色实心数字、完成 teal 柔底对勾、识别失败琥珀提醒、未到描边数字，步骤之间 1px `line-strong` 线，手机只显示当前步骤名）、状态条（一张 sheet：文件名、「识别：…」「AI：…」、页数、「草稿已保存」（teal）、停止 / 重试）、页级核对复选框；桌面双栏（原件预览 : 草稿 = 5 : 7，`lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]`），手机用「明细 / 原件」分段切换。草稿明细的表头只写一次（品名 / 数量 / 单位；面板窄时逐条堆叠，字段名改写在字段上方），行内 `Input size="sm"`，可访问名称带行号（「第 N 行品名 / 规格 / 数量 / 单位」，`hide-label`；e2e 按占位文字找这几格），正在核对的明细 `bg-primary-soft`，「删除」是 `danger-ghost`（可访问名称「删除第 N 行」），识别依据与 AI 建议收在 `Disclosure` 里。
   - 上传态（还没有任务，或地址里的任务已不存在）：步骤条下面两栏 `lg:grid-cols-[minmax(0,1fr)_400px]`——左边 FileDropzone 虚线框（撑高到 280px：标题「把 PDF、OA 截图或手机照片拖到这里」、限制说明、主按钮样式的「选择文件」提示，手机上框下另有「拍照上传」）、隐私说明（含「未确认的原件保留 30 天」）和「上传之后会发生什么」三小段；右边是「未完成的导入」。两栏外层是 `div`：e2e 按「含标题『未完成的导入』的 `section`」找任务面板，再套 `section` 会把上传区也圈进去。
   - StickyActionBar：「保存草稿」（secondary）「确认全部内容并导入」（primary），保存失败与其它错误放在 `#start`；还不能入账时 `#start` 另有一行琥珀 inline 汇总原因（`confirmBlockers`：单据头未填、明细品名 / 数量 / 单位未确认、页面未核对、AI 建议待核对、原件缺失，规则与 `workflowImportConfirmSchema` 及服务端确认一致），此时确认按钮禁用并经 `aria-describedby` 指向这行字（不是 alert）。「重新载入已保存版本」走页内 `ConfirmDialog`，放弃草稿失败的原因只显示在它自己的确认框里。其后是修改历史与 AI 用量（历史只在展开时加载，草稿版本没变不重复请求，有加载中、失败重试与空态；AI 调用状态写中文，费用 `¥0.0123`），页尾仍是「上传区 | 未完成的导入」两栏（上传框不撑高、不显示三小段），方便导入下一份。确认成功后换成一张 sheet：teal 对勾 +「已确认导入」+ 创建 / 合并 / 跳过 / 关联原件数 + 主按钮「继续办理申请」。
   - 「未完成的导入」（标题沿用这个名字，e2e 按它找面板）：只按 `confirmedAt` 区分，分段 Tabs「未完成 / 已入账」，正在看「未完成」时标签后带朱砂计数；每行 = 状态图标（识别中蓝色转圈、待核对 `file`、识别失败琥珀 `alert`、已入账 teal `check-circle`）+ 文件名 +「时间 · 状态」（今天只写时刻、昨天写「昨天 HH:mm」，完整时间在 `title` 里；状态：识别中 / AI 原件识别中 / 识别失败，待人工核对（琥珀）/ 待核对入账（蓝）/ 已入账（teal），原件不在时追加「· 原件缺失」；未确认的任务不叫「已完成」）+ 右侧一个链接：待核对与识别失败是「继续处理」（secondary sm），识别中与已入账是「查看」（ghost sm）；每行只有文件名带 `title`、只有这一个链接（e2e 按 `title` 与链接计数）；当前任务行 `aria-current="true"`、`bg-primary-soft` 并带「当前」Badge；页脚「共 N 条」或「已显示 N 条」，底部「显示更多（共 N 条）」追加下一页。
@@ -402,7 +407,7 @@
 - **设置 `/settings`**：
   - `SettingsLayout` 给出页头「设置」与子导航 `<nav aria-label="设置分区">`：桌面左侧 200px、滚动时钉在 `<main>` 顶部，当前项 surface 底 + 左侧 2px 朱砂 + 墨色 600；< lg 变成横向滚动的药丸行。右侧内容最宽 760px。「系统」一组是 `/settings` 各区块的锚点（外观、账号安全、系统状态、AI 助手、自动备份、备份管理，id 即地址里的 `#hash`，见 `components/settings/sections.ts`），当前项跟着 `<main>` 的滚动位置走（`aria-current="true"`），带 `#hash` 打开时载入后定位到区块；「主数据与记录」是供应商与比价 `/settings/suppliers`、审计日志 `/settings/audit` 两个子页（`aria-current="page"`）。
   - 每个区块一个 `Panel flush`：标题行 + 设置行（`components/settings/SettingRow.vue`：左 13.5px / 500 label + 12.5px muted 说明，右边控件，行间 `divide-y divide-line`）；开关行直接用 `Switch`（`label-position="left"`，说明走 `description`，用 `[&_.text-meta]:` 调成 12.5px muted）。除「外观」外各区块是 `components/settings/` 下的一个组件（`AccountSecurityPanel`、`SystemStatusPanel`、`AiSettingsPanel`、`AutoBackupPanel`、`BackupManagerPanel`）；`SettingsView` 只加载系统状态、备份列表、OCR 健康与 AI 配置（四个请求并行）并按顺序编排，初始值经 props 交给面板，备份列表用 `v-model:backups` 与 `v-model:error`。系统状态失败是整页 `ErrorState`；备份列表、AI 配置读取失败只在各自区块显示 inline 红字 +「重试」，不显示假空态。系统状态面板的「刷新」只重拉系统状态与 OCR 健康（按钮转圈），不回填其它面板的表单。
-  - 账号安全：修改密码、重置恢复码各在弹窗里；退出登录只在顶栏账号菜单与手机「更多」里。系统状态：标题说明是版本与运行时长；四格数字（申请单 / 物品 / 有效单据（已过账）/ 数据库）；两行状态：库存核对（接口返回时才显示：正常 = teal、N 处不一致 = red、尚未核对 = gray Badge，后跟核对时间）与本地 OCR 服务（不可用时下方琥珀提示）。备份管理行内只有「下载」，恢复与删除收在「…」里并各走确认框。AI 区的文案被 e2e 依赖（「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」）。
+  - 账号安全：修改密码、重置恢复码各在弹窗里；退出登录只在顶栏账号菜单与手机「更多」里。系统状态：标题说明是版本与运行时长；四格数字（申请单 / 物品 / 有效单据（已过账）/ 数据库）；两行状态：库存核对（接口返回时才显示：正常 = teal、N 处不一致 = red、尚未核对 = gray Badge，后跟核对时间）与本地 OCR 服务（不可用时下方琥珀提示）。备份管理行内只有「下载」，恢复与删除收在「…」里并各走确认框；恢复进行中是 persistent 的「正在恢复备份」弹窗（`role="status"` 的进度文字），焦点圈在弹窗里，键盘也碰不到页面上的按钮。AI 区的文案被 e2e 依赖（「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」）。
   - 供应商与比价：查询实际成交价格，明确展示规格、单位和来源申请；不以旧的品名报价表为新采购提供建议。行内「编辑」+「…」（删除）；已有单据的供应商在删除确认框里说明「已有 N 份单据，不能删除」并禁用确认按钮（`confirmDisabled`）。成交价格首次查询用骨架，之后再查询保留旧表格、工具栏显示「查询中…」；搜索无结果时复述关键词并给「清除关键词」。审计日志：操作类型 chip 只用 gray / amber（覆盖或回退数据：恢复备份、改密、撤销登记…）/ red（失败、删除、库存核对不一致），业务登记（`WORKFLOW_*`）显示中文名；整行可点展开详情，键盘与读屏用详情格里的展开按钮（`aria-expanded`）。
 - **统计报表 `/insights`**：
   - 筛选一行：期间分段（全部 / 本月 / 上月 / 本季度 / 自定义：快捷期间按本地日历写入整月 / 整季的起止日期并立即查询；按当前填的日期认出对应的快捷期间；「自定义」把焦点交给起始日期）+「起始日期」「结束日期」+ 金额分组 +「查询报表」。

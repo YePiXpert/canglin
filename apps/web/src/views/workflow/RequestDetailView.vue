@@ -20,6 +20,7 @@ import WorkflowActions from '@/components/workflow/WorkflowActions.vue';
 import WorkflowAttachments from '@/components/workflow/WorkflowAttachments.vue';
 import { requestCancelChoices } from '@/components/workflow/commandChoices';
 import { PROGRESS_SEGMENTS, requestStatusChips } from '@/components/workflow/lineProgress';
+import { setPageTitle } from '@/utils/title';
 
 /*
  * 申请详情（DESIGN.md §8）：页头 → 申请明细与数量进度 → 已到货，待决定去向 → 两栏（业务记录 | OA 原件与附件、付款与开票）。
@@ -50,6 +51,10 @@ watch(() => route.params.id, () => {
   reset(); resetStock();
   void load(); void loadStock();
 }, { immediate: true });
+/* 标签页标题：数据到位后改成「{流水号} · 仓廪」（导航时路由先设成「申请详情 · 仓廪」） */
+watch(() => request.value?.serialNumber, (serial) => {
+  if (serial) setPageTitle(serial);
+});
 async function refresh() {
   refreshing.value = true;
   try { await Promise.all([load(), loadStock(), documents.value?.refresh(), payments.value?.refresh()]); }
