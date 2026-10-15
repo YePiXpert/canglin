@@ -163,8 +163,7 @@ const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloa
 
     <!--
       上传区（左）与导入任务（右 400px）：上传态紧跟在步骤条下面；有任务后两栏一起留在页尾，核对完可以直接导入下一份。
-      上传区只有一个实例，里面始终只有一个 input[type=file]。外层用 div 而不是 section：
-      e2e 按「含标题『未完成的导入』的 section」找任务面板，外面再套 section 会把上传区也圈进去。
+      上传区只有一个实例，里面始终只有一个 input[type=file]。外层只是排版容器：两块各自是有名字的区域。
     -->
     <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
       <ImportUploadSection />

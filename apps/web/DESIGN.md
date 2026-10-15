@@ -48,7 +48,7 @@
 | `--radius-card` / `--radius-control` | 面板与卡片 10px / 按钮与输入框 6px；弹窗 `rounded-xl`（12px），状态 chip `rounded-sm`（4px），药丸 `rounded-full` |
 | `--shadow-xs` / `--shadow-card` / `--shadow-pop` | 经 `--elevation-*` 间接取值：Tailwind 会把命名阴影的值内联进工具类，直接在 `.dark` 覆盖 `--shadow-*` 无效。面板与按钮都没有阴影；只有弹窗、下拉、Toast 用 `shadow-pop`，分段控件的当前项用 `shadow-xs` |
 | `animate-fade-in` / `animate-pop-in` / `animate-sheet-in` | 遮罩 / 下拉与弹层（也给登录面板的首帧）/ 底部抽屉的进场动效，时长与曲线见 `main.css` |
-| `animate-check-draw` | 对勾按笔画描出（300ms）：path 写 `pathLength="1" stroke-dasharray="1"`；只用于导入「已确认导入」。不做路由切换过渡（e2e 依赖即时渲染，`<main>` 回顶也会受影响） |
+| `animate-check-draw` | 对勾按笔画描出（300ms）：path 写 `pathLength="1" stroke-dasharray="1"`；只用于导入「已确认导入」。不做路由切换过渡：这是录入工具，切页靠即时渲染与 `<main>` 回顶，过渡会让回顶和钉住的元素时序变复杂 |
 | `--font-sans` / `--font-mono` | 系统中文字体栈（Segoe UI、PingFang SC、Microsoft YaHei …，不引网络字体）/ 流水号、备份文件名与代码 |
 
 文字层级：
@@ -189,7 +189,7 @@
 
 - 都是原生 `<input>`（`appearance: none` 自绘），role、键盘、label 关联都是原生的；Switch 底下也是 checkbox，role 仍是 checkbox，Playwright 的 `check()` / `uncheck()` 照常可用。
 - 选中色是墨色：复选、单选选中 = 墨色实心（深色下近白，勾与圆点用 `primary-fg`）；Switch 开 = 墨色轨道。键盘焦点沿用全局 2px 朱砂外框；禁用 50%。
-- `description` 走 `aria-describedby`，不进可访问名称；补充说明不要塞进 `label`（e2e 按精确名称找复选框）。
+- `description` 走 `aria-describedby`，不进可访问名称；补充说明不要塞进 `label`：名称保持简短，读屏先读名称、再读说明。
 - Checkbox：`v-model` 绑布尔，或配合 `value` 绑数组 / Set（返回新数组 / 新 Set）；也可以 `:checked` + `@change`（原生事件）受控；`indeterminate`；`size="sm"`（14px）。有 label / description / 插槽时整行是 `<label>`，否则只渲染 input，此时必须给 `ariaLabel`。
 - 单选不封装组件，直接用全局类 `<input type="radio" class="radio">`（见下条）：同组传同一个 `name`；`change` 只在被选中时触发。
 - Switch：`labelPosition="left"`（设置行文字在左、开关在右，配 `class="w-full justify-between"`）；没有 `size`。
@@ -205,7 +205,7 @@
 - `Tabs`（按值切换）：`tabs: TabItem[]`（`value`、`label`、`count?`、`icon?`、`disabled?`）；`block`（撑满一行、各项等宽）；`ariaLabel`（整组 `role="group"`）；`disabled`（整组禁用，如保存中不许切换退货方式）。每项是普通 `<button>`，当前项 `aria-pressed="true"`；事件 `update:modelValue`、`change`（点当前项不触发）。
   - `variant="segmented"`：surface-2 轨道（2px 内边距、6px 圆角）+ 当前项白底轻阴影；用于列表筛选（「全部 · 有待采购 · 有待到货 …」）、面板顶部的视图切换和分段控件。`count` 是跟在标签后的小号数字，当前项的计数朱砂。
   - `variant="underline"`（默认）：只配合页级分区；当前项墨色 600 + 底部 2px 朱砂下划线（左右各收 12px）；`count` 是小药丸（surface-2 底），当前项变朱砂柔底。
-  - `count` 会并入按钮的可访问名称（「有待采购 2」）：e2e 按精确名称点的页签（「库存物品」「领用与归还」「已入账」…）加 `count` 前先改测试。
+  - `count` 会并入按钮的可访问名称（「有待采购 2」）；按名称找页签的测试要允许计数（`/^库存物品( \d+)?$/`）。
 - 按 query 区分的列表行（如 `/import?task=…`）不要直接用 `<router-link>`：它判断「当前」时不看 query，会给每一行都加 `aria-current="page"`。用 `custom` 插槽自己渲染 `<a>`，「当前」由页面标注。
 
 ```vue
@@ -215,8 +215,8 @@
 
 ### 5.5 PageHeader / Panel / StickyActionBar
 
-- `PageHeader`：`title`、`description?`、`mono?`（流水号当标题时用等宽字）；默认插槽 = 本页动作（右侧，窄屏换行靠左）；`#meta` 放标题上方的小字（面包屑「申请单 / 流水号」、「示例数据」chip）；`#status` 放紧跟在标题右边的状态 chip——在 `h1` 之外，不进标题的可访问名称（e2e 按 `h1` 的文字断言流水号）；`#description` 替代说明文本（需要链接或高亮数字时）。标题 24px / 700（手机 22px），说明 13px muted；自带 `mb-6`，页面不再给它外边距。
-- `Panel`：一层面板（`.card`：surface 底 + 1px line + 10px 圆角，无阴影；`overflow-clip`：按圆角裁掉贴边内容，但不是滚动容器）；`title?`（h2，15px / 600）、`description?`、`flush`（body 无内边距，表格与列表贴边）、`bodyClass`（整体替换 body 的类，默认 `p-5`）；插槽 `#actions`（头部右侧，放 sm 按钮；放 ghost 按钮时加 `-mr-2`）、`#toolbar`（头部与 body 之间的工具栏行：`flex flex-wrap items-center gap-2.5 px-4 py-3` + 底部发丝线：搜索框最左，分段 Tabs 筛选，右侧 `ml-auto` 放计数 / 排序 / 动作；不传不渲染）、默认、`#footer`（分页、计数；`px-4 py-2.5` + 顶部发丝线，插槽什么都没渲染时整条隐藏——total 为 0 的 Pagination 就是这样）。新写的面板优先用它。
+- `PageHeader`：`title`、`description?`、`mono?`（流水号当标题时用等宽字）；默认插槽 = 本页动作（右侧，窄屏换行靠左）；`#meta` 放标题上方的小字（面包屑「申请单 / 流水号」、「示例数据」chip）；`#status` 放紧跟在标题右边的状态 chip——在 `h1` 之外，不进标题的可访问名称（标题只读流水号）；`#description` 替代说明文本（需要链接或高亮数字时）。标题 24px / 700（手机 22px），说明 13px muted；自带 `mb-6`，页面不再给它外边距。
+- `Panel`：一层面板（`.card`：surface 底 + 1px line + 10px 圆角，无阴影；`overflow-clip`：按圆角裁掉贴边内容，但不是滚动容器）；`title?`（h2，15px / 600）、`description?`、`flush`（body 无内边距，表格与列表贴边）、`bodyClass`（整体替换 body 的类，默认 `p-5`）；插槽 `#actions`（头部右侧，放 sm 按钮；放 ghost 按钮时加 `-mr-2`）、`#toolbar`（头部与 body 之间的工具栏行：`flex flex-wrap items-center gap-2.5 px-4 py-3` + 底部发丝线：搜索框最左，分段 Tabs 筛选，右侧 `ml-auto` 放计数 / 排序 / 动作；不传不渲染）、默认、`#footer`（分页、计数；`px-4 py-2.5` + 顶部发丝线，插槽什么都没渲染时整条隐藏——total 为 0 的 Pagination 就是这样）。有 `title` 时根元素 `<section>` 经 `aria-labelledby` 以标题命名，是读屏可以跳转的区域（测试用 `getByRole('region', { name })` 找面板）。新写的面板优先用它。
 - `StickyActionBar`：页面底部的保存 / 确认条；默认插槽放按钮（靠右，手机整宽加 `max-sm:flex-1`），`#start` 放提示与错误（用 `Notice variant="inline"`，`role="alert"` 由调用方给；什么都没渲染时整块隐藏）。
 
 ```vue
@@ -233,7 +233,7 @@
 
 ### 5.6 FileDropzone
 
-- 点击或拖入上传。内部始终只有一个 `<input type="file">`（`sr-only`，整块是可键盘聚焦的 `<label>`），e2e 直接对它 `setInputFiles`。
+- 点击或拖入上传。内部始终只有一个 `<input type="file">`（`sr-only`，整块是可键盘聚焦的 `<label>`），测试直接对它 `setInputFiles`，和用户选文件走同一条路径。
 - 外观：surface 底 + 1.5px line-strong 虚线、12px 圆角；48px surface-2 图标块 + 15px / 600 标题 + 12px faint 限制说明；悬停描边加深、拖入时描边墨色 + surface-2 底；键盘焦点是全局的朱砂外框。`art`（只给导入页撑高的上传态）：≥ 640px 用 96px 的「单据 + 扫描线」线描代替图标块，拖入时线描只换描边色（faint → 墨色）；手机与页尾的紧凑上传框不传，仍是图标块。
 - props：`accept`（拖入的文件也按它过滤）、`multiple`（默认只交出第一个文件）、`label`、`hint`、`disabled`、`capture`（手机上多一个「拍照上传」，临时给同一个 input 加 `capture`）；默认插槽追加在文案下方。
 - 事件：`files(File[])`（交出后清空 input，同一文件可以再选）；`rejected(File[])`——组件已经弹了错误 Toast（「不支持的文件类型，请选择 …」，格式名按 `accept` 生成：`.pdf` → PDF、`.jpeg` 并入 JPG、`image/*` → 图片），调用方不要再弹。组件用到 toast store，单测挂载需要活动的 pinia（见 `FileDropzone.spec.ts`）。
@@ -265,7 +265,7 @@
 - `EmptyState`：44px surface-2 圆角图标块 + 15px / 600 标题 + 13px muted 一句话 + 最多两个 sm 按钮（默认插槽），上下 40px。`icon`（默认 `box`；`false` = 不画图标块）、`art?`（单色线描，传了就代替图标块，默认不画）、`title`、`description?`；`illustration`（`box`、`ledger`、`truck`、`search`、`empty`）是旧的场景名，现在只换成对应的线性图标，新代码直接传 `icon`。三种用法：首次使用 = 图标（重要的几处用 `art`）+ 一句话 + 两个入口（primary sm + secondary sm）；搜索 / 筛选无结果 = `icon=false`、不传 `art`，标题复述条件，给「清除全部条件」(secondary sm)/「只清除关键词」(ghost sm)；待办已清空 = 页面里一行提示，不占高度。
 - 「墨线画」`LineArt`（`components/ui/LineArt.vue` + `art.ts`）：单色线描，120 × 96 视窗、2px 描边（不随尺寸缩放）、圆角线帽、`aria-hidden`，宽不超过 120px。主线是 currentColor（调用方给 `text-faint`，拖入、强调时可换墨色），单据上的文字行与地面线自动画成更淡的 `line-strong`，深浅色跟着令牌换；`accent` 只给登录页粮仓门楣的一方朱砂印。只出现在没有数据的地方：工作台与申请单的「还没有申请单」（`ledger`）、库存「还没有库存物品」（`box`）、备份管理「还没有备份」（`archive`）、导入任务列表空态（`inbox`）、404（`search`）、导入页撑高的上传框（`scan`）、登录页左栏（`granary`）。允许的只有这种单色线描；不用彩色插画、照片、素材库插图、渐变与背景纹理，新增母题照 `art.ts` 的规格画。
 - `ErrorState`：原位的加载失败——朱砂 `alert-circle` + `title`（默认「加载失败」）+ `message` +「重新加载」（secondary sm，`loading` 时转圈并禁用；旧名 `retrying` 已改）；默认插槽追加在「重新加载」之后（如「查看系统状态」ghost sm）；事件 `retry`。不带 role（页面同时只该有一个 alert）。
-- `Skeleton`：surface-2 条块，用尺寸类拼出占位形状（`<Skeleton class="h-4 w-40" />`），代替「加载中…」文字；只给首次加载，刷新时保留旧内容。`animate-pulse` 也是 e2e 判断「没有停在骨架屏上」的依据。
+- `Skeleton`：surface-2 条块，用尺寸类拼出占位形状（`<Skeleton class="h-4 w-40" />`），代替「加载中…」文字；只给首次加载，刷新时保留旧内容。根元素带 `data-skeleton`，测试按它判断「已离开骨架屏」（`animate-pulse` 只是样式）。
 - Toast：`useToastStore()` 的 `success(msg, action?)`、`error(msg)`、`info(msg)`；墨色浮层白字（`bg-panel`），成功图标绿、信息图标蓝，错误换成深朱砂底（`bg-panel-red`）；桌面右下、手机居中在标签栏之上，最多同时 4 条；错误是 `role="alert"`，其余 `role="status"`；带动作（如「撤销」）的成功提示停留更久，动作是浅色小药丸按钮。
 
 ### 5.10 Icon
@@ -381,58 +381,58 @@
 - 纯图标按钮必须有 `aria-label`（`.row-action` 可以用 `title`）；`Icon` 本身 `aria-hidden`。
 - 键盘顺序跟随阅读顺序：导入页的 StickyActionBar 放在草稿之后、历史与上传区之前，Tab 顺序是「明细 → 保存 / 确认」。
 - 触屏没有悬停：行内操作在触屏上常亮，不要让可操作的控件只在 `:hover` 时出现。
-- 提示与错误区用 `role="alert"`；同一时刻不要出现多个意思重复的 alert（e2e 用 `getByRole('alert')` 定位）。
-- 异步进度（上传中、保存草稿、识别状态、列表刷新）给读屏：常驻一个 sr-only `role="status"` 元素、只换里面的文字（元素和文字一起插入时有的读屏不播报）；文字没变时 DOM 不更新，轮询不会重复播报同一句。措辞别和 e2e 依赖的可见文字重复（如「草稿已保存」「AI：已完成」），否则 `getByText` 会多出一个匹配。
+- 提示与错误区用 `role="alert"`；同一时刻不要出现多个意思重复的 alert（读屏会逐个打断播报）。
+- 异步进度（上传中、保存草稿、识别状态、列表刷新）给读屏：常驻一个 sr-only `role="status"` 元素、只换里面的文字（元素和文字一起插入时有的读屏不播报）；文字没变时 DOM 不更新，轮询不会重复播报同一句。措辞按读屏的需要写；测试按 `data-testid` 读可见的状态文字，不靠措辞区分。
 - 表格列头一律 `<th scope="col">`。
 - `prefers-reduced-motion`：全局把过渡与动画缩到近 0（写在所有 `@layer` 之外，不需要 `!important`），页面不必另写。
 - `forced-colors`（高对比度模式）：自绘复选框与单选框退回系统外观。
-- 文案、`aria-label`、`role` 和按钮名是测试接口：`e2e/import.spec.ts`、`src/**/*.spec.ts` 与服务端测试都依赖它们，改之前先搜测试。
+- 测试接口与定位约定：可见文案、可访问名称（label、`aria-label`、按钮名）、`role` 与 `data-*` 钩子是测试接口，改了就同步改测试（`apps/web/e2e`、`src/**/*.spec.ts`），不是不能改。测试优先用 `getByRole(role, { name })` / `getByLabel`；结构上按业务钩子（`data-request-id`、`data-document-id`、`data-product-id`、`data-request-line`、`data-command-line`、`data-receipt-line`、`data-purchase-line`、`data-task-id`）或 `data-testid` 找。不按 DOM 层级（`section` / `header` 祖先）、元素个数（title、链接计数）或样式类（`animate-pulse`）找——页面结构与样式不为测试让步。
 
 ## 8. 页面特例
 
-- **登录**：桌面（≥ lg）左右两栏——左 5/12 是品牌面板（画布色，右侧一条发丝线）：方印 + 词标、线描粮仓（`granary`，门楣朱砂印）、一句定位与三条价值点（原件先存档 / 按量采购可追溯 / 库存与领用同一本账）；右侧是表单面板（首帧 `animate-pop-in`），面板里的方印与词标在桌面上隐藏，避免重复。手机单栏，只有表单面板，线描不显示。保留 `input[type=password]`、按钮文字「登 录」（e2e 用 `/^登\s*录$/` 匹配）、恢复码与初始化流程、页脚版本号。
+- **登录**：桌面（≥ lg）左右两栏——左 5/12 是品牌面板（画布色，右侧一条发丝线）：方印 + 词标、线描粮仓（`granary`，门楣朱砂印）、一句定位与三条价值点（原件先存档 / 按量采购可追溯 / 库存与领用同一本账）；右侧是表单面板（首帧 `animate-pop-in`），面板里的方印与词标在桌面上隐藏，避免重复。手机单栏，只有表单面板，线描不显示。保留 `input[type=password]`、按钮文字「登 录」（测试按 `/^登\s*录$/` 找）、恢复码与初始化流程、页脚版本号。
 - **工作台 `/workbench`**：页头说明写等待推进的申请张数（待办总数）。「待办概览」是一行数字：到货待处理在最前（大于 0 时数字朱砂）、待到货、待采购、未完成导入，最右库存物品；各项链接到 `/requests?stage=…`、`/import`、`/stock`，手机上是通栏横向滑动的小卡。主体「待办申请」取后端待办的前 10 张（`pending: '1'`，后端按录入倒序），前端按下一步重排：有待处理 > 有待到货 > 仅待采购，同级按申请日期升序（`components/workflow/workbench.ts`）；每行是 `WorkbenchRequestRow`（流水号、部门 · 经办人、日期 · 明细数与状态 chip ｜ 各明细的剩余数量，待处理蓝色加粗、已办结绿色 ｜ 下一步按钮 + 一句原因：定去向 primary，登记到货 / 登记采购 secondary），按钮都进 `/requests/:id` 办理，工作台不直接登记；桌面三栏 200 / 1fr / 180，窄屏纵向堆叠、按钮整宽。待办清空时是一行提示（不占高度），从没有申请时给「人工录入申请」入口。右栏（< xl 排到主体下方）：`components/import/ImportPendingAside`（最近 5 份未入账的导入，「继续处理」进 `/import?task=…`，总数交给概览）与 `RecentDocumentsAside`（最近录入的 3 条业务记录，能对应到申请的链接到申请详情）。
 - **申请单 `/requests`**：
   - 列表（`RequestCollection`）是一层 `Panel flush`：工具栏 = 搜索（流水号 / 品名 / 部门 / 经办人；接口不搜规格）+ 分段筛选「全部 · 有待采购 · 有待到货 · 有待处理 · 已办结」（地址参数 `stage`，工作台的待办数字链接到这里）+ 右侧「共 N 张 · 按录入时间倒序」（接口按录入顺序倒序）。表格 `table-fixed`，一张申请一行（`RequestRow`，`tr[data-request-id]`）：流水号（等宽，副行「N 条明细 · N 份原件」）| 部门 / 经办人 | 申请日期 | 申请明细（前两项单行截断带 title，「等 N 项」不参与截断；只有一条明细时副行写申请 / 已采购 / 已到货 …）| 进度 chips | 下一步 +「…」（查看申请详情、查看原件）。没有记录时不出分页；首次使用给「导入 OA 单」「人工录入申请」两个入口，搜索 / 筛选无结果复述条件并给「清除全部条件」「只清除关键词」。手机按 `.table-cards` 变卡片：流水号与明细在前，chips 与按钮在底部。
   - chips 与下一步由 `requestSummary.ts` 从后端的 `stages` 与数量推导：待处理（blue）、待到货（amber）在单位相同时合计数量（「待处理 4 包」），单位不同只数条数；待采购（gray）数条数；还有待办时已办结 / 已取消的明细只数条数，没有待办时是「实物已办结」（teal），全部取消是划线的「已取消」。下一步按 有待处理「定去向」> 有待到货「登记到货」> 有待采购「登记采购」，都进详情办理；没有待办是 ghost「查看」。
-  - 人工录入（`RequestCreateDialog`，880px）：头部「OA 流水号（等宽）/ 申请日期 / 申请部门 / 经办人」一行；明细是表格式输入，可访问名称「第 N 行品名 / 规格 / 申请数量 / 单位」与按钮「添加申请明细」「删除第 N 行」「确认创建申请」被 e2e 依赖。单位格回车跳到下一行的品名、最后一行回车加一行（输入法确认候选词的回车不算）；行级错误按行记（删行不会错位），字段只标 `aria-invalid`，原因在表下汇总「第 N 行：原因」；备注是单行「申请备注」。手机上每条明细一张小卡（单元格恢复描边、44px 高），弹窗全屏、页脚钉底。
+  - 人工录入（`RequestCreateDialog`，880px）：头部「OA 流水号（等宽）/ 申请日期 / 申请部门 / 经办人」一行；明细是表格式输入，可访问名称带行号（「第 N 行品名 / 规格 / 申请数量 / 单位」、按钮「删除第 N 行」），另有「添加申请明细」「确认创建申请」。单位格回车跳到下一行的品名、最后一行回车加一行（输入法确认候选词的回车不算）；行级错误按行记（删行不会错位），字段只标 `aria-invalid`，原因在表下汇总「第 N 行：原因」；备注是单行「申请备注」。手机上每条明细一张小卡（单元格恢复描边、44px 高），弹窗全屏、页脚钉底。
 - **申请详情 `/requests/:id`**：
-  - 页头：`#meta` 是面包屑「申请单 / 流水号」；标题只有流水号（`mono`，e2e 按 `h1` 的文字断言），状态 chip 放 `#status`（待处理 blue / 待到货 amber / 待采购 gray：单条明细写数量，多条写「N 项」；都没有时「实物已办结」teal，整张取消是删除线的「已取消」）；说明行「部门 · 经办人 · 申请日期 · 由 OA 原件导入 / 人工录入 · N 条明细」；动作依次「取消未采购量」ghost、刷新（secondary 图标）、「登记采购」primary。
+  - 页头：`#meta` 是面包屑「申请单 / 流水号」；标题只有流水号（`mono`），状态 chip 放 `#status`（待处理 blue / 待到货 amber / 待采购 gray：单条明细写数量，多条写「N 项」；都没有时「实物已办结」teal，整张取消是删除线的「已取消」）；说明行「部门 · 经办人 · 申请日期 · 由 OA 原件导入 / 人工录入 · N 条明细」；动作依次「取消未采购量」ghost、刷新（secondary 图标）、「登记采购」primary。
   - 区块标题在面板外（15px / 600 + 13px 说明，标题到面板 10px，区块之间 28px）。从上到下：①「申请明细与数量进度」（`RequestProgress`，页脚是申请备注）②「已到货，待决定去向」（有到货待处理时出现，标题旁 blue chip「N 批」，`StockProductCard receiving` 单列排）③ 两栏 `lg:grid-cols-[minmax(0,1fr)_360px]`：左「业务记录」，右「OA 原件与附件」与「付款与开票」；`< lg` 单列。
-  - 进度表：第二列是四段进度条（已处理 = 直发 + 入库 teal / 待处理 blue / 待到货 `bg-amber/60` / 待采购 line-strong，段间 2px，按申请量折算，取消与退回的部分留空轨道）+ 一行说明，分段与页头 chip 的计算在 `lineProgress.ts`；条 `aria-hidden`，图例在区块标题右侧。其余数量列的 `data-label`、「6 盒」格式和 `tr[data-request-line]` 是 e2e 接口。≥ 640px 放不下时在自己的容器里横向滚动并钉住首列（真在滚动时首列右侧才有发丝线）；< 640px 走 `.table-cards`，进度条整行，数值为 0 的次要列（已采购、已到货、直发、累计入库、当前库存）用 `max-sm:hidden` 隐藏——只用 CSS，格子照样渲染（e2e 按 `data-label` 找）；申请、待处理、尚待办理与进度条始终显示。
-  - 业务记录（`DocumentCollection`，库存页「领用与归还」共用）：标题与类型筛选（`NativeSelect`，可访问名称「业务记录类型」）在面板外，面板里一条记录一行（`DocumentCard row`；不传 `row` 是「查看业务来源」弹窗里的独立卡片）。头行：类型 chip 与 #编号同在 `h3`（读作「采购成交 #117」，e2e 按 `/^采购成交/` 找）、日期、供应商或去向（直发 / 库存领用 · 部门）、已撤销（outline）/ 付款 / 开票 chip、右侧金额；动作行「登记到货」primary，其余 secondary，「撤销登记」ghost 靠右；`article[data-document-id]` 保留。
+  - 进度表：第二列是四段进度条（已处理 = 直发 + 入库 teal / 待处理 blue / 待到货 `bg-amber/60` / 待采购 line-strong，段间 2px，按申请量折算，取消与退回的部分留空轨道）+ 一行说明，分段与页头 chip 的计算在 `lineProgress.ts`；条 `aria-hidden`，图例在区块标题右侧。其余数量列带 `data-label`（卡片里的列名，也是测试钩子），行带 `tr[data-request-line]`。≥ 640px 放不下时在自己的容器里横向滚动并钉住首列（真在滚动时首列右侧才有发丝线）；< 640px 走 `.table-cards`，进度条整行，数值为 0 的次要列（已采购、已到货、直发、累计入库、当前库存）用 `max-sm:hidden` 隐藏——只用 CSS，格子照样渲染，表格结构不随数值变；申请、待处理、尚待办理与进度条始终显示。
+  - 业务记录（`DocumentCollection`，库存页「领用与归还」共用）：标题与类型筛选（`NativeSelect`，可访问名称「业务记录类型」）在面板外，面板里一条记录一行（`DocumentCard row`；不传 `row` 是「查看业务来源」弹窗里的独立卡片）。头行：类型 chip 与 #编号同在 `h3`（读作「采购成交 #117」）、日期、供应商或去向（直发 / 库存领用 · 部门）、已撤销（outline）/ 付款 / 开票 chip、右侧金额；动作行「登记到货」primary，其余 secondary，「撤销登记」ghost 靠右；`article[data-document-id]` 保留。
   - 右栏：「OA 原件与附件」是 `WorkflowAttachments sheet`（贴面板的文件行 + 顶部计数与「上传附件」）加一行说明与「查看原件识别与核对记录」；「付款与开票」（`RequestPayments`）列出本申请未撤销的采购单（编号 · 供应商、金额、付款与开票 chip），点整行打开「付款与发票」弹窗。
 - **导入 `/import`**：
   - 页头右侧是识别服务状态（`components/import/ImportServiceStatus`，只读 `aiApi.config` 与 `systemApi.ocrHealth`，各自取回后才显示）：「AI 原件识别 已启用 / 未启用 / 未配置」（已启用的条件与服务端自动识别一致：启用 + 上传后自动识别 + 有 Key + 识别检测通过）、「本地 OCR 正常 / 不可用」，文字前一个小圆点（正常 teal、未启用与未配置 faint、不可用 red）。
-  - 从上到下：步骤条（上传原件 → 识别单据 → 核对入账；当前步墨色实心数字、完成 teal 柔底对勾、识别失败琥珀提醒、未到描边数字，步骤之间 1px `line-strong` 线，手机只显示当前步骤名）、状态条（一张 sheet：文件名、「识别：…」「AI：…」、页数、「草稿已保存」（teal）、停止 / 重试）、页级核对复选框；桌面双栏（原件预览 : 草稿 = 5 : 7，`lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]`），手机用「明细 / 原件」分段切换。草稿明细的表头只写一次（品名 / 数量 / 单位；面板窄时逐条堆叠，字段名改写在字段上方），行内 `Input size="sm"`，可访问名称带行号（「第 N 行品名 / 规格 / 数量 / 单位」，`hide-label`；e2e 按占位文字找这几格），正在核对的明细 `bg-primary-soft`，「删除」是 `danger-ghost`（可访问名称「删除第 N 行」），识别依据与 AI 建议收在 `Disclosure` 里。
-  - 上传态（还没有任务，或地址里的任务已不存在）：步骤条下面两栏 `lg:grid-cols-[minmax(0,1fr)_400px]`——左边 FileDropzone 虚线框（撑高到 280px：标题「把 PDF、OA 截图或手机照片拖到这里」、限制说明、主按钮样式的「选择文件」提示，手机上框下另有「拍照上传」）、隐私说明（含「未确认的原件保留 30 天」）和「上传之后会发生什么」三小段；右边是「未完成的导入」。两栏外层是 `div`：e2e 按「含标题『未完成的导入』的 `section`」找任务面板，再套 `section` 会把上传区也圈进去。
+  - 从上到下：步骤条（上传原件 → 识别单据 → 核对入账；当前步墨色实心数字、完成 teal 柔底对勾、识别失败琥珀提醒、未到描边数字，步骤之间 1px `line-strong` 线，手机只显示当前步骤名）、状态条（一张 sheet：文件名、「识别：…」「AI：…」、页数、「草稿已保存」（teal）、停止 / 重试）、页级核对复选框；桌面双栏（原件预览 : 草稿 = 5 : 7，`lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]`），手机用「明细 / 原件」分段切换。草稿明细的表头只写一次（品名 / 数量 / 单位；面板窄时逐条堆叠，字段名改写在字段上方），行内 `Input size="sm"`，可访问名称带行号（「第 N 行品名 / 规格 / 数量 / 单位」，`hide-label`），正在核对的明细 `bg-primary-soft`，「删除」是 `danger-ghost`（可访问名称「删除第 N 行」），识别依据与 AI 建议收在 `Disclosure` 里。
+  - 上传态（还没有任务，或地址里的任务已不存在）：步骤条下面两栏 `lg:grid-cols-[minmax(0,1fr)_400px]`——左边 FileDropzone 虚线框（撑高到 280px：标题「把 PDF、OA 截图或手机照片拖到这里」、限制说明、主按钮样式的「选择文件」提示，手机上框下另有「拍照上传」）、隐私说明（含「未确认的原件保留 30 天」）和「上传之后会发生什么」三小段；右边是「未完成的导入」。两栏外层只是排版容器，两块各自是有名字的区域。
   - 草稿区（`ImportDraftEditor` 的 fieldset）在草稿载入前（识别中）与已确认后整体只读：载入会整份替换单据头与明细，载入前的输入既不保存也会被覆盖。
   - StickyActionBar：「保存草稿」（secondary）「确认全部内容并导入」（primary），保存失败与其它错误放在 `#start`；还不能入账时 `#start` 另有一行琥珀 inline 汇总原因（`confirmBlockers`：单据头未填、明细品名 / 数量 / 单位未确认、页面未核对、AI 建议待核对、原件缺失，规则与 `workflowImportConfirmSchema` 及服务端确认一致），此时确认按钮禁用并经 `aria-describedby` 指向这行字（不是 alert）。「重新载入已保存版本」走页内 `ConfirmDialog`，放弃草稿失败的原因只显示在它自己的确认框里。其后是修改历史与 AI 用量（历史只在展开时加载，草稿版本没变不重复请求，有加载中、失败重试与空态；AI 调用状态写中文，费用 `¥0.0123`），页尾仍是「上传区 | 未完成的导入」两栏（上传框不撑高、不显示三小段），方便导入下一份。确认成功后换成一张 sheet：teal 对勾（`animate-check-draw` 按笔画描出，300ms）+「已确认导入」+ 创建 / 合并 / 跳过 / 关联原件数 + 主按钮「继续办理申请」。
-  - 「未完成的导入」（标题沿用这个名字，e2e 按它找面板）：只按 `confirmedAt` 区分，分段 Tabs「未完成 / 已入账」，正在看「未完成」时标签后带朱砂计数；每行 = 状态图标（识别中蓝色转圈、待核对 `file`、识别失败琥珀 `alert`、已入账 teal `check-circle`）+ 文件名 +「时间 · 状态」（今天只写时刻、昨天写「昨天 HH:mm」，完整时间在 `title` 里；状态：识别中 / AI 原件识别中 / 识别失败，待人工核对（琥珀）/ 待核对入账（蓝）/ 已入账（teal），原件不在时追加「· 原件缺失」；未确认的任务不叫「已完成」）+ 右侧一个链接：待核对与识别失败是「继续处理」（secondary sm），识别中与已入账是「查看」（ghost sm）；每行只有文件名带 `title`、只有这一个链接（e2e 按 `title` 与链接计数）；当前任务行 `aria-current="true"`、`bg-primary-soft` 并带「当前」Badge；页脚「共 N 条」或「已显示 N 条」，底部「显示更多（共 N 条）」追加下一页。状态判断、文案、图标与颜色集中在 `components/import/status.ts`（`isTaskActive`、`taskKind`、`taskStatusLabel`、`TASK_KIND_STYLES`），工作台的「未完成的导入」与识别步骤条、`useImportTask` 共用，不再各写一份 `PENDING || RUNNING`。
+  - 「未完成的导入」（标题也是面板的区域名）：只按 `confirmedAt` 区分，分段 Tabs「未完成 / 已入账」，正在看「未完成」时标签后带朱砂计数；每行 = 状态图标（识别中蓝色转圈、待核对 `file`、识别失败琥珀 `alert`、已入账 teal `check-circle`）+ 文件名 +「时间 · 状态」（今天只写时刻、昨天写「昨天 HH:mm」，完整时间在 `title` 里；状态：识别中 / AI 原件识别中 / 识别失败，待人工核对（琥珀）/ 待核对入账（蓝）/ 已入账（teal），原件不在时追加「· 原件缺失」；未确认的任务不叫「已完成」）+ 右侧一个链接：待核对与识别失败是「继续处理」（secondary sm），识别中与已入账是「查看」（ghost sm）；每行 `li` 带 `data-task-id`；当前任务行 `aria-current="true"`、`bg-primary-soft` 并带「当前」Badge；页脚「共 N 条」或「已显示 N 条」，底部「显示更多（共 N 条）」追加下一页。状态判断、文案、图标与颜色集中在 `components/import/status.ts`（`isTaskActive`、`taskKind`、`taskStatusLabel`、`TASK_KIND_STYLES`），工作台的「未完成的导入」与识别步骤条、`useImportTask` 共用，不再各写一份 `PENDING || RUNNING`。
   - 当前任务只由地址里的 `task` 决定：切换前先保存草稿（保存失败就拦下并说明原因），切换时清空上一个任务的状态、丢弃迟到的响应，并把 `<main>` 滚回顶部。已确认的任务只读。
   - 重复上传相同内容的原件时，上传框下面出现一条 sheet：琥珀 chip「同一原件」+ 说明 +「打开已有任务」（primary sm）「这是新的业务，继续处理」「取消本次上传」。
   - 地址里的任务不存在时显示 `role="alert"` 的琥珀 `Notice`，不轮询、不自动新建任务。
 - **设置 `/settings`**：
   - `SettingsLayout` 给出页头「设置」与子导航 `<nav aria-label="设置分区">`：桌面左侧 200px、滚动时钉在 `<main>` 顶部，当前项 surface 底 + 左侧 2px 朱砂 + 墨色 600；< lg 变成横向滚动的药丸行。右侧内容最宽 760px。「系统」一组是 `/settings` 各区块的锚点（外观、账号安全、系统状态、AI 助手、自动备份、备份管理，id 即地址里的 `#hash`，见 `components/settings/sections.ts`），当前项跟着 `<main>` 的滚动位置走（`aria-current="true"`），带 `#hash` 打开时载入后定位到区块；「主数据与记录」是供应商与比价 `/settings/suppliers`、审计日志 `/settings/audit` 两个子页（`aria-current="page"`）。
   - 每个区块一个 `Panel flush`：标题行 + 设置行（`components/settings/SettingRow.vue`：左 13.5px / 500 label + 12.5px muted 说明，右边控件，行间 `divide-y divide-line`）；开关行直接用 `Switch`（`label-position="left"`，说明走 `description`，用 `[&_.text-meta]:` 调成 12.5px muted）。除「外观」外各区块是 `components/settings/` 下的一个组件（`AccountSecurityPanel`、`SystemStatusPanel`、`AiSettingsPanel`、`AutoBackupPanel`、`BackupManagerPanel`）；`SettingsView` 只加载系统状态、备份列表、OCR 健康与 AI 配置（四个请求并行）并按顺序编排，初始值经 props 交给面板，备份列表用 `v-model:backups` 与 `v-model:error`。系统状态失败是整页 `ErrorState`；备份列表、AI 配置读取失败只在各自区块显示 inline 红字 +「重试」，不显示假空态。系统状态面板的「刷新」只重拉系统状态与 OCR 健康（按钮转圈），不回填其它面板的表单。
-  - 账号安全：修改密码、重置恢复码各在弹窗里；退出登录只在顶栏账号菜单与手机「更多」里。系统状态：标题说明是版本与运行时长；四格数字（申请单 / 物品 / 有效单据（已过账）/ 数据库）；两行状态：库存核对（接口返回时才显示：正常 = teal、N 处不一致 = red、尚未核对 = gray Badge，后跟核对时间）与本地 OCR 服务（不可用时下方琥珀提示）。备份管理行内只有「下载」，恢复与删除收在「…」里并各走确认框；恢复进行中是 persistent 的「正在恢复备份」弹窗（`role="status"` 的进度文字），焦点圈在弹窗里，键盘也碰不到页面上的按钮。AI 区的文案被 e2e 依赖（「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」）。
+  - 账号安全：修改密码、重置恢复码各在弹窗里；退出登录只在顶栏账号菜单与手机「更多」里。系统状态：标题说明是版本与运行时长；四格数字（申请单 / 物品 / 有效单据（已过账）/ 数据库）；两行状态：库存核对（接口返回时才显示：正常 = teal、N 处不一致 = red、尚未核对 = gray Badge，后跟核对时间）与本地 OCR 服务（不可用时下方琥珀提示）。备份管理行内只有「下载」，恢复与删除收在「…」里并各走确认框；恢复进行中是 persistent 的「正在恢复备份」弹窗（`role="status"` 的进度文字），焦点圈在弹窗里，键盘也碰不到页面上的按钮。AI 区的连接默认收起（「服务已配置 · 修改连接」），服务器配置了 Key 时不显示 Key 输入框。
   - 供应商与比价：查询实际成交价格，明确展示规格、单位和来源申请；不以旧的品名报价表为新采购提供建议。工具栏左侧是供应商搜索（名称、联系人、电话、备注，前端过滤，地址参数 `supplierSearch`），计数写「找到 N 家 · 共 M 家」，无结果时复述关键词并给「清除关键词」；成交价格表每次画 50 条、底部「显示更多」。行内「编辑」+「…」（删除）；已有单据的供应商在删除确认框里说明「已有 N 份单据，不能删除」并禁用确认按钮（`confirmDisabled`）。成交价格首次查询用骨架，之后再查询保留旧表格、工具栏显示「查询中…」；搜索无结果时复述关键词并给「清除关键词」。审计日志：操作类型 chip 只用 gray / amber（覆盖或回退数据：恢复备份、改密、撤销登记…）/ red（失败、删除、库存核对不一致），业务登记（`WORKFLOW_*`）显示中文名；整行可点展开详情，键盘与读屏用详情格里的展开按钮（`aria-expanded`）。
 - **统计报表 `/insights`**：
   - 筛选一行：期间分段（全部 / 本月 / 上月 / 本季度 / 自定义：快捷期间按本地日历写入整月 / 整季的起止日期并立即查询；按当前填的日期认出对应的快捷期间；「自定义」把焦点交给起始日期）+「起始日期」「结束日期」+ 金额分组 +「查询报表」。
   - 核心指标是一张面板：左边净成交金额（34px / 700）与公式行（成交原额 − 采购取消 − 退款退货，换货保留成交金额），右边四个小指标：采购单数（各分组 `purchaseCount` 之和，按部门分组时跨部门的单据各计一次）、到货原额、净到货金额、实物退货金额。
-  - 「采购金额」面板（标题保持这四个字：e2e 按标题精确找这个区块；分组方式与区间写在说明里）：第一列名跟着分组方式走；净成交列是单色 `bg-blue` 细条（8px、右端圆角，按本表最大净成交取比例，0 与负数不画）+ 靠右的加粗数字；`tfoot` 合计。「员工领用」同样式。两张表右上各有「导出 CSV」（secondary sm），都是 `table-base table-cards`：≥ 640px 在自己的容器横向滚动，不能撑宽整个页面；< 640px 按 §4 变成卡片（条形与合计行在卡片里不显示，合计见核心指标）。
-  - 金额 ¥ 前缀 + 千分位（负号在 ¥ 之后：¥-0.34）。没有数据时用无结果样式的 EmptyState（有区间时给「查看全部时间」）。查询失败的原因是页面上唯一的 `role="alert"`（e2e 按它断言）。旧地址 `/reports` 重定向到这里。
+  - 「采购金额」面板（分组方式与区间写在说明里，标题只写这四个字）：第一列名跟着分组方式走；净成交列是单色 `bg-blue` 细条（8px、右端圆角，按本表最大净成交取比例，0 与负数不画）+ 靠右的加粗数字；`tfoot` 合计。「员工领用」同样式。两张表右上各有「导出 CSV」（secondary sm），都是 `table-base table-cards`：≥ 640px 在自己的容器横向滚动，不能撑宽整个页面；< 640px 按 §4 变成卡片（条形与合计行在卡片里不显示，合计见核心指标）。
+  - 金额 ¥ 前缀 + 千分位（负号在 ¥ 之后：¥-0.34）。没有数据时用无结果样式的 EmptyState（有区间时给「查看全部时间」）。查询失败的原因是页面上唯一的 `role="alert"`。旧地址 `/reports` 重定向到这里。
 - **库存与领用 `/stock`**：
-  - 页头：「刷新库存」图标按钮 +「新增库存物品」（secondary）。underline 页签：库存物品 N / 到货待处理 N / 领用与归还 / 库存流水；计数跟着当前搜索，并入按钮的可访问名称（e2e 用 `/^库存物品( \d+)?$/` 点页签）。
+  - 页头：「刷新库存」图标按钮 +「新增库存物品」（secondary）。underline 页签：库存物品 N / 到货待处理 N / 领用与归还 / 库存流水；计数跟着当前搜索，并入按钮的可访问名称（测试按 `/^库存物品( \d+)?$/` 找页签）。
   - 库存物品、到货待处理是同一个 `Panel flush`（接口一次返回全部物品，列表每次画 50 种，超过时页脚「已显示 M 种 · 共 N 种」+「显示更多」）：工具栏 = 搜索「搜索品名或规格」+ 开关按钮「有库存 N」「已空 N」（互斥，再点一次取消；地址里 `stock=in|empty`）+ 右侧「按品名排序 · 共 N 种」（刷新时「刷新中…」）。空态：首次使用（新增库存物品 / 查看申请单）、到货待处理已清空（一行提示）、搜索或筛选无结果（复述条件 + 清除）。
   - 行式列表 `StockProductCard layout="row"`：列宽由列表容器的 `--stock-cols` 给，表头行与每一行共用（展开 | 物品 | 单位 | 主数量 | 次数量 | 来源 | 操作）；到货待处理页签把待处理数量（蓝）换到主数量列。单位单独一列，数量里的单位只留给读屏；库存为 0 是 amber「已空」；行内动作全部可见（库存领用 / 直接发放 / 登记入库 / 退回供应商 = secondary sm，盘点调整 = ghost sm）；首列展开按钮（可访问名称「采购来源与数量」，`aria-expanded`）列出来源批次（供应商 · 单价、库存、待处理、来源明细 / 到货明细 / 申请）。≥ 640px 放不下时在面板里横向滚动，< 640px 每行堆叠成卡片（列名在左、值在右，展开按钮在右上，动作在底部换行）。
-  - `StockProductCard` 默认 `layout="card"`：申请详情「已到货，待决定去向」一物一张卡片（品名 + 规格 / 来源 | 待处理 | 直接发放 primary + 登记入库 / 退回供应商），外面不再套面板。e2e 依赖 `article[data-product-id]`、`h3` 品名、唯一的 `<header>` 里「8 盒」这样一整段的数量文字和各动作按钮名。
+  - `StockProductCard` 默认 `layout="card"`：申请详情「已到货，待决定去向」一物一张卡片（品名 + 规格 / 来源 | 待处理 | 直接发放 primary + 登记入库 / 退回供应商），外面不再套面板。根元素 `article[data-product-id]`、品名 `h3`，主数量带 `data-testid="product-quantity"`（读出来是「8 盒」）。
   - 领用与归还沿用 `DocumentCollection`；库存流水是 `table-cards` 表格：日期 | 物品 | 业务类型（冲销加 outline chip）| 位置 | 数量变化（增加 teal、减少 red）| 来源（业务 # / 来源明细 #）。
   - 各物品单位不同，库存数量不相加。供应商与审计保留「工具栏 + 表格或行列表 + 分页」的一层面板。
 - **登记类弹窗（`components/workflow/`）**：
   - 宽度：登记采购 880；登记到货与 `QuantityCommandDialog`（入库 / 发放 / 退回 / 取消）760；盘点调整、付款与发票、新增库存物品 560；撤销业务登记是 420 的确认框排版（`Dialog compact`、手机不全屏、朱砂确认按钮，保留「撤销日期」「撤销原因」，失败原因放在正文的红色 `Notice` 里）。页脚左侧是失败原因（`role="alert"`）或一句提示，右侧「取消」+ 主按钮（名字不变：登记已下单、确认本次到货、确认{动作}、确认盘点调整…）；手机上页脚钉底、主按钮整宽 44px。
-  - 明细是表格式明细，统一用同目录的 `RegisterLineTable` 与 `useRegisterLines`（已选行数、表下的行级错误汇总、全选，三个弹窗共用）：列头只写一次，第一列是选择框 + 品名 + 规格 / 来源 meta（表头这一格是「全选」，部分勾选时半选；手机上「全选」换到表格上方），其余列是待采购 / 尚欠 / 可操作（数字右对齐）与本次数量，采购再加成交单价、本行金额，发放再加领用人。行内 `Input size="sm" hide-label`、输入框后跟单位；可访问名称保留全称（「{品名} 本次数量（{单位}）」「{品名} 领用人」「{品名} 本次采购数量（{单位}）」「{品名} 成交单价（元/{单位}）」「{品名} 采购链接」「{品名} 本次到货数量（{单位}）」），复选框名就是品名（e2e 依赖）。未勾选的行变淡、输入格显示「—」。字段错误只在单元格标红框，原因在表下汇总「第 N 行 · 品名：原因」。手机上每行一张卡片（`.table-cards`）。表头在弹窗正文里钉住（包一层 `[--main-pt:1.25rem]` 抵掉正文上内边距）。
-  - 登记采购：一条明细一个 `<tbody>`，主行下方一行放历史成交价小药丸（悬停蓝色；点了填入单价与链接并选定该供应商，别家的随即禁用）与采购链接；合计在页脚左侧（「本次成交合计 ¥…」或「已填价合计 ¥… · N 条价格待填」，金额加千分位）。发放：「拆给另一位领用人」在品名下方，拆出的行紧跟在同一来源之后。退货处理方式是分段 Tabs。盘点调整的「调整后库存」在页脚左侧，负数标红。e2e 按 `tr[data-command-line]` 找数量类弹窗的行（另有 `tr[data-receipt-line]`、`tbody[data-purchase-line]`）。
+  - 明细是表格式明细，统一用同目录的 `RegisterLineTable` 与 `useRegisterLines`（已选行数、表下的行级错误汇总、全选，三个弹窗共用）：列头只写一次，第一列是选择框 + 品名 + 规格 / 来源 meta（表头这一格是「全选」，部分勾选时半选；手机上「全选」换到表格上方），其余列是待采购 / 尚欠 / 可操作（数字右对齐）与本次数量，采购再加成交单价、本行金额，发放再加领用人。行内 `Input size="sm" hide-label`、输入框后跟单位；可访问名称保留全称（「{品名} 本次数量（{单位}）」「{品名} 领用人」「{品名} 本次采购数量（{单位}）」「{品名} 成交单价（元/{单位}）」「{品名} 采购链接」「{品名} 本次到货数量（{单位}）」），复选框名就是品名。未勾选的行变淡、输入格显示「—」。字段错误只在单元格标红框，原因在表下汇总「第 N 行 · 品名：原因」。手机上每行一张卡片（`.table-cards`）。表头在弹窗正文里钉住（包一层 `[--main-pt:1.25rem]` 抵掉正文上内边距）。
+  - 登记采购：一条明细一个 `<tbody>`，主行下方一行放历史成交价小药丸（悬停蓝色；点了填入单价与链接并选定该供应商，别家的随即禁用）与采购链接；合计在页脚左侧（「本次成交合计 ¥…」或「已填价合计 ¥… · N 条价格待填」，金额加千分位）。发放：「拆给另一位领用人」在品名下方，拆出的行紧跟在同一来源之后。退货处理方式是分段 Tabs。盘点调整的「调整后库存」在页脚左侧，负数标红。数量类弹窗的行带 `tr[data-command-line]`（另有 `tr[data-receipt-line]`、`tbody[data-purchase-line]`），是测试钩子。
 
 ## 9. 修改守则与验证
 
@@ -440,7 +440,7 @@
 
 - 颜色只用令牌（`text-muted`、`bg-surface`、`border-line`、`text-accent` …）；不用 Tailwind 调色板颜色（`text-red-600`、`bg-blue-50` …），不写内联颜色，不用 `!important`。
 - 不引入新的运行时依赖（UI 库、图标库、字体文件、Google Fonts）；缺的图标在 `Icon.vue` 里补。
-- 视觉改动不顺带改业务逻辑、API 调用、store 和路由；不改用户可见文案、`aria-*`、`role`、按钮名，确需改动时同步修改测试并在提交说明里写清。
+- 视觉改动不顺带改业务逻辑、API 调用、store 和路由；改了用户可见文案、`aria-*`、`role`、按钮名或 `data-*` 钩子，同步改测试并在提交说明里写清（§7 定位约定）。
 - 先用 §5 的组件和 §6 的全局类，不新建与现有组件重复的基元；确需新增时写进本文。
 - 不在页面里重复外壳的职责（导入 / AI / 主题 / 退出入口、`<main>` 的留白、给底栏让位）。
 

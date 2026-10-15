@@ -11,8 +11,8 @@ import { quantityLabel, unitPriceLabel } from './presentation';
 import { stockIssueChoices, stockSourceChoices } from './commandChoices';
 
 /**
- * 一种库存物品（DESIGN.md §8「库存与领用」）。根元素 article[data-product-id]、品名 h3、主行 <header>（数量和动作都在里面）
- * 是 e2e 的定位依据：header 里的数量写成「8 盒」这样的一整段文字，动作按钮名不改。
+ * 一种库存物品（DESIGN.md §8「库存与领用」）。根元素 article[data-product-id]、品名 h3；
+ * 主数量带 data-testid="product-quantity"（读出来是「8 盒」这样一整段，单位在行式里只给读屏）。
  * - layout="row"：库存页列表里的一行。≥ 640px 按父容器给的 --stock-cols 排成网格（展开 | 物品 | 单位 | 主数量 | 次数量 | 来源 | 操作），
  *   表头由 StockView 画；单位单独一列，数量里的单位只留给读屏。< 640px 堆叠成卡片：列名在左、值在右，按钮在底部换行。
  * - layout="card"（默认）：独立的一张卡片、一物一行（申请详情「已到货，待决定去向」）：品名 + 规格 / 来源 | 主数量 | 动作。
@@ -95,7 +95,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
       <p class="col-span-full flex items-baseline justify-between gap-3 sm:col-span-1 sm:block sm:text-right">
         <span class="text-xs text-faint sm:sr-only">{{ receiving ? '到货待处理 ' : '当前库存 ' }}</span>
         <span class="inline-flex items-center gap-1.5">
-          <span class="num text-[15px] font-semibold" :class="primaryTone">{{ primary }}<span class="sm:sr-only">{{ ' ' + unit }}</span></span>
+          <span class="num text-[15px] font-semibold" :class="primaryTone" data-testid="product-quantity">{{ primary }}<span class="sm:sr-only">{{ ' ' + unit }}</span></span>
           <Badge v-if="!receiving && emptied" tone="amber">已空</Badge>
         </span>
       </p>
@@ -126,7 +126,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
       <p class="flex items-baseline gap-2 sm:ml-auto sm:block sm:text-right">
         <span class="text-meta sm:block">{{ receiving ? '待处理 ' : '当前库存 ' }}</span>
         <span class="inline-flex items-center gap-1.5">
-          <span class="num text-xl leading-7 font-semibold" :class="primaryTone">{{ quantityLabel(primary, product.unit) }}</span>
+          <span class="num text-xl leading-7 font-semibold" :class="primaryTone" data-testid="product-quantity">{{ quantityLabel(primary, product.unit) }}</span>
           <Badge v-if="!receiving && emptied" tone="amber">已空</Badge>
         </span>
       </p>

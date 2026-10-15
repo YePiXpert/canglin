@@ -7,9 +7,9 @@ import Notice from '@/components/ui/Notice.vue';
  * 登记类弹窗的「表格式明细」：下单（PurchaseRegisterDialog）、到货（ReceiptRegisterDialog）与
  * 入库 / 发放 / 退回 / 取消（QuantityCommandDialog）共用，见 DESIGN.md §8「登记类弹窗」。
  *
- * - 列头只写一次。第一列「明细」：每行一个选择框 + 品名（复选框的可访问名称就是品名，e2e 按它找）+ 规格 / 来源 meta，
+ * - 列头只写一次。第一列「明细」：每行一个选择框 + 品名（复选框的可访问名称就是品名）+ 规格 / 来源 meta，
  *   表头这一格是「全选」；其余列头由 #head 插槽给出（<th>，数字列加 text-right），行由默认插槽给出（一个或多个 <tbody>）。
- * - 行内输入用 Input size="sm" hide-label：label 仍写全称（「{品名} 本次数量（{单位}）」），读屏与 e2e 按它找字段。
+ * - 行内输入用 Input size="sm" hide-label：label 仍写全称（「{品名} 本次数量（{单位}）」），读屏听得出是哪一行的哪个字段。
  * - 字段错误：单元格里只标红框（这里隐藏单元格内的 .field-error），原因由 rowErrors 在表下汇总成「第 N 行 · 品名：原因」；
  *   error 是整表的错误（「请至少选择一条…」）。两者都是 role="alert"。
  * - 手机（< 640px）走 .table-cards：每行一张卡片，单元格写 data-label；表头只留给读屏，「全选」换到表格上方。

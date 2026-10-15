@@ -189,7 +189,6 @@ async function testAi(): Promise<void> {
   <!--
     AI 助手：标题行 + 设置行。连接是一行可展开的折叠区（已配置时默认收起），
     其后是模型、两个开关、识别检测，最后一行「保存」。
-    e2e 依赖的文案：「服务已配置 · 修改连接」「服务器已配置 Key，无需填写」「接口地址」「API Key」「模型」「获取模型列表」。
   -->
   <Panel title="AI 助手" description="原件识别与 AI 问答共用这里的连接和模型；密钥只保存在服务端，页面不显示明文。" flush>
     <div v-if="loadError && !initial" class="px-5 py-4">

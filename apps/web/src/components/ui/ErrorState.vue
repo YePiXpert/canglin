@@ -5,7 +5,7 @@ import Button from './Button.vue';
 /**
  * 原位的加载失败：朱砂警示图标 + 标题 + 原因 +「重新加载」，不跳页、不清空页面其它内容。
  * 默认插槽追加在「重新加载」之后（如「查看系统状态」ghost sm 按钮）。
- * 不带 role：页面上同时只该有一个 alert（e2e 用 getByRole('alert') 定位），需要时由调用方加。
+ * 不带 role：页面上同时只该有一个 alert（DESIGN.md §7），需要时由调用方加。
  */
 withDefaults(
   /** loading：重新加载进行中（按钮转圈并禁用），与 Button / ConfirmDialog 的 loading 同名 */

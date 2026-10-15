@@ -105,7 +105,7 @@ function masks(page: Page): Locator[] {
 
 async function settle(page: Page) {
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('.animate-pulse')).toHaveCount(0);
+  await expect(page.locator('[data-skeleton]')).toHaveCount(0);
   await page.mouse.move(0, 0);
 }
 
@@ -162,7 +162,7 @@ for (const variant of VARIANTS) {
       await shot(page, `${v}-import-empty`);
       await page.goto(`/import?task=${s.taskId}`);
       await expect(page.getByPlaceholder('品名（同名不同规格请明确区分）')).toHaveValue('测试用品1');
-      await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+      await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
       await shot(page, `${v}-import-task`);
       await page.goto('/insights');
       await shot(page, `${v}-insights`);

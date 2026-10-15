@@ -24,7 +24,7 @@ const intro = computed(() => !task.value && (!taskId.value || missing.value));
     <!-- 上传进度给读屏（转圈本身 aria-hidden）；元素常驻、只换文字 -->
     <p class="sr-only" role="status">{{ busy ? '正在上传原件…' : '' }}</p>
     <!--
-      整块虚线框是一个 <label>，里面只有 FileDropzone 自己的那个 input[type=file]（e2e 直接对它 setInputFiles）。
+      整块虚线框是一个 <label>，里面只有 FileDropzone 自己的那个 input[type=file]：点击、拖入、拍照都走它。
       「选择文件」只是长得像主按钮的提示（pointer-events-none，点击落在 label 上照常打开文件选择），不进读屏；
       「拍照上传」由 FileDropzone 在手机上画在框下面（复用同一个 input）。
     -->

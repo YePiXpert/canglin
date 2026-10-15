@@ -20,7 +20,7 @@ test('报表按业务发生日期展示退款，CSV 与页面金额和区间一�
   const receipt = await write('receipts', { date: '2025-01-12', lines: [{ purchaseLineId: purchase.lines[0].id, quantity: '2' }] });
   await write('supplier-returns', { date: '2025-02-02', reason: '跨期退款验收', returnMode: 'REFUND', lines: [{ receiptLineId: receipt.lines[0].id, quantity: '1', location: 'RECEIVING' }] });
   await page.goto('/insights?dateFrom=2025-02-01&dateTo=2025-02-28&groupBy=supplier');
-  const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: '采购金额', exact: true }) });
+  const panel = page.getByRole('region', { name: '采购金额', exact: true });
   const row = panel.getByRole('row').filter({ hasText: supplierName });
   await expect(row).toContainText('¥-0.34');
   await expect(panel).toContainText('2025-02-01 至 2025-02-28');

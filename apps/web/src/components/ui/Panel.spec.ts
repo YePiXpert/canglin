@@ -22,6 +22,14 @@ describe('Panel', () => {
     expect(wrapper.get('footer').text()).toBe('共 3 条');
   });
 
+  it('有标题时以标题命名（读屏与测试按 region 找），没有标题时不加 aria-labelledby', () => {
+    const titled = mount(Panel, { props: { title: '未完成的导入' } });
+    const id = titled.get('h2').attributes('id');
+    expect(id).toBeTruthy();
+    expect(titled.attributes('aria-labelledby')).toBe(id);
+    expect(mount(Panel, { props: { flush: true } }).attributes('aria-labelledby')).toBeUndefined();
+  });
+
   it('页脚里的 Pagination 在 total 为 0 时什么都不渲染，页脚靠 empty:hidden 整条隐藏', () => {
     const wrapper = mount(Panel, {
       props: { flush: true },

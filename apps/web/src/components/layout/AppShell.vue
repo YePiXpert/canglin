@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
 
 /**
  * 手机底部标签：四个常用入口 + 「更多」。导入走顶栏右侧的主按钮。
- * 「库存与领用」标签只写「库存」，可访问名称保持全称（e2e 与读屏都按全称找）。
+ * 「库存与领用」标签只写「库存」，可访问名称保持全称（读屏读全称）。
  */
 const tabItems: NavItem[] = [
   { path: '/workbench', title: '工作台', icon: 'kanban' },

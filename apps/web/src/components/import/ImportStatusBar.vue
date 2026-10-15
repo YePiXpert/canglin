@@ -14,7 +14,7 @@ const task = ctx.task as Ref<ImportTaskView>;
 /*
  * 给读屏的状态播报（sr-only role="status"，元素常驻、只换文字）：文字没变时 DOM 不更新，
  * 轮询每 1.5 秒刷新任务也不会重复播报同一句。保存只播报「已保存草稿」（保存中留空），打字时不会每次念两句。
- * 措辞刻意和可见文字不同（不写「AI：…」「草稿已保存」）：e2e 按这些可见文字 getByText，不能多出第二个匹配。
+ * 措辞按读屏的需要写；可见的文件名与状态文字带 data-testid，测试按它读，不受这里的措辞影响。
  */
 const recognitionLive = computed(() => `本地识别${localState.value}；AI 识别${aiState.value}`);
 const saveLive = computed(() => (saved.value ? '已保存草稿' : ''));
@@ -37,19 +37,19 @@ const saveLive = computed(() => (saved.value ? '已保存草稿' : ''));
         <Icon v-else name="file" :size="18" />
       </span>
       <div class="min-w-0">
-        <p class="truncate text-sm font-medium text-ink" :title="task.filename">
+        <p class="truncate text-sm font-medium text-ink" :title="task.filename" data-testid="import-status-filename">
           {{ task.filename }}
         </p>
         <!-- 每项以圆点 / 图标开头，换行时行首也整齐，不用「·」分隔 -->
         <p class="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-muted">
-          <span class="inline-flex items-center gap-1.5"
+          <span class="inline-flex items-center gap-1.5" data-testid="import-local-state"
             ><span
               class="size-1.5 shrink-0 rounded-full"
               :class="stateDot[task.status] ?? 'bg-faint'"
               aria-hidden="true"
             />识别：{{ localState }}</span
           >
-          <span class="inline-flex items-center gap-1.5"
+          <span class="inline-flex items-center gap-1.5" data-testid="import-ai-state"
             ><span
               class="size-1.5 shrink-0 rounded-full"
               :class="stateDot[task.aiStatus] ?? 'bg-faint'"
@@ -62,7 +62,7 @@ const saveLive = computed(() => (saved.value ? '已保存草稿' : ''));
             }}/{{ pageCount }} 页识别完成 · {{ task.aiResult.length }}/{{ pageCount }} 页 AI
             完成</span
           >
-          <span class="inline-flex items-center gap-1" :class="saved ? 'text-teal' : ''"
+          <span class="inline-flex items-center gap-1" :class="saved ? 'text-teal' : ''" data-testid="import-save-state"
             ><Icon :name="saved ? 'check' : 'clock'" :size="12" class="shrink-0" />{{
               saved ? '草稿已保存' : '保存中…'
             }}</span

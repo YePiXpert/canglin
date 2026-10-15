@@ -7,12 +7,12 @@ import { lineProgress } from './lineProgress';
 /**
  * 申请明细与数量进度表（DESIGN.md §8「申请详情」）。
  * - 「进度」列是四段条（lineProgress.ts）+ 一行说明；条本身 aria-hidden，读屏读说明文字。
- * - 数量列的 data-label 与「6 盒」格式是 e2e 接口（td[data-label="已采购"] …），tr 带 data-request-line。
+ * - 数量列带 data-label（卡片里的列名，也是测试读格子的钩子），tr 带 data-request-line。
  * - ≥ 640px 是表格，放不下时在自己的容器里横向滚动并钉住首列；< 640px 走 .table-cards，进度条整行显示。
  */
 const props = defineProps<{ lines: WorkflowRequestLineRow[]; compact?: boolean }>();
 /**
- * optional：< 640px 的卡片里数值为 0 时隐藏的次要列（只用 CSS 隐藏，格子照样渲染——e2e 按 data-label 找格子）。
+ * optional：< 640px 的卡片里数值为 0 时隐藏的次要列（只用 CSS 隐藏，格子照样渲染，表格结构不随数值变）。
  * 申请、待处理、尚待办理与进度条始终显示，免得一条「待采购 20 个」的明细在手机上列出一串「0 个」。
  */
 const columns = [

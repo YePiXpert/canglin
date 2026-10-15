@@ -8,7 +8,7 @@ import { buttonClass } from './button';
 
 /**
  * 文件上传区：点击选择或拖入。内部始终只有一个真实的 <input type="file">（sr-only，
- * 整块 <label> 可点），e2e 用 input[type=file] 直接 setInputFiles 也走同一条路径。
+ * 整块 <label> 可点），测试直接对这个 input setInputFiles，和用户选文件走同一条路径。
  * capture 为 true 时，手机上额外给一个「拍照上传」按钮：临时给同一个 input 加
  * capture="environment" 再打开，不会多出第二个 file input。
  */

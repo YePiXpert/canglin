@@ -157,7 +157,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     await expect(qty).toBeVisible();
     const taskUrl = page.url();
     if (ai && !timeout) {
-      await expect(page.getByText('AI：已完成', { exact: false })).toBeVisible();
+      await expect(page.getByTestId('import-ai-state')).toContainText('AI：已完成');
       await expect(qty).toHaveValue('8');
       await expect(page.locator('input[type=date]')).toHaveValue(businessDate);
     } else {
@@ -166,7 +166,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
       await page.locator('input[type=date]').fill(businessDate);
     }
     if (timeout) {
-      await expect(page.getByText('AI：部分失败', { exact: false })).toBeVisible();
+      await expect(page.getByTestId('import-ai-state')).toContainText('AI：部分失败');
       await expect(page.getByText('第 1 页 AI 未完成，已使用本地 OCR，请核对原件', { exact: false })).toBeVisible();
     }
     // 生成申请必须有原件单位；识别结果没有时人工补上
@@ -174,7 +174,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     if (!(await unitInput.inputValue())) await unitInput.fill('盒');
     const unit = await unitInput.inputValue();
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
-    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
     await page.reload();
     await expect(qty).toHaveValue('8');
     await expect(page.locator('img[alt="单据原件页面"]')).toBeVisible();
@@ -222,7 +222,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     if (!ai) {
       // 入库后库存页能看到这件物品，当前库存按它自己的单位显示；整段精确匹配，「18 盒」不算
       await page.goto('/stock');
-      await expect(card.locator('header').getByText(`8 ${unit}`, { exact: true })).toBeVisible();
+      await expect(card.getByTestId('product-quantity')).toHaveText(`8 ${unit}`);
       // 已入账的任务不在「未完成」里；切到「已入账」能找到它，并且只能只读打开
       await page.goto('/import');
       const panel = importPanel(page);
@@ -243,11 +243,9 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
   });
 }
 
-/** 导入页底部的「未完成的导入」面板 */
+/** 导入页底部的「未完成的导入」面板（Panel 以标题命名的区域） */
 function importPanel(page: Page) {
-  return page.locator('section', {
-    has: page.getByRole('heading', { name: '未完成的导入', exact: true }),
-  });
+  return page.getByRole('region', { name: '未完成的导入', exact: true });
 }
 
 /** 登录并关闭 AI：新任务只做本地识别，列表里的状态是确定的「待核对入账」 */
@@ -304,7 +302,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     expect(ids.A).toMatch(/^[0-9a-f-]{36}$/);
     await qty(page).fill('3');
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
-    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
     await expect.poll(() => savedQuantity(page, ids.A)).toBe(3);
 
     // 离开再从入口进来（地址里没有 task）：从「未完成的导入」继续
@@ -323,7 +321,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     await expect(qty(page)).toHaveValue('');
     await qty(page).fill('5');
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
-    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
     await expect.poll(() => savedQuantity(page, ids.B)).toBe(5);
 
     for (const [key, value] of [
@@ -388,9 +386,10 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
       lateUrl,
     );
     expect(delayed).toBe(1);
-    // 文件名：B 在状态条与列表各一处，A 只在列表里
-    await expect(page.getByTitle(files.B.name, { exact: true })).toHaveCount(2);
-    await expect(page.getByTitle(files.A.name, { exact: true })).toHaveCount(1);
+    // 状态条只有一条、是 B；A、B 在列表里各一行
+    await expect(page.getByTestId('import-status-filename')).toHaveText(files.B.name);
+    await expect(row(page, files.B.name)).toHaveCount(1);
+    await expect(row(page, files.A.name)).toHaveCount(1);
     await expect(qty(page)).toHaveValue('5');
     const current = panel(page).locator('li[aria-current="true"]');
     await expect(current).toHaveCount(1);
@@ -421,7 +420,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     await expect(saveFailed).toBeVisible();
     await page.unroute(draftUrl);
     await page.getByRole('button', { name: '重试保存', exact: true }).click();
-    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
     await expect.poll(() => savedQuantity(page, ids.B)).toBe(7);
     await openFromList(page, files.A.name);
     await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
@@ -455,7 +454,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     });
     await page.goto(`/import?task=${missing}`);
     await expect(page.getByRole('alert')).toContainText('任务不存在或已被清理');
-    await expect(page.locator('main .animate-pulse')).toHaveCount(0); // 没有停在骨架屏上
+    await expect(page.locator('main [data-skeleton]')).toHaveCount(0); // 没有停在骨架屏上
     await expect(qty(page)).toHaveCount(0);
     // 其它错误 5 秒后重试；404 只请求一次
     await page.waitForTimeout(5500);
@@ -486,9 +485,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     const more = panel(page).getByRole('button', { name: `显示更多（共 ${total} 条）`, exact: true });
     await more.click();
     await expect(rows).toHaveCount(Math.min(total, 20));
-    const tasks = await rows
-      .getByRole('link')
-      .evaluateAll((links) => links.map((a) => new URL((a as HTMLAnchorElement).href).searchParams.get('task')));
+    const tasks = await rows.evaluateAll((items) => items.map((li) => li.getAttribute('data-task-id')));
     expect(tasks).toHaveLength(Math.min(total, 20));
     expect(new Set(tasks).size).toBe(tasks.length);
   });
@@ -511,7 +508,7 @@ test.describe('手机 390px', () => {
     await qty.fill('6');
     await page.locator('input[type=date]').fill('2026-09-27');
     await page.getByRole('button', { name: '保存草稿', exact: true }).click();
-    await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
     await page.screenshot({ path: test.info().outputPath('mobile-import-review.png') });
     await page.getByRole('button', { name: '确认全部内容并导入' }).click();
     await expect(page.getByText(/已创建 1 条/)).toBeVisible();

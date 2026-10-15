@@ -36,7 +36,7 @@ const emit = defineEmits<{
 }>();
 
 const inputEl = ref<HTMLInputElement | null>(null);
-/** 说明文字走 aria-describedby，不并入可访问名称（e2e 按名称精确匹配复选框） */
+/** 说明文字走 aria-describedby，不并入可访问名称：名称保持简短，读屏先读名称、再读说明 */
 const descId = `desc-${useId()}`;
 
 const isChecked = computed(() => {

@@ -177,7 +177,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
       <Select v-model="filters.groupBy" label="金额分组" :options="groups" class="w-36" />
       <Button type="submit" variant="primary" class="max-sm:h-11" :loading="loading">查询报表</Button>
     </form>
-    <!-- 查询失败的原因是页面上唯一的 role="alert"（e2e 按它断言） -->
+    <!-- 查询失败的原因是页面上唯一的 role="alert"（一页同时只有一个 alert，DESIGN.md §7） -->
     <Notice v-if="failure" tone="red" variant="inline" role="alert" class="-mt-2 mb-5">{{ failure }}</Notice>
 
     <div v-if="report" class="space-y-7" :aria-busy="loading">
@@ -204,7 +204,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
         </dl>
       </div>
 
-      <!-- 标题保持「采购金额」（e2e 按标题精确找这个区块）；分组方式与区间写在说明里 -->
+      <!-- 分组方式与区间写在说明里，标题只写「采购金额」 -->
       <Panel title="采购金额" :description="`${appliedGroup.label}汇总 · ${dateLabel}`" flush>
         <template #actions>
           <Button size="sm" :disabled="!report.groups.length" @click="exportAmounts"><Icon name="download" :size="14" />导出 CSV</Button>

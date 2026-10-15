@@ -12,7 +12,7 @@ import { PAYMENT_STATUS_LABELS, moneyText, parseFixed } from '@canglin/shared';
 /**
  * 一条业务记录（DESIGN.md §8「申请详情」）。
  * - row：业务记录列表里的一行（无描边，行间分隔线由列表画）；不传时是独立的卡片（「查看业务来源」弹窗）。
- * - 头行：类型 chip 与 #编号同在 h3 里（标题读作「采购成交 #117」，e2e 按 /^采购成交/ 找）、日期、供应商或去向、
+ * - 头行：类型 chip 与 #编号同在 h3 里（标题读作「采购成交 #117」）、日期、供应商或去向、
  *   已撤销 / 付款 / 开票 chip，右侧金额；下面是明细行；最后是动作：「登记到货」是主按钮，「撤销登记」ghost 靠右。
  */
 const props = defineProps<{ document: WorkflowDocumentRow; readonly?: boolean; row?: boolean }>();

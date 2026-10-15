@@ -58,7 +58,7 @@ function needsYou(task: ImportTaskSummary): boolean {
 }
 /**
  * 分段筛选。「未完成」后的朱砂数字是等你处理的任务数：只有正在看「未完成」时才知道准确的总数，
- * 切到「已入账」时不显示，免得留着旧数字。计数会并入按钮的可访问名称（「未完成 3」）；e2e 只按名称点「已入账」。
+ * 切到「已入账」时不显示，免得留着旧数字。计数会并入按钮的可访问名称（「未完成 3」）。
  */
 const tabs = computed<TabItem<'pending' | 'confirmed'>[]>(() => [
   { value: 'pending', label: '未完成', count: tab.value === 'pending' && total.value ? total.value : undefined },
@@ -77,9 +77,9 @@ defineExpose({ refresh });
 
 <template>
   <!--
-    导入任务：一层面板 + 行式列表（导入页右栏；有任务时跟着上传区在页尾）。标题沿用「未完成的导入」——e2e 按这个标题找面板。
+    导入任务：一层面板 + 行式列表（导入页右栏；有任务时跟着上传区在页尾）。标题「未完成的导入」也是面板的区域名。
     每行：状态图标（识别中是蓝色转圈）+ 文件名 +「时间 · 状态 · 原件缺失」，右侧「继续处理」或「查看」；
-    当前任务行 aria-current="true"、primary-soft 底并带「当前」Badge。每行只有文件名带 title、只有一个链接（e2e 按这两样计数）。
+    当前任务行 aria-current="true"、primary-soft 底并带「当前」Badge；每行 li 带 data-task-id。
   -->
   <Panel title="未完成的导入" flush>
     <template #actions>
@@ -92,7 +92,7 @@ defineExpose({ refresh });
       列表加载失败：{{ error }}
       <template #actions><Button variant="link" size="sm" @click="refresh()"><Icon name="refresh" :size="14" />重新加载</Button></template>
     </Notice>
-    <!-- 空态：标题文字是 e2e 接口（「没有未完成的导入」）；线描只是装饰 -->
+    <!-- 空态：首次使用的线描（inbox） -->
     <EmptyState
       v-else-if="!rows.length"
       art="inbox"
@@ -100,7 +100,7 @@ defineExpose({ refresh });
       :description="tab === 'pending' ? '上传的原件识别后会留在这里，随时可以回来继续核对。' : '确认入账的任务会留在这里，只读查看，可回到对应申请。'"
     />
     <ul v-else class="divide-y divide-line">
-      <li v-for="task in rows" :key="task.id" class="flex items-center gap-3.5 px-5 py-3 transition-colors duration-150" :class="task.id === props.currentTaskId ? 'bg-primary-soft' : ''" :aria-current="task.id === props.currentTaskId ? 'true' : undefined">
+      <li v-for="task in rows" :key="task.id" :data-task-id="task.id" class="flex items-center gap-3.5 px-5 py-3 transition-colors duration-150" :class="task.id === props.currentTaskId ? 'bg-primary-soft' : ''" :aria-current="task.id === props.currentTaskId ? 'true' : undefined">
         <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
           <span v-if="kind(task) === 'running'" class="size-3.5 animate-spin rounded-full border-2 border-blue-soft border-t-blue" />
           <Icon v-else :name="KINDS[kind(task)].icon" :size="16" :class="KINDS[kind(task)].iconClass" />
