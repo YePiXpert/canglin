@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --project=functional",
+    "test:visual": "playwright test --project=visual"
   },
   "dependencies": {
     "@canglin/shared": "workspace:*",

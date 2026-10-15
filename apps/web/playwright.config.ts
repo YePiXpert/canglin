@@ -4,6 +4,15 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   timeout: 60_000,
+  /*
+   * 两组分开跑，各自启动 webServer（每次一个新的临时 SQLite）：
+   * functional 是浏览器流程（test:e2e）；visual 是视觉回归（test:visual，要全新的数据库，
+   * 在固定的 Playwright 容器里跑，见 scripts/visual.sh 与 CI 的 visual job）。
+   */
+  projects: [
+    { name: 'functional', testIgnore: /visual\.spec\.ts/ },
+    { name: 'visual', testMatch: /visual\.spec\.ts/ },
+  ],
   use: {
     actionTimeout: 10_000,
     baseURL: 'http://127.0.0.1:5174',

@@ -4,15 +4,14 @@ import { randomUUID } from 'node:crypto';
 /**
  * 视觉回归（DESIGN.md §9 的截图矩阵）：1440 × 1000 与 390 × 844（2x）× 浅 / 深色，主要页面与三个登记弹窗。
  *
- * - 只在设了 VISUAL=1 时运行（CI 与平时的 test:e2e 跳过）：基线依赖本机字体，见 README「测试」。
- * - 必须单独跑、并且是全新的数据库（webServer 每次启动一个新的临时 SQLite）：
- *     VISUAL=1 pnpm --filter @canglin/web exec playwright test e2e/visual.spec.ts            # 与基线比较
- *     VISUAL=1 pnpm --filter @canglin/web exec playwright test e2e/visual.spec.ts --update-snapshots   # 有意改了 UI 后重建基线
- *   和其它 spec 一起跑时数据库里已有别的数据，整组自动跳过。
+ * - 是 playwright 的 visual 组（test:visual），在固定的 Playwright 容器里跑，浏览器与字体由镜像决定（README「测试」）：
+ *     apps/web/scripts/visual.sh            # 与基线比较
+ *     apps/web/scripts/visual.sh --update   # 有意改了 UI 后重建变化了的基线，人工看一遍差异再提交
+ *   CI 的 visual job 用同一个镜像；不在容器里比较会有字体与抗锯齿的像素差。
+ * - 要全新的数据库：test:visual 单独启动 webServer（每次一个新的临时 SQLite）；库里已有别的数据时整组跳过。
  * - 确定性：播种数据的名称、业务日期固定；浏览器时钟固定在 2026-10-14 10:00（Asia/Shanghai），表单默认日期与「今天」都不变；
  *   服务端写的录入时间（time 元素、工作台「最近登记」、审计时间）、数据库大小与审计详情（含操作编号）用 mask 盖住。
  */
-const RUN = !!process.env.VISUAL;
 const BASE = 'http://127.0.0.1:5174';
 const password = 'browser-test-password';
 const NOW = new Date('2026-10-14T10:00:00+08:00');
@@ -27,7 +26,6 @@ async function post(request: APIRequestContext, url: string, data: object) {
 }
 
 test.beforeAll(async ({ playwright }) => {
-  if (!RUN) return;
   const request = await playwright.request.newContext();
   await request.post(`${BASE}/api/auth/setup`, { data: { password } });
   expect((await request.post(`${BASE}/api/auth/login`, { data: { password } })).ok()).toBeTruthy();
@@ -134,8 +132,7 @@ for (const variant of VARIANTS) {
     });
 
     test('主要页面与登记弹窗', async ({ page }) => {
-      test.skip(!RUN, '视觉回归只在 VISUAL=1 时运行（基线依赖本机字体，见 README「测试」）');
-      test.skip(!seed, '需要全新的数据库：单独运行 e2e/visual.spec.ts');
+      test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
       test.setTimeout(180_000);
       const s = seed!;
       const v = variant.name;

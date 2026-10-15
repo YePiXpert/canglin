@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 视觉回归（e2e/visual.spec.ts）：在固定的 Playwright 容器里跑，和 CI 的 visual job 用同一个镜像，
+# 视觉回归（e2e/visual.spec.ts）：在固定的 Playwright 容器里跑，和 CI 的 visual job 用同一个镜像加同一个字体包
+# （fonts-noto-cjk：有真正的粗体，字体栈里本来就列了 Noto Sans CJK SC；镜像自带的文泉驿正黑没有粗体，标题会变细），
 # 浏览器与字体都由镜像决定，基线只在这里生成和比较，不受本机字体和浏览器影响。
 #
 #   apps/web/scripts/visual.sh            与基线比较；失败时差异图在 apps/web/test-results/visual/
@@ -21,12 +22,18 @@ done
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 VERSION=$(grep -oE "@playwright/test@[0-9]+\.[0-9]+\.[0-9]+" "$ROOT/pnpm-lock.yaml" | head -n 1 | cut -d@ -f3)
 [ -n "$VERSION" ] || { echo "在 pnpm-lock.yaml 里找不到 @playwright/test 的版本" >&2; exit 1; }
-IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
+BASE_IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
+IMAGE="canglin-visual:${VERSION}"
 SNAPSHOTS="$ROOT/apps/web/e2e/visual.spec.ts-snapshots"
 RESULTS="$ROOT/apps/web/test-results/visual"
 mkdir -p "$SNAPSHOTS" "$RESULTS"
 rm -rf "${RESULTS:?}"/*
 
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "[visual] 第一次运行：构建 $IMAGE（$BASE_IMAGE + fonts-noto-cjk）…"
+  printf 'FROM %s\nRUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk && rm -rf /var/lib/apt/lists/*\n' "$BASE_IMAGE" \
+    | docker build -q -t "$IMAGE" - >/dev/null
+fi
 echo "[visual] 镜像 $IMAGE$([ "$UPDATE" = 1 ] && echo '，重建变化了的基线')"
 cd "$ROOT"
 git ls-files -z --cached --others --exclude-standard -- . ':!.claude' \

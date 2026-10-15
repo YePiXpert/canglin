@@ -456,10 +456,10 @@ pnpm --filter @canglin/web test
 pnpm --filter @canglin/web build
 pnpm --filter @canglin/server build     # e2e 前先构建 API（原因见 README「测试」）
 pnpm --filter @canglin/web test:e2e
-VISUAL=1 pnpm --filter @canglin/web exec playwright test e2e/visual.spec.ts   # 可选：视觉回归，单独运行
+apps/web/scripts/visual.sh               # 视觉回归：在 Playwright 容器里跑（有意改了 UI 后加 --update）
 ```
 
-- `e2e/visual.spec.ts` 把下面的截图矩阵（1440 / 390 × 浅 / 深色，主要页面与三个登记弹窗）做成了 `toHaveScreenshot` 基线：浏览器时钟固定、服务端时间与会变的数字用 mask 盖住；只在 `VISUAL=1` 时运行，基线依赖本机字体（README「测试」）。有意改了 UI 后用 `--update-snapshots` 重建，并人工看一遍差异图。
+- `e2e/visual.spec.ts` 把下面的截图矩阵（1440 / 390 × 浅 / 深色，主要页面与三个登记弹窗）做成了 `toHaveScreenshot` 基线：浏览器时钟固定、服务端时间与会变的数字用 mask 盖住；在固定的 Playwright 容器里运行（`scripts/visual.sh`，CI 的 visual job 用同一个镜像，见 README「测试」）。有意改了 UI 后用 `scripts/visual.sh --update` 重建，并人工看一遍差异图。
 
 截图检查（浅 / 深色 × 1440 / 390 宽）：
 

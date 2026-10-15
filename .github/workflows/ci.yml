@@ -51,6 +51,35 @@ jobs:
       - run: python3 -m unittest discover -s deploy/tests -v
       - run: python3 -m unittest discover -s scripts/tests -v
 
+  visual:
+    name: 视觉回归（Playwright 容器）
+    runs-on: ubuntu-latest
+    # 与 apps/web/scripts/visual.sh 同一个镜像：浏览器与中文字体由镜像决定，基线只在这里比较。
+    # 镜像版本要和 pnpm-lock.yaml 里的 @playwright/test 一致，升级 Playwright 时一起改并重建基线。
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --ipc=host
+    steps:
+      # 中文字体与 scripts/visual.sh 一致：镜像自带的文泉驿正黑没有粗体
+      - run: apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4   # 版本取自根 package.json 的 packageManager
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @canglin/shared build
+      - run: pnpm --filter @canglin/server build
+      - run: pnpm --filter @canglin/web test:visual
+      - name: 上传差异图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: apps/web/test-results
+          retention-days: 7
+
   ocr:
     name: OCR 解析服务（测试）
     runs-on: ubuntu-latest
@@ -79,7 +108,7 @@ jobs:
   docker:
     name: 镜像（${{ matrix.name }}）构建并推送 GHCR
     runs-on: ubuntu-latest
-    needs: [web, server, ocr, ocr-runtime]
+    needs: [web, server, visual, ocr, ocr-runtime]
     # PR 只验证构建不推送；push / 手动触发推送 ghcr.io
     permissions:
       contents: read

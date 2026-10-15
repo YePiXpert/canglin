@@ -259,3 +259,16 @@ pnpm --filter @canglin/web test:e2e
 - 与方案不同：登录场景里的「两袋粮」画出来像钱袋，换成一座粮囤加一只小粮袋；`rest` 的视窗裁成 120 × 64、放大到 112px，`spill` 裁成 140 × 56、放大到 200px（原尺寸里留白太多，显小）；问候按 6 个时段（含「夜深了」「中午好」）。
 - 改动的测试接口：`EmptyState.spec.ts` 用例名的措辞；新增 `LineArt.spec.ts`（3 例）、`workbench.spec.ts` 问候 1 例。可见文案没有改动（「已确认导入」「已创建 N 条」「今天的待办都处理完了」「页面出现异常」「重新加载」照旧）。
 - 校验：typecheck ✓ lint ✓ test 259 passed；截图检查（系统 Chromium，隔离 API + 全新库）：登录 1440 / 390 × 浅 / 深、首次使用的工作台 / 申请单 / 库存 / 导入 / 报表 / 供应商 / 备份、AI 助手欢迎、404（1440 / 390）、页面异常（把报表页模块换成 setup 抛错的组件）、待办清空、导入确认成功；每幅插画另在预览页按 1× / 3× × 浅 / 深色核对过。
+
+### R2（2026-10-15）
+
+- 完成：`playwright.config.ts` 分成 `functional` 与 `visual` 两组，`test:e2e` 只跑功能流程，新增 `test:visual`；`visual.spec.ts` 去掉 `VISUAL` 开关（`test.skip(!seed)` 的保险保留）。新增 `apps/web/scripts/visual.sh`：按 `pnpm-lock.yaml` 的 `@playwright/test` 版本用 `mcr.microsoft.com/playwright:v<版本>-noble`，在其上构建本地镜像 `canglin-visual:<版本>`（加 `fonts-noto-cjk`），把仓库（git 文件清单，含未提交的改动）打包进容器安装、构建、比较，`--update` 时把变化了的基线拷回；差异图在 `apps/web/test-results/visual/`。CI 新增 `visual` job（同一个镜像，第一步装同一个字体包），`docker` job 的 `needs` 加上它。68 张基线按 R3 / R6 之后的页面在容器里重建（6.7 MB），文件名因为分组多了 `-visual`。README「测试」、DESIGN §9、`visual.spec.ts` 头注释、CHANGELOG 同步。
+- 跳过：无。
+- 与方案不同：方案写的是装 `fonts-wqy-microhei`；实际先用镜像自带的文泉驿正黑生成过一版，发现它没有粗体、容器里也不合成粗体，中文标题全是常规字重（字重改动在视觉回归里会看不出来），于是改装 `fonts-noto-cjk`（真正的粗体，字体栈里本来就列了 Noto Sans CJK SC）再重建。本地用派生镜像而不是每次 `apt-get`：快，也不依赖每次能连上 apt 源。
+- 改动的测试接口：`e2e/visual.spec.ts` 的运行方式（不再看 `VISUAL`，由 `--project=visual` 选择）；基线文件全部重建。
+- 校验：容器里 `--update` 生成 68 张后连续比较两次 4 passed（每次约 1 分钟，pnpm 缓存在 docker 卷 `canglin-visual-pnpm`）；宿主机 `--project=functional` 21 passed；`test --list` 显示 functional 21 例、visual 4 例。CI 上的 visual job 还没跑过（要推送后才会运行）。
+
+### 收尾（2026-10-15）
+
+- 全量：`pnpm --filter @canglin/shared build && pnpm typecheck && pnpm lint && pnpm test` ✓（前端 259、服务端 192），e2e functional 21 passed，视觉回归 4 passed（容器），部署脚本 25 passed，`scripts/tests` 通过。
+- 没有提交；用户要提交时可以按项提交（每项结束时都拍了树对象）。

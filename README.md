@@ -80,13 +80,13 @@ pnpm test                                           # 前端单测 + 服务端�
 pnpm --filter @canglin/server build            # 浏览器测试的 API（apps/server/test/browser-server.cjs）加载 dist
 pnpm --filter @canglin/web exec playwright install --with-deps chromium   # 首次运行浏览器测试前
 pnpm --filter @canglin/web test:e2e            # 浏览器流程：临时 SQLite + 真实 API，OCR/GPT 为合成替身
-VISUAL=1 pnpm --filter @canglin/web exec playwright test e2e/visual.spec.ts   # 视觉回归（可选，见下）
+apps/web/scripts/visual.sh                          # 视觉回归（在 Playwright 容器里跑，需要 docker，见下）
 python3 -m unittest discover -s deploy/tests -v     # 部署脚本（伪 git/docker，不接触真实服务）
 python3 -m unittest discover -s scripts/tests -v    # 导入评测脚本
 (cd apps/ocr && pytest)                             # 解析器单测 + API 集成（无需 paddle）
 ```
 
-视觉回归 `apps/web/e2e/visual.spec.ts`（1440 / 390 × 浅 / 深色，主要页面与三个登记弹窗）只在设了 `VISUAL=1` 时运行，平时的 `test:e2e` 与 CI 都跳过：截图基线（`e2e/visual.spec.ts-snapshots/`）依赖本机字体，现有基线是在装了 `fonts-wqy-microhei` 的 Linux 上生成的，字体不同的机器上先加 `--update-snapshots` 生成本机基线再比较。它要一个全新的数据库，必须单独运行（和其它 spec 一起跑时整组自动跳过）；有意改了 UI 后用 `--update-snapshots` 重建基线并人工看一遍差异。
+视觉回归 `apps/web/e2e/visual.spec.ts`（1440 / 390 × 浅 / 深色，主要页面与三个登记弹窗）是 Playwright 的 `visual` 组（`test:visual`），和浏览器流程（`test:e2e`）分开跑、各用一个全新的临时库。截图基线（`e2e/visual.spec.ts-snapshots/`）只在固定的容器里生成和比较：`apps/web/scripts/visual.sh` 用 `mcr.microsoft.com/playwright` 官方镜像（版本跟 `pnpm-lock.yaml` 里的 `@playwright/test` 一致，另装 `fonts-noto-cjk`，中文标题有真正的粗体），把仓库（含未提交的改动）复制进容器安装、构建再比较，不动本机的 `node_modules`；失败时差异图在 `apps/web/test-results/visual/`。CI 的 `visual` job 用同一个镜像，通过后才发布镜像。有意改了 UI 后运行 `apps/web/scripts/visual.sh --update` 重建变化了的基线，人工看一遍差异再提交；升级 Playwright 时同时改 CI 里的镜像标签并重建基线。
 
 ## Docker 部署（VPS）
 
