@@ -32,6 +32,8 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      # 设置页可选的模型（逗号分隔，* 不限制）；留空为默认的三个
+      LLM_ALLOWED_MODELS: ${LLM_ALLOWED_MODELS:-}
     volumes:
       - state:/app/state
     depends_on:

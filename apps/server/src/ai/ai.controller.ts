@@ -13,10 +13,10 @@ import type { FastifyRequest } from 'fastify';
 import {
   aiAskSchema,
   aiConfigSchema,
-  AI_MODELS,
   type AiAskInput,
   type AiConfigInput,
 } from '@canglin/shared';
+import { config } from '../config';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { AiService } from './ai.service';
@@ -58,7 +58,9 @@ export class AiController {
     const cfg = await this.aiConfig.getConfig();
     if (!cfg.apiKey) throw new BadRequestException('请先配置服务密钥，再获取模型列表');
     const available = await this.llm.listModels(cfg.baseUrl, cfg.apiKey);
-    return { models: AI_MODELS.map((m) => m.id).filter((id) => available.includes(id)) };
+    // 有允许列表时只回列表里服务商也提供的模型；不限制时原样返回
+    const allowed = config.llmAllowedModels;
+    return { models: allowed ? allowed.map((m) => m.id).filter((id) => available.includes(id)) : available };
   }
 
   @Post('capabilities')

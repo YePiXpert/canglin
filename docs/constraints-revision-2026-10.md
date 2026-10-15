@@ -227,3 +227,19 @@ pnpm --filter @canglin/web test:e2e
 - 与方案不同：读屏播报（`ImportStatusBar` 的 sr-only）措辞没改，只去掉了注释里的限制；路由切换过渡仍不做，理由改写成产品理由。
 - 改动的测试接口：`e2e/import.spec.ts`（面板按 region；状态条文件名按 testid、列表按行数；任务 id 读 `data-task-id`；「草稿已保存」「AI：…」按 testid；骨架按 `[data-skeleton]`；库存数量按 `product-quantity`）、`e2e/reports.spec.ts`（region）、`e2e/workflow.spec.ts`（`product-quantity`）、`e2e/visual.spec.ts`（`[data-skeleton]`、保存状态 testid）；`Panel.spec.ts` 新增 1 例。
 - 校验：typecheck ✓ lint ✓ test 254 passed（原 253）/ e2e 21 passed、4 skipped（视觉回归，用系统 Chromium 154 经临时配置运行）
+
+### R4（2026-10-15）
+
+- 完成：`packages/shared` 的 `AI_MODELS` 换成 `AiModelOption` + `DEFAULT_AI_MODELS` + `fixedReasoningEffort()`，`aiConfigSchema.model` 去掉写死的 `refine`，`AiConfigView` 增加 `models`（`null` = 不限制）；服务端 `config.llmAllowedModels` 读 `LLM_ALLOWED_MODELS`（逗号分隔，未设置为默认三个，`*` 不限制），`AiConfigService.updateConfig` 拒绝列表外的模型（400），`GET /api/ai/models` 有列表时过滤、不限制时原样返回，GPT 固定中等思考改为查 `fixedReasoningEffort`；设置页有列表时下拉、`null` 时输入框（候选来自「获取模型列表」），推理强度锁定按所选模型判断。`.env.example`、`docker-compose.yml`、README「AI 能力」、升级说明「配置第三方 Responses」第 2 步、CHANGELOG 同步。
+- 跳过：`deploy/compose.trial.yml` 没加——试用 compose 只透传列出的变量，不列就是默认的三个。
+- 与方案不同：允许列表的校验放在 `AiConfigService.updateConfig`（服务层），不在控制器的 zod 管道；`trusted-import.spec.ts` 里「换模型使能力检测失效」的用例原来换成 `other`，现在换成允许列表里的另一个模型。
+- 改动的测试接口：无（e2e 的三个选项不变；`browser-server.cjs` 删掉 `LLM_ALLOWED_MODELS`，不受开发机环境影响）。新增服务端 1 例、前端 1 例，`AiPanel.spec.ts` 的配置补 `models: null`。
+- 校验：shared build ✓ typecheck ✓ lint ✓ 服务端 192 passed（原 191）/ 前端 255 passed / e2e 21 passed、4 skipped
+
+### R5（2026-10-15）
+
+- 完成：`deploy/upgrade.sh` 拉不到镜像时在停机前报错退出（提示 CI、私有包登录、`--build` 三条出路），并撤回这次尝试：源码 `git reset --keep` 回升级前的提交、删掉这次的 `release-*` 记录与三个回退标签；`deploy/deploy.sh` 同样不再回退构建，新增 `--build`（位置不限，端口与目录仍按位置读，未知 `--xxx` 在动手前退出），拉取失败时区分「这个提交的镜像还没发布」与「包不可访问」；新增可选的 `scripts/githooks/pre-push`（默认不启用）。README「Docker 部署」「开发约定」、升级说明「备份、恢复与回退」、CHANGELOG 同步。
+- 跳过：无。
+- 与方案不同：拉取失败后撤回源码与回退点是方案外加的：原来拉取失败会接着本地构建，现在这条路是「CI 还在跑」时的常态，不撤回的话下次升级会把新提交记成「旧版本」，回退点里的 `old-compose.yml` 也会是新版的。
+- 改动的测试接口：`deploy/tests/test_paths.py` 的 `test_failed_pull_rebuilds_all_three_images` 换成 `test_failed_pull_fails_before_stopping`；新增 `test_failed_pull_restores_previous_source`、`test_build_flag_builds_all_three_images` 与 deploy.sh 的 4 例；假 git 加 `MOVES_HEAD`（merge 之后 HEAD 换成新提交）。
+- 校验：`bash -n` 四个脚本 ✓ `sh -n` pre-push ✓ 部署脚本 25 passed（原 19，含 `docker compose config` 解析试用配置的 1 例）

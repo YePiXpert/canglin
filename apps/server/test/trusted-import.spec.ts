@@ -7,6 +7,7 @@ import { OcrClient } from '../src/imports/ocr.client';
 import { AttachmentsService } from '../src/attachments/attachments.service';
 import { AiResponseError, LlmClient } from '../src/ai/llm.client';
 import { config } from '../src/config';
+import { DEFAULT_AI_MODELS } from '@canglin/shared';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -255,8 +256,10 @@ describe('trusted import', () => {
   it('invalidates capability results when model changes', async () => {
     const service = ctx.app.get(AiConfigService),
       cfg = await service.getConfig();
+    // 换成允许列表里的另一个模型：能力检测结果按模型失效
+    const other = DEFAULT_AI_MODELS.find((m) => m.id !== cfg.model)!.id;
     await expect(
-      service.updateConfig({ ...cfg, model: 'other', autoImport: true }),
+      service.updateConfig({ ...cfg, model: other, autoImport: true }),
     ).rejects.toThrow('能力检测');
   });
   it('requires explicit continuation for identical uploaded content', async () => {

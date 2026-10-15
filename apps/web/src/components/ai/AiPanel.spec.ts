@@ -51,6 +51,7 @@ describe('AiPanel', () => {
       model: 'glm-4.6',
       semanticSearch: true,
       apiKeySet: false,
+      models: null,
     });
     const wrapper = mountPanel();
     await wrapper.setProps({ open: true });
@@ -69,6 +70,7 @@ describe('AiPanel', () => {
       model: 'glm-4.6',
       semanticSearch: true,
       apiKeySet: true,
+      models: null,
     });
     const wrapper = mountPanel();
     await wrapper.setProps({ open: true });
@@ -92,6 +94,7 @@ describe('AiPanel', () => {
       model: 'glm-4.6',
       semanticSearch: true,
       apiKeySet: true,
+      models: null,
     });
     mockedAsk.mockResolvedValue({
       answer: '上月共 3 条记录。',
@@ -121,6 +124,7 @@ describe('AiPanel', () => {
       model: 'glm-4.6',
       semanticSearch: true,
       apiKeySet: true,
+      models: null,
     });
     mockedAsk.mockRejectedValue(new Error('AI 服务调用失败：超时'));
     const wrapper = mountPanel();

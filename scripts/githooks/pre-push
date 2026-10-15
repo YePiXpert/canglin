@@ -1,0 +1,22 @@
+#!/bin/sh
+# 可选的 push 前检查，默认不启用（不装 husky 之类的依赖）。
+# 启用：git config core.hooksPath scripts/githooks
+# 停用：git config --unset core.hooksPath；单次跳过：git push --no-verify
+# 跑 README「开发约定」里的提交前检查，任何一步失败都取消这次 push。
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+
+run() {
+  printf '\n[pre-push] %s\n' "$*"
+  "$@" || {
+    printf '\n[pre-push] 未通过：%s\n[pre-push] push 已取消；修好后重新 push（确需跳过检查时用 git push --no-verify）\n' "$*" >&2
+    exit 1
+  }
+}
+
+run pnpm --filter @canglin/shared build
+run pnpm typecheck
+run pnpm lint
+run pnpm test
+printf '\n[pre-push] 检查通过\n'

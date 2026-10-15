@@ -42,7 +42,7 @@
 
 ## AI 能力（可选）
 
-在系统设置连接支持 Responses API 的服务，保存地址、密钥与模型并完成能力检测。模型只提供 `gemini-3.8-flash-high`、`gpt-6.1-sol`（中等思考）与 `grok-4.7`。图像和结构化输出通过后，可开启自动智能导入；识别、问答共用一个模型。
+在系统设置连接支持 Responses API 的服务，保存地址、密钥与模型并完成能力检测。模型默认只提供 `gemini-3.8-flash-high`、`gpt-6.1-sol`（中等思考）与 `grok-4.7`，可用服务器环境变量 `LLM_ALLOWED_MODELS` 换成别的列表（逗号分隔，`*` 不限制）。图像和结构化输出通过后，可开启自动智能导入；识别、问答共用一个模型。
 
 - **原件识别**：带文本层的 OA 打印 PDF 先按表格边框重建物理行（不经 OCR），AI 在审核模式下只拆分品名与规格、判断单位，数量与链接以文本层为准；截图、照片和扫描页由 AI 在识别模式下从页图主识别（照片先转正、缩放）。失败页由网格结果或本地 OCR 补充，两者都失败时仍可人工补录并记录逐页核对。AI 不伪造坐标，不自动入账；与已有物品匹配的品名只作建议，由你决定是否采用。
 - **人工差异确认**：重试产生的品名、规格、单位、数量和价格变化须明确处理，后台迟到结果不会覆盖人工草稿。
@@ -100,11 +100,12 @@ python3 -m unittest discover -s scripts/tests -v    # 导入评测脚本
 curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/deploy.sh | bash
 # 自定义端口：同一命令末尾改为 bash -s -- 9000
 # 自定义目录：同一命令末尾改为 bash -s -- 8080 /srv/canglin
+# 不用 GHCR 镜像、在本机构建：末尾加 --build，如 bash -s -- --build 或 bash -s -- 8080 /srv/canglin --build
 ```
 
 默认部署目录为 `/opt/canglin`，不存在时自动克隆；已有仓库和 `.env` 会复用。源码开发副本可放在 `/workspace/canglin`，不会被脚本自动选为部署目标。目录优先级为显式参数 → `CANGLIN_REPO` → `/opt/canglin`。
 
-脚本自动完成：生成 `.env`（随机 OCR_API_KEY）→ 从 GHCR 拉镜像并启动（拉取失败自动回退本地构建）→ API 与 OCR 就绪检查。首次访问 `http://<服务器IP>:8080` 设置管理员密码。
+脚本自动完成：生成 `.env`（随机 OCR_API_KEY）→ 从 GHCR 拉取当前提交（`sha-xxxxxxx`）的镜像并启动 → API 与 OCR 就绪检查。首次访问 `http://<服务器IP>:8080` 设置管理员密码。拉不到镜像时脚本报错退出，不会自动改用本地构建：多半是这个提交的 CI 还没跑完或没通过（到 GitHub Actions 查看，通过后重新运行），或私有包还没 `docker login ghcr.io`；确认要用本机源码（未经 CI 测试）构建时加 `--build`。
 
 **版本升级**（一行命令，任意目录执行；默认操作 `/opt/canglin`）：
 
@@ -116,13 +117,13 @@ curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/upgra
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/upgrade.sh | bash -s -- /path/to/canglin
-bash deploy/upgrade.sh --build     # 不等 CI，直接本地构建全部三个镜像
-bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像，不拉取代码
+bash deploy/upgrade.sh --build     # 不等 CI，直接用本机源码构建全部三个镜像（未经 CI 测试）
+bash deploy/upgrade.sh --no-pull   # 不拉取代码，按当前源码 SHA 拉取镜像（同时加 --build 则本地构建）
 ```
 
 数据统一保存在部署目录的 `data/`（默认 `/opt/canglin/data`），`canglin_state` 仅作为映射该目录的 Docker 卷名。首次部署脚本会准备目录权限；旧版升级会在停机备份后自动迁移并核对数据，保留独立旧卷副本。不要直接用 `docker compose up` 代替旧版首次升级。自定义部署目录由脚本写入 `.env` 的 `CANGLIN_DATA_DIR`。
 
-升级脚本只做快进更新（已跟踪文件有本机改动时退出），三个服务绑定同一源码的 `sha-xxxxxxx` 标签并写入 `.env` 的 `RELEASE_TAG`；新镜像就绪后才停机，停机后先把整个数据卷和三个旧镜像引用保存到 `pre-upgrade-backups/release-TIMESTAMP/` 再启动新版本。这些回退点不会自动删除，稳定后由管理员归档；回退必须同时恢复旧数据和旧镜像，回退与回退后的管理命令见 [升级说明](docs/upgrade-2026-09.md#备份恢复与回退)。推送源码和发布 GHCR 镜像不会自动更新 VPS。
+升级脚本只做快进更新（已跟踪文件有本机改动时退出），三个服务绑定同一源码的 `sha-xxxxxxx` 标签并写入 `.env` 的 `RELEASE_TAG`；新镜像就绪后才停机，停机后先把整个数据卷和三个旧镜像引用保存到 `pre-upgrade-backups/release-TIMESTAMP/` 再启动新版本。拉不到这个标签的镜像时（CI 还没跑完或没通过、私有包没有 `docker login ghcr.io`）脚本在停机前报错退出：源码退回升级前的提交、不留下这次的回退点，也不会回退本地构建；确认要用本机源码时加 `--build`。这些回退点不会自动删除，稳定后由管理员归档；回退必须同时恢复旧数据和旧镜像，回退与回退后的管理命令见 [升级说明](docs/upgrade-2026-09.md#备份恢复与回退)。推送源码和发布 GHCR 镜像不会自动更新 VPS。
 
 ## 数据与安全提醒
 
@@ -145,7 +146,7 @@ bash deploy/upgrade.sh --no-pull   # 按当前源码 SHA 获取或构建镜像�
 - 改动前先对照上面的「适用范围与不做什么」；超出范围的需求先讨论，不顺手加。
 - 如无必要勿增实体：优先复用现有页面、数据表、接口和 `apps/web/src/components/ui` 组件；没有真实需要不加表、字段、页面或依赖。
 - 这些规则不能削弱：已记账业务通过带原因的撤销回冲纠正，不能删除或覆盖数量与金额；新业务写操作必须带 `Idempotency-Key`；草稿按版本号保存，过期版本返回 409；有未完成页面时须逐页人工核对才能确认；确认时关联原件，原件缺失不能确认；接口和日志不输出明文密钥。
-- 提交前至少运行 `pnpm --filter @canglin/shared build && pnpm typecheck && pnpm lint && pnpm test`；改到导入、工作台、库存流程时再跑浏览器测试（见「测试」）。
+- 提交前至少运行 `pnpm --filter @canglin/shared build && pnpm typecheck && pnpm lint && pnpm test`；改到导入、工作台、库存流程时再跑浏览器测试（见「测试」）。可选：`git config core.hooksPath scripts/githooks` 启用仓库自带的 pre-push hook，push 前自动跑这组检查、失败即取消 push（默认不启用；停用用 `git config --unset core.hooksPath`，单次跳过用 `git push --no-verify`）。
 - 前端遵循 [apps/web/DESIGN.md](apps/web/DESIGN.md)；导入、OCR、AI、备份与回退的行为和接口以 [升级说明](docs/upgrade-2026-09.md) 为准，行为变了同步更新这两份文档。
 
 ## 隔离试用

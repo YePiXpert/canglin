@@ -14,8 +14,8 @@ import { aiApi } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
-import type { AiConfigView, ReasoningSetting } from '@canglin/shared';
-import { AI_MODELS } from '@canglin/shared';
+import type { AiConfigView, AiModelOption, ReasoningSetting } from '@canglin/shared';
+import { fixedReasoningEffort } from '@canglin/shared';
 
 const props = defineProps<{
   /** 设置页整页载入（或读取失败后重试）得到的配置；读取失败为 null。换成新的非空对象时回填表单 */
@@ -72,15 +72,20 @@ let aiConfigRevision = 0;
 const aiConnectionDirty = computed(
   () => aiForm.baseUrl.trim() !== aiSavedBaseUrl.value || !!aiForm.apiKey.trim(),
 );
-const modelOptions = AI_MODELS.map((m) => ({ value: m.id, label: m.label }));
-watch(() => aiForm.model, (model) => {
-  if (model === 'gpt-6.1-sol') aiForm.reasoningEffort = 'medium';
+/** 服务端的模型允许列表（LLM_ALLOWED_MODELS）：有列表时下拉选择；null = 不限制，直接填写模型名（候选来自「获取模型列表」） */
+const allowedModels = ref<AiModelOption[] | null>([]);
+const modelOptions = computed(() => allowedModels.value?.map((m) => ({ value: m.id, label: m.label })) ?? null);
+/** 有的模型固定推理强度（GPT 6.1 Sol 固定中等思考），这时高级配置里的推理强度不能改 */
+const fixedEffort = computed(() => fixedReasoningEffort(aiForm.model.trim()));
+watch(fixedEffort, (effort) => {
+  if (effort) aiForm.reasoningEffort = effort;
 });
 
 function applyAiView(view: AiConfigView): void {
   aiKeySet.value = view.apiKeySet;
   aiKeySource.value = view.keySource ?? 'database';
   aiCapabilities.value = view.capabilities;
+  allowedModels.value = view.models;
   aiSavedBaseUrl.value = view.baseUrl;
   aiForm.apiKey = '';
   aiChangeKey.value = false;
@@ -100,7 +105,8 @@ async function loadAiModels(): Promise<void> {
     const result = await aiApi.models();
     if (revision !== aiConfigRevision) return;
     aiModels.value = result.models;
-    if (!result.models.length) aiModelsError.value = '服务商没有返回所选的三个模型，请检查接口配置。';
+    if (!result.models.length)
+      aiModelsError.value = modelOptions.value ? '服务商没有返回允许列表中的模型，请检查接口配置。' : '服务商没有返回任何模型，请检查接口配置。';
   } catch (e) {
     if (revision === aiConfigRevision) {
       aiModels.value = [];
@@ -251,10 +257,20 @@ async function testAi(): Promise<void> {
       <div class="space-y-2 px-5 py-4">
         <div class="flex items-start gap-3">
           <Select
+            v-if="modelOptions"
             class="flex-1 min-w-0"
             v-model="aiForm.model"
             label="模型"
             :options="modelOptions"
+            :error="aiErrors.model"
+          />
+          <Input
+            v-else
+            class="flex-1 min-w-0"
+            v-model="aiForm.model"
+            label="模型"
+            placeholder="填写模型名，或先获取模型列表"
+            :suggestions="aiModels"
             :error="aiErrors.model"
           />
           <Button
@@ -310,7 +326,7 @@ async function testAi(): Promise<void> {
           description="识别与问答请求附带的推理强度；服务不接受时会自动去掉该参数重发，之后不再发送。「不发送」时也不带温度。"
           class="pt-0"
         >
-          <Select v-model="aiForm.reasoningEffort" :options="reasoningOptions" :disabled="aiForm.model === 'gpt-6.1-sol'" size="sm" class="w-52" />
+          <Select v-model="aiForm.reasoningEffort" :options="reasoningOptions" :disabled="!!fixedEffort" size="sm" class="w-52" />
         </SettingRow>
         <Switch
           v-model="aiForm.reviewTextPdf"

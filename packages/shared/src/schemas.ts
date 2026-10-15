@@ -148,11 +148,28 @@ export type AutoBackupConfig = z.infer<typeof autoBackupConfigSchema>;
 
 /* ----------------------------------- AI ----------------------------------- */
 
-export const AI_MODELS = [
+/** 设置页里的一个模型选项 */
+export interface AiModelOption {
+  id: string;
+  label: string;
+  /** 选这个模型时推理强度固定为此值，设置页不能改（GPT 6.1 Sol 的识别和问答固定中等思考） */
+  reasoningEffort?: ReasoningSetting;
+}
+
+/**
+ * 默认允许的模型。服务端按环境变量 LLM_ALLOWED_MODELS 给出允许列表（未设置时就是这三个，`*` = 不限制），
+ * 随 GET /api/ai/config 的 models 下发；这里的 label 与固定推理强度对列表外的同名模型也生效。
+ */
+export const DEFAULT_AI_MODELS: AiModelOption[] = [
   { id: 'gemini-3.8-flash-high', label: 'gemini-3.8-flash-high' },
-  { id: 'gpt-6.1-sol', label: 'gpt-6.1-sol（中等思考）' },
+  { id: 'gpt-6.1-sol', label: 'gpt-6.1-sol（中等思考）', reasoningEffort: 'medium' },
   { id: 'grok-4.7', label: 'grok-4.7' },
-] as const;
+];
+
+/** 选这个模型时固定的推理强度；没有固定值时返回 undefined */
+export function fixedReasoningEffort(model: string): ReasoningSetting | undefined {
+  return DEFAULT_AI_MODELS.find((m) => m.id === model)?.reasoningEffort;
+}
 
 /** OpenAI 兼容 LLM 服务配置（存 Setting 表，设置页可随时改） */
 export const aiConfigSchema = z.object({
@@ -161,8 +178,8 @@ export const aiConfigSchema = z.object({
   baseUrl: z.string().trim().url('接口地址应为合法 URL').max(200),
   /** 留空 = 保留已保存的 Key */
   apiKey: z.string().trim().max(200).optional(),
-  model: z.string().trim().min(1, '模型名不能为空').max(100)
-    .refine((id) => AI_MODELS.some((m) => m.id === id), '请选择 Gemini Flash High、GPT 6.1 Sol 或 Grok 4.7'),
+  /** 是否在允许列表里由服务端按 LLM_ALLOWED_MODELS 判断 */
+  model: z.string().trim().min(1, '模型名不能为空').max(100),
   /** 申请单、单据与库存按品名搜索时启用 AI 同义词扩展（关闭则退回普通关键字匹配） */
   semanticSearch: z.boolean(),
   protocol: z.literal('responses').optional(),
@@ -200,6 +217,8 @@ export interface AiConfigView {
     tools: boolean;
   };
   keySource?: 'server' | 'database';
+  /** 设置页可选的模型（服务端 LLM_ALLOWED_MODELS）；null = 不限制，可以填写任意模型名 */
+  models: AiModelOption[] | null;
 }
 
 export const aiAskSchema = z.object({

@@ -83,6 +83,43 @@ describe('AI 配置', () => {
     await service.updateConfig({ ...current, model: 'gemini-3.8-flash-high', reasoningEffort: 'auto' });
   });
 
+  it('允许列表来自 LLM_ALLOWED_MODELS：随配置下发并在保存时校验；* 不限制时任意模型可保存、模型列表原样返回', async () => {
+    const service = ctx.app.get(AiConfigService);
+    const previous = { models: config.llmAllowedModels, apiKey: config.llmDefaults.apiKey };
+    const base = { enabled: false, baseUrl: (await service.getConfig()).baseUrl, semanticSearch: true };
+    const put = (model: string) => ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model } }) });
+    const ids = (body: { models: { id: string }[] | null }) => body.models?.map((m) => m.id) ?? null;
+    try {
+      // 未设置：默认的三个，GPT 带固定的中等思考
+      const current = await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() });
+      expect(ids(current.json())).toEqual(['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7']);
+      expect(current.json().models[1]).toMatchObject({ label: 'gpt-6.1-sol（中等思考）', reasoningEffort: 'medium' });
+
+      Object.defineProperty(config, 'llmAllowedModels', { value: [{ id: 'grok-4.7', label: 'grok-4.7' }, { id: 'house-model', label: 'house-model' }] });
+      const outside = await put('gemini-3.8-flash-high');
+      expect(outside.statusCode).toBe(400);
+      expect(outside.json().message).toContain('grok-4.7、house-model');
+      const inside = await put('house-model');
+      expect(inside.statusCode).toBe(200);
+      expect(ids(inside.json())).toEqual(['grok-4.7', 'house-model']);
+
+      Object.defineProperty(config, 'llmAllowedModels', { value: null });
+      const free = await put('anything-goes');
+      expect(free.statusCode).toBe(200);
+      expect(free.json()).toMatchObject({ model: 'anything-goes', models: null });
+      // 列表外的 GPT 仍固定中等思考
+      expect((await put('gpt-6.1-sol')).json().reasoningEffort).toBe('medium');
+      Object.defineProperty(config.llmDefaults, 'apiKey', { value: 'server-only-secret' });
+      const models = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
+      expect(models.json()).toEqual({ models: ['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7', 'other-model'] });
+    } finally {
+      Object.defineProperty(config, 'llmAllowedModels', { value: previous.models });
+      Object.defineProperty(config.llmDefaults, 'apiKey', { value: previous.apiKey });
+      fake.modelCalls.length = 0;
+      await service.updateConfig({ ...base, model: 'gemini-3.8-flash-high', reasoningEffort: 'auto' });
+    }
+  });
+
   it('默认未启用且不回传 Key', async () => {
     const res = await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() });
     expect(res.statusCode).toBe(200);

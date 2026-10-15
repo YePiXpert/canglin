@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
-import type { AiConfigInput, AiConfigView, ReasoningSetting } from '@canglin/shared';
+import { fixedReasoningEffort, type AiConfigInput, type AiConfigView, type ReasoningSetting } from '@canglin/shared';
 import type { ChatCallOptions, RejectableParam } from './llm.client';
 
 export interface StoredAiConfig {
@@ -57,7 +57,8 @@ export class AiConfigService {
     for (const key of ['importModel', 'askModel', 'searchModel'])
       Reflect.deleteProperty(result, key);
     if (config.llmDefaults.apiKey) result.apiKey = config.llmDefaults.apiKey;
-    if (result.model === 'gpt-6.1-sol') result.reasoningEffort = 'medium';
+    const fixed = fixedReasoningEffort(result.model);
+    if (fixed) result.reasoningEffort = fixed;
     return result;
   }
   fingerprint(cfg: StoredAiConfig) {
@@ -119,14 +120,17 @@ export class AiConfigService {
     return result;
   }
   async updateConfig(input: AiConfigInput, ip?: string) {
+    const allowed = config.llmAllowedModels;
+    if (allowed && !allowed.some((m) => m.id === input.model))
+      throw new BadRequestException(`模型不在允许列表中，请选择 ${allowed.map((m) => m.id).join('、')}`);
     const current = await this.getConfig();
     const stored: StoredAiConfig = {
       ...current,
       ...input,
       protocol: 'responses',
       apiKey: config.llmDefaults.apiKey || input.apiKey || current.apiKey,
-      reasoningEffort: input.model === 'gpt-6.1-sol' ? 'medium'
-        : input.reasoningEffort ?? (input.model === current.model ? current.reasoningEffort : 'auto'),
+      reasoningEffort: fixedReasoningEffort(input.model)
+        ?? input.reasoningEffort ?? (input.model === current.model ? current.reasoningEffort : 'auto'),
     };
     if (stored.enabled && !stored.apiKey) throw new BadRequestException('请先配置 API Key');
     if (stored.enabled && stored.autoImport) {
@@ -168,6 +172,7 @@ export class AiConfigService {
       ...rest,
       apiKeySet: !!apiKey,
       keySource: config.llmDefaults.apiKey ? 'server' : 'database',
+      models: config.llmAllowedModels,
       capabilities: caps
         ? {
             checkedAt: caps.checkedAt,

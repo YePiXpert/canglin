@@ -29,7 +29,10 @@ if tool == "git":
     elif args[0] == "diff" and os.environ.get("DIRTY_TRACKED") == "1":
         sys.exit(1)
     elif args[0] == "rev-parse":
-        print("abc1234")
+        # MOVES_HEAD=1：merge 之后 HEAD 换成新提交（默认新旧提交相同）
+        moved = os.environ.get("MOVES_HEAD") == "1" and any(
+            json.loads(line)[2][:1] == ["merge"] for line in open(os.environ["COMMAND_LOG"]))
+        print("def5678" if moved else "abc1234")
 elif tool == "docker":
     if os.environ.get("FAIL_PULL") == "1" and args[:2] == ["compose", "pull"]:
         sys.exit(1)
@@ -145,6 +148,58 @@ class DeploymentPaths(unittest.TestCase):
         self.assertFalse((target / ".env").exists())
         self.assertEqual((target / "important").read_text(), "keep")
 
+    def test_install_failed_pull_fails_without_building(self):
+        # 拉不到镜像不回退本地构建：不构建、不启动，也不把这个版本写进 .env。
+        target = self.root / "install-no-image"
+        r = self.run_script("deploy.sh", "8080", str(target), FAIL_PULL="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--build", r.stderr)
+        compose = [c[2][:2] for c in self.commands() if c[0] == "docker"]
+        self.assertIn(["compose", "pull"], compose)
+        self.assertNotIn(["compose", "build"], compose)
+        self.assertNotIn(["compose", "up"], compose)
+        self.assertNotIn("RELEASE_TAG=", (target / ".env").read_text())
+
+    def test_install_build_flag_builds_all_three_images(self):
+        # --build 不拉镜像（拉取会失败也不影响），用同一源码版本构建全部三个镜像后再启动。
+        target = self.root / "install-local-build"
+        r = self.run_script("deploy.sh", "--build", CANGLIN_REPO=str(target), FAIL_PULL="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        compose = [c[2] for c in self.commands() if c[0] == "docker" and c[2][:1] == ["compose"]]
+        verbs = [c[1] for c in compose]
+        self.assertNotIn("pull", verbs)
+        builds = [c for c in compose if c[1] == "build"]
+        self.assertEqual(len(builds), 1)
+        self.assertEqual(builds[0][-3:], ["web", "server", "ocr"])
+        self.assertIn("SOURCE_REVISION=abc1234", builds[0])
+        self.assertLess(verbs.index("build"), verbs.index("up"))
+        env = (target / ".env").read_text()
+        self.assertIn("WEB_PORT=8080", env)
+        self.assertIn("RELEASE_TAG=sha-abc1234", env)
+
+    def test_install_build_flag_keeps_positional_port_and_directory(self):
+        # --build 放在端口与目录之间或最后，位置参数照旧解析，显式目录仍优先于 CANGLIN_REPO。
+        middle, last = self.root / "build middle", self.root / "build last"
+        for target, args in ((middle, ["9003", "--build", str(middle)]),
+                             (last, ["9004", str(last), "--build"])):
+            with self.subTest(args=args):
+                r = self.run_script("deploy.sh", *args, CANGLIN_REPO=str(self.root / "wrong"))
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertIn(f"WEB_PORT={args[0]}", (target / ".env").read_text())
+                calls = [c[2][:2] for c in self.commands() if c[0] == "docker" and c[1] == str(target)]
+                self.assertIn(["compose", "build"], calls)
+                self.assertIn(["compose", "up"], calls)
+        self.assertFalse((self.root / "wrong").exists())
+
+    def test_install_rejects_unknown_option_before_any_action(self):
+        # 拼错的选项不能被当成端口：在克隆和调用 docker 之前退出。
+        target = self.root / "install-typo"
+        r = self.run_script("deploy.sh", "--biuld", CANGLIN_REPO=str(target))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--biuld", r.stderr)
+        self.assertEqual(self.commands(), [])
+        self.assertFalse(target.exists())
+
     def test_upgrade_default_does_not_select_source_checkout_or_home(self):
         script, opt = self.patched("upgrade.sh")
         self.repository("canglin")
@@ -166,13 +221,51 @@ class DeploymentPaths(unittest.TestCase):
         self.assertTrue(all(c[1] == str(target) for c in calls))
         self.assertFalse((self.root / "wrong").exists())
 
-    def test_failed_pull_rebuilds_all_three_images(self):
-        target = self.repository("fallback")
-        r = self.run_script("upgrade.sh", str(target), "--no-pull", FAIL_PULL="1")
+    def test_failed_pull_fails_before_stopping(self):
+        # CI 没通过或还没跑完的提交没有镜像：不回退本地构建，在停机前退出，.env 仍指向运行中的版本。
+        target = self.repository("no-image")
+        env_before = (target / ".env").read_text()
+        r = self.run_script("upgrade.sh", str(target), FAIL_PULL="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("服务未停止", r.stderr)
+        self.assertIn("--build", r.stderr)
+        compose = [c[2][:2] for c in self.commands() if c[0] == "docker"]
+        self.assertIn(["compose", "pull"], compose)
+        for verb in ("down", "build", "up"):
+            self.assertNotIn(["compose", verb], compose)
+        self.assertEqual((target / ".env").read_text(), env_before)
+        # 这次的回退点记录已删除，不留下不能用的 release 目录
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_failed_pull_restores_previous_source(self):
+        # 已经快进到新提交时退回旧提交，并删掉这次打的回退标签：下次升级记下的旧版本仍是运行中的版本
+        target = self.repository("no-image-moved")
+        r = self.run_script("upgrade.sh", str(target), FAIL_PULL="1", MOVES_HEAD="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("sha-def5678", r.stderr)
+        self.assertIn("源码仍是 abc1234", r.stderr)
+        git_calls = [c[2] for c in self.commands() if c[0] == "git"]
+        self.assertIn(["reset", "-q", "--keep", "abc1234"], git_calls)
+        self.assertLess(git_calls.index(["merge", "--ff-only", "origin/main"]), git_calls.index(["reset", "-q", "--keep", "abc1234"]))
+        removed = [c[2][1] for c in self.commands() if c[0] == "docker" and c[2][:1] == ["rmi"]]
+        self.assertEqual([name.split(":")[0] for name in removed], ["canglin-rollback-web", "canglin-rollback-server", "canglin-rollback-ocr"])
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_build_flag_builds_all_three_images(self):
+        # --build 不拉镜像（拉取会失败也不影响），三个镜像构建好之后才停机。
+        target = self.repository("local-build")
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", "--build", FAIL_PULL="1")
         self.assertEqual(r.returncode, 0, r.stderr)
-        builds = [c[2] for c in self.commands() if c[2][:2] == ["compose", "build"]]
+        compose = [c[2] for c in self.commands() if c[0] == "docker" and c[2][:1] == ["compose"]]
+        verbs = [c[1] for c in compose]
+        self.assertNotIn("pull", verbs)
+        builds = [c for c in compose if c[1] == "build"]
         self.assertEqual(len(builds), 1)
         self.assertEqual(builds[0][-3:], ["web", "server", "ocr"])
+        self.assertIn("SOURCE_REVISION=abc1234", builds[0])
+        self.assertLess(verbs.index("build"), verbs.index("down"))
+        self.assertLess(verbs.index("down"), verbs.index("up"))
+        self.assertIn("RELEASE_TAG=sha-abc1234", (target / ".env").read_text())
         self.assertTrue(any("/ready" in " ".join(c[2]) for c in self.commands()))
 
     def test_upgrade_preserves_untracked_local_configuration(self):

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { DEFAULT_AI_MODELS, type AiModelOption } from '@canglin/shared';
 
 /** 运行时状态目录：数据库、上传、备份、密钥都集中在这里，便于挂载与备份 */
 function resolveDataDir(): string {
@@ -11,6 +12,15 @@ function resolveDataDir(): string {
 }
 
 const dataDir = resolveDataDir();
+
+/** LLM_ALLOWED_MODELS：逗号分隔的模型名；未设置（compose 传空串）用默认的三个，`*` 不限制。已知模型沿用默认的显示名与固定推理强度 */
+function allowedModels(raw: string | undefined): AiModelOption[] | null {
+  const value = raw?.trim();
+  if (!value) return DEFAULT_AI_MODELS;
+  if (value === '*') return null;
+  const ids = [...new Set(value.split(',').map((id) => id.trim()).filter(Boolean))];
+  return ids.map((id) => DEFAULT_AI_MODELS.find((m) => m.id === id) ?? { id, label: id });
+}
 
 export const config = {
   dataDir,
@@ -30,6 +40,8 @@ export const config = {
       : process.env.LLM_API_KEY || '',
     model: process.env.LLM_MODEL || 'gpt-6.1-sol',
   },
+  /** 设置页可选的模型：LLM_ALLOWED_MODELS 逗号分隔；未设置为默认的三个，`*` 为不限制（null） */
+  llmAllowedModels: allowedModels(process.env.LLM_ALLOWED_MODELS),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 30) * 1024 * 1024,
   /** AI_IMAGE_STRIPS=1：长截图按空白带切成最多 3 段、作为同一页的多张图识别（评测通过前默认关闭） */
   aiImageStrips: process.env.AI_IMAGE_STRIPS === '1',

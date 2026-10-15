@@ -8,6 +8,8 @@ process.env.DATA_DIR = directory;
 process.env.DATABASE_URL = `file:${directory}/canglin.db`;
 process.env.LLM_API_KEY = '';
 delete process.env.LLM_API_KEY_FILE;
+// 设置页的模型选项用默认的三个（不受开发机环境变量影响）
+delete process.env.LLM_ALLOWED_MODELS;
 execFileSync(
   process.execPath,
   [

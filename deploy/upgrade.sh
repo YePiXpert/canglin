@@ -7,6 +7,7 @@
 #   curl -fsSL …/upgrade.sh | bash -s -- /path/to/repo
 #                                      # 仓库在别处时指定目录（或用环境变量 CANGLIN_REPO）
 # 可选参数：--build 本地构建三个镜像；--full 兼容旧参数；--no-pull 跳过 git pull
+# 镜像默认拉取 CI 发布的 sha-xxxxxxx 标签；拉不到时在停机前退出，不回退本地构建（用本地源码须显式加 --build）
 set -euo pipefail
 
 info() { printf '\033[1;34m[升级]\033[0m %s\n' "$*"; }
@@ -96,15 +97,25 @@ case "$RESOLVED" in
 esac
 
 # ---------- 获取镜像（不停机） ----------
+# 拉不到镜像不回退本地构建：CI 没通过或还没跑完的提交没有镜像，回退构建等于把没过测试的源码上线。
 if [ "$BUILD" = 1 ]; then
   SERVICES="web server ocr"
   info "本地构建镜像：$SERVICES …"
   docker compose build --build-arg "SOURCE_REVISION=$NEW_COMMIT" $SERVICES
 else
-  info "拉取最新镜像（未变更的层不会重复下载）…"
+  info "拉取镜像 $RELEASE_TAG（未变更的层不会重复下载）…"
   if ! docker compose pull; then
-    warn "镜像拉取失败，回退本地构建全部三个镜像"
-    docker compose build --build-arg "SOURCE_REVISION=$NEW_COMMIT" web server ocr
+    # 撤回这次尝试，下次升级照常从运行中的版本记起：源码退回升级前的提交（--keep 不碰未跟踪文件，
+    # 前面已确认没有已跟踪文件的改动），删掉这次的回退点记录与回退标签（只是标签，镜像仍被运行中的容器使用）。
+    if [ "$NEW_COMMIT" != "$OLD_COMMIT" ]; then
+      git reset -q --keep "$OLD_COMMIT" || warn "源码没能退回 $OLD_COMMIT；请在部署目录执行 git reset --keep $OLD_COMMIT"
+    fi
+    for service in web server ocr; do docker rmi "canglin-rollback-$service:$STAMP" >/dev/null 2>&1 || true; done
+    rm -rf "$RELEASE_DIR"
+    die "镜像 $RELEASE_TAG 拉取失败，服务未停止，源码仍是 ${OLD_COMMIT:0:7}。可能的原因与出路：
+  1. 该提交的镜像尚未发布——CI 还在跑或已失败：到 GitHub Actions（https://github.com/YePiXpert/canglin/actions）查看，通过后重新运行本脚本
+  2. 镜像为私有包：先 docker login ghcr.io（GitHub PAT 需 read:packages 权限），或把包改为 Public
+  3. 确认要用本地源码构建（未经 CI 测试）：加 --build 重新运行（curl 一行命令末尾改为 bash -s -- --build）"
   fi
 fi
 
