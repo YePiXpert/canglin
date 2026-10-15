@@ -237,7 +237,11 @@ class DeploymentPaths(unittest.TestCase):
         self.assertIn(["compose", "pull"], compose)
         for verb in ("down", "build", "up"):
             self.assertNotIn(["compose", verb], compose)
-        self.assertEqual((target / ".env").read_text(), env_before)
+        # .env 没有换成新版本（拉取前只会补上数据目录 CANGLIN_DATA_DIR）
+        env_after = (target / ".env").read_text()
+        self.assertNotIn("RELEASE_TAG=", env_after)
+        for line in env_before.splitlines():
+            self.assertIn(line, env_after)
         # 这次的回退点记录已删除，不留下不能用的 release 目录
         self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
 
@@ -253,6 +257,17 @@ class DeploymentPaths(unittest.TestCase):
         self.assertLess(git_calls.index(["merge", "--ff-only", "origin/main"]), git_calls.index(["reset", "-q", "--keep", "abc1234"]))
         removed = [c[2][1] for c in self.commands() if c[0] == "docker" and c[2][:1] == ["rmi"]]
         self.assertEqual([name.split(":")[0] for name in removed], ["canglin-rollback-web", "canglin-rollback-server", "canglin-rollback-ocr"])
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_storage_check_failure_after_merge_undoes_attempt(self):
+        # 数据目录检查在 merge 之后：失败同样退回源码、删掉这次的回退点，不停机
+        target = self.repository("foreign-data-moved")
+        r = self.run_script("upgrade.sh", str(target), MOVES_HEAD="1", VOLUME_DEVICE="/unrelated")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("数据目录检查失败", r.stderr)
+        self.assertIn("源码仍是 abc1234", r.stderr)
+        self.assertIn(["reset", "-q", "--keep", "abc1234"], [c[2] for c in self.commands() if c[0] == "git"])
+        self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
         self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
 
     def test_failed_pull_with_no_pull_does_not_reset(self):

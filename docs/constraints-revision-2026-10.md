@@ -296,4 +296,5 @@ pnpm --filter @canglin/web test:e2e
   6. e2e：`getByTestId` 的文字断言前补回 `toBeVisible()`（import 9 处、workflow 5 处、visual 1 处）。
   7. `apps/server/test/setup.ts` 清掉 `LLM_ALLOWED_MODELS`；`ImportView.vue`「绿色对勾」与 `workbench.ts` 错位的 JSDoc 两处过期注释。
 - 未改（可选）：运行时 `isReady` / `canImport` 对列表外的已保存模型仍放行——收窄列表不该让正在用的识别与问答静默停掉，设置页已有提示；CI 的 `visual` job 首次运行要等推送。
+- 推送前变基到 Codex 的「统一部署数据目录」（9954876）之上：`upgrade.sh` 里数据目录的准备与检查（merge 之后、停机之前）失败时也走 `undo_attempt`；「拉取失败 `.env` 不变」的测试改成「没写 `RELEASE_TAG`、原有行都在」（拉取前会补上 `CANGLIN_DATA_DIR`）；新增 1 个测试，部署脚本 35 passed。
 - 复验：服务端 194 passed（原 192）、前端 260 passed（原 259）、部署脚本 30 passed（原 25）、functional e2e 21 passed、容器视觉比对 4 passed（68 张基线未变）、R4 端到端 15 项通过（含收窄列表后的提示与切换）、减少动态效果等行为验收 5 项通过。

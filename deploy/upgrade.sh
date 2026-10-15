@@ -90,10 +90,11 @@ if [ "$GIT_PULL" = 1 ]; then
   git fetch origin main --tags
   git merge --ff-only origin/main
 fi
-source deploy/storage.sh
-prepare_storage_path
-check_storage_volume || die "数据目录检查失败；服务未停止"
 NEW_COMMIT=$(git rev-parse HEAD)
+# 数据目录的准备与检查在 merge 之后、停机之前：失败同样撤回这次尝试
+source deploy/storage.sh
+prepare_storage_path || { undo_attempt; die "数据目录准备失败；服务未停止，$SOURCE_NOTE"; }
+check_storage_volume || { undo_attempt; die "数据目录检查失败；服务未停止，$SOURCE_NOTE"; }
 export RELEASE_TAG="sha-$(git rev-parse --short=7 HEAD)"
 printf 'new_source=%s\nrelease_tag=%s\nocr_model=PP-OCRv6_medium\n' "$NEW_COMMIT" "$RELEASE_TAG" >> "$RELEASE_DIR/release.txt"
 cp docker-compose.yml "$RELEASE_DIR/new-compose.yml"
