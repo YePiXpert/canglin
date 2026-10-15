@@ -3,13 +3,14 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { workflowApi, type WorkflowRequestRow } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
-import { sortByNextStep, todayLabel } from '@/components/workflow/workbench';
+import { greetingLabel, sortByNextStep, todayLabel } from '@/components/workflow/workbench';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
+import LineArt from '@/components/ui/LineArt.vue';
 import ErrorState from '@/components/ui/ErrorState.vue';
 import { buttonClass } from '@/components/ui/button';
 import WorkbenchRequestRow from '@/components/workflow/WorkbenchRequestRow.vue';
@@ -23,6 +24,7 @@ const TODO_LIMIT = 10;
 const router = useRouter();
 const creating = ref(false);
 const today = todayLabel();
+const greeting = greetingLabel();
 const { data: overview, loading: overviewLoading, refreshing: overviewRefreshing, error: overviewError, load: loadOverview } = useWorkflowResource(workflowApi.overview);
 const { data: pending, loading: pendingLoading, refreshing: pendingRefreshing, error: pendingError, load: loadPending } = useWorkflowResource(
   () => workflowApi.requests({ pending: '1', pageSize: TODO_LIMIT }),
@@ -60,7 +62,7 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
 <template>
   <div>
     <PageHeader title="工作台">
-      <template #meta><span>{{ today }}</span></template>
+      <template #meta><span>{{ today }} · {{ greeting }}</span></template>
       <template #description>按申请推进采购、到货与物品去向<template v-if="pendingTotal">；今天有 <b class="num font-semibold text-ink">{{ pendingTotal }}</b> 张申请等待推进</template><template v-else-if="pendingTotal === 0">；目前没有等待推进的申请</template></template>
       <Button aria-label="刷新工作台" icon-only @click="refresh"><Icon name="refresh" :size="16" :class="refreshing ? 'animate-spin' : ''" /></Button>
       <span class="sr-only" role="status">{{ refreshing ? '刷新中…' : '' }}</span>
@@ -126,9 +128,9 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
             <Button size="sm" @click="creating = true">人工录入申请</Button>
           </EmptyState>
         </div>
-        <!-- 待办已清空：一行提示，不占高度 -->
-        <div v-else-if="!requests.length" class="card flex flex-wrap items-center gap-3 px-5 py-4.5">
-          <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-teal-soft text-teal" aria-hidden="true"><Icon name="check" :size="16" /></span>
+        <!-- 待办已清空：一行提示，左边一幅小插画（合上的账、一盆绿植、一杯热茶） -->
+        <div v-else-if="!requests.length" class="card flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4">
+          <LineArt name="rest" :size="112" class="text-faint" />
           <div class="min-w-0 flex-1 basis-48">
             <p class="text-sm font-semibold text-ink">今天的待办都处理完了</p>
             <p class="mt-0.5 text-[12.5px] text-muted">所有申请都已办结；有新的 OA 单时从右上角导入。</p>

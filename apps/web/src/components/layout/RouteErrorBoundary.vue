@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onErrorCaptured, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import ErrorState from '@/components/ui/ErrorState.vue';
+import Button from '@/components/ui/Button.vue';
+import Icon from '@/components/ui/Icon.vue';
+import LineArt from '@/components/ui/LineArt.vue';
 
 /**
  * 页面级错误边界（AppShell 里包住 <router-view>）：页面组件渲染或 setup 抛错时，
- * 原位显示「页面出现异常」+「重新加载」，而不是留下一片空白；路由变化时自动重置。
+ * 原位居中显示墨线插画（打翻的墨水瓶）+「页面出现异常」+「重新加载」，而不是留下一片空白；路由变化时自动重置。
  * 只接管渲染与 setup 的错误：事件处理、异步回调里的错误照旧交给 main.ts 的全局兜底（toast），
  * 点一个按钮失败不该把整页换成错误页。console.error 保留，便于排查。
  */
@@ -37,12 +39,11 @@ function reload(): void {
 </script>
 
 <template>
-  <div v-if="failed" class="card">
-    <ErrorState
-      title="页面出现异常"
-      message="这一页显示时出错了，错误已记录在浏览器控制台。重新加载通常可以恢复；切换到其它页面也会重置。"
-      @retry="reload"
-    />
+  <div v-if="failed" class="card flex flex-col items-center px-6 py-10 text-center">
+    <LineArt name="spill" :size="200" class="text-faint" />
+    <h2 class="mt-5 text-[15px] leading-6 font-semibold text-ink">页面出现异常</h2>
+    <p class="mt-1 max-w-sm text-[13px] text-muted">这一页显示时出错了，错误已记录在浏览器控制台。重新加载通常可以恢复；切换到其它页面也会重置。</p>
+    <Button size="sm" class="mt-4" @click="reload"><Icon name="refresh" :size="14" />重新加载</Button>
   </div>
   <slot v-else />
 </template>

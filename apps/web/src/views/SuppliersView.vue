@@ -137,7 +137,7 @@ onMounted(() => { void loadSuppliers(); if (state.tab === 'prices') void loadPri
           <Skeleton v-for="i in 6" :key="i" class="h-10" />
         </div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="loadSuppliers" />
-        <EmptyState v-else-if="suppliers.length === 0" icon="supplier" title="还没有供应商" description="把常用的几家加进来，登记采购时可以直接选择。" />
+        <EmptyState v-else-if="suppliers.length === 0" art="shop" title="还没有供应商" description="把常用的几家加进来，登记采购时可以直接选择。" />
         <EmptyState v-else-if="filteredSuppliers.length === 0" :icon="false" :title="`没有找到「${state.supplierSearch.trim()}」相关的供应商`" description="按名称、联系人、电话或备注搜索。">
           <Button size="sm" @click="state.supplierSearch = ''">清除关键词</Button>
         </EmptyState>

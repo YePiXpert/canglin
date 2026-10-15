@@ -127,12 +127,12 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
 
 <template>
   <!--
-    「墨线」：纸色画布，没有背景纹理。桌面（≥ lg）左右两栏：左 5/12 是品牌面板（画布色，右边一条发丝线）——
-    方印与词标、一幅单色线描（粮仓，门楣一方朱砂印）、一句定位与三条价值点；右边是表单面板。
-    手机单栏，只有表单面板（面板顶部自带方印与词标），线描不显示。
+    「墨线」：纸色画布。桌面（≥ lg）左右两栏：左 5/12 是品牌面板（画布色，右边一条发丝线）——
+    方印与词标、一幅墨线插画（粮仓与收成：门楣朱砂匾、谷穗、粮囤、远山与日轮）、一句定位与三条价值点；右边是表单面板。
+    手机单栏：表单面板上方一幅 72px 的小粮仓（矮屏不显示），面板顶部自带方印与词标。
   -->
   <div class="min-h-dvh bg-canvas lg:grid lg:grid-cols-12">
-    <aside class="hidden border-r border-line lg:col-span-5 lg:flex lg:flex-col lg:px-12 lg:py-12 xl:px-16" aria-label="关于仓廪">
+    <aside class="paper-grain hidden border-r border-line lg:col-span-5 lg:flex lg:flex-col lg:px-12 lg:py-12 xl:px-16" aria-label="关于仓廪">
       <div class="flex items-center gap-3">
         <span :class="SEAL" aria-hidden="true">仓廪</span>
         <div class="min-w-0">
@@ -141,7 +141,7 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
         </div>
       </div>
       <div class="my-auto max-w-sm py-12">
-        <LineArt name="granary" :size="120" accent class="text-faint" />
+        <LineArt name="granary-scene" :size="340" class="-ml-2 max-w-full text-faint" />
         <p class="mt-8 text-[22px] leading-8 font-bold tracking-[-0.01em] text-ink">从 OA 申请到领用，记在同一本账上</p>
         <p class="mt-2 text-[13px] leading-relaxed text-muted">导入已审批的申请，分次采购、到货、发放与库存都跟着申请走，每一笔都能追到原件。</p>
         <ul class="mt-8 space-y-4">
@@ -157,6 +157,8 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
     </aside>
 
     <div class="flex min-h-dvh flex-col items-center justify-center px-4 py-10 lg:col-span-7">
+      <!-- 手机：表单上方一幅小粮仓；矮屏（高 < 700px）不显示，免得把表单挤出首屏 -->
+      <LineArt name="granary" :size="72" class="mb-5 text-faint lg:hidden [@media(max-height:699px)]:hidden" />
       <!-- 面板首帧轻弹入（animate-pop-in；减少动态效果时全局缩到近 0） -->
       <div class="w-full max-w-[420px] bg-surface border border-line rounded-xl p-6 sm:p-8 animate-pop-in">
         <!-- 品牌：朱砂方印 + 词标（与顶栏一致）；桌面上品牌在左栏，这里不再重复 -->

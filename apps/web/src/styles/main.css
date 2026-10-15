@@ -75,11 +75,8 @@
   --animate-fade-in: fade-in 0.15s ease-out;
   --animate-pop-in: pop-in 0.16s ease-out;
   --animate-sheet-in: sheet-in 0.2s ease-out;
-  /*
-   * 对勾描边（导入「已确认导入」）：path 写 pathLength="1" stroke-dasharray="1"，从 1 画到 0；
-   * both 让动画前后都停在端点，减少动态效果时直接是画好的对勾
-   */
-  --animate-check-draw: check-draw 0.3s ease-out 0.05s both;
+  /* 「入账」方印盖下来（导入「已确认导入」）：从放大、透明落到原位；both 让减少动态效果时直接停在盖好的样子 */
+  --animate-stamp-in: stamp-in 0.18s ease-out both;
 
   @keyframes fade-in {
     from {
@@ -98,12 +95,10 @@
       opacity: 0;
     }
   }
-  @keyframes check-draw {
+  @keyframes stamp-in {
     from {
-      stroke-dashoffset: 1;
-    }
-    to {
-      stroke-dashoffset: 0;
+      opacity: 0;
+      transform: scale(1.35);
     }
   }
 }
@@ -231,6 +226,17 @@
 }
 
 @layer components {
+  /*
+   * 纸纹（登录页品牌面板的宣纸颗粒）：内联 SVG 噪点平铺，一层极淡的暖灰颗粒，不引图片文件；
+   * 深色下换成更淡的浅色颗粒。只给这一处用，业务页面不加纹理。
+   */
+  .paper-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.38 0 0 0 0 0.32 0 0 0 0.1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+  .dark .paper-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.92 0 0 0 0 0.86 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+
   /* 面板：白底 + 发丝描边，默认不加阴影（深色下同样靠描边区分层级） */
   .card {
     @apply bg-surface border border-line rounded-(--radius-card);

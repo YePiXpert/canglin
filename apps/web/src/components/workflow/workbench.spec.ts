@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mount, RouterLinkStub } from '@vue/test-utils';
 import type { WorkflowRequestLineRow, WorkflowRequestRow } from '@/api/workflow';
 import WorkbenchRequestRow from './WorkbenchRequestRow.vue';
-import { nextStep, sortByNextStep, todayLabel } from './workbench';
+import { greetingLabel, nextStep, sortByNextStep, todayLabel } from './workbench';
 import { shortDateTime } from '@/utils/datetime';
 
 function line(over: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRow {
@@ -52,6 +52,13 @@ describe('工作台的处理顺序', () => {
     expect(shortDateTime(new Date(2025, 11, 30, 14, 20).toISOString(), now)).toBe('2025-12-30 14:20');
     expect(shortDateTime('不是时间', now)).toBe('不是时间');
     expect(todayLabel(now)).toBe('2026 年 10 月 10 日 · 星期六');
+  });
+
+  it('页头问候按本地时段：深夜、早上、上午、中午、下午、晚上', () => {
+    const at = (hour: number, minute = 0) => greetingLabel(new Date(2026, 9, 10, hour, minute));
+    expect([at(2), at(4, 59), at(5), at(8, 59), at(9), at(11, 59), at(12), at(13, 59), at(14), at(17, 59), at(18), at(23, 59)]).toEqual([
+      '夜深了', '夜深了', '早上好', '早上好', '上午好', '上午好', '中午好', '中午好', '下午好', '下午好', '晚上好', '晚上好',
+    ]);
   });
 });
 

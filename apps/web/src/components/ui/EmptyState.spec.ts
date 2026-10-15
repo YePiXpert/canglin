@@ -29,7 +29,7 @@ describe('EmptyState', () => {
     expect(mount(EmptyState, { props: { title: 't' } }).get('path').attributes('d')).toBe(iconPath('box'));
   });
 
-  it('传 art 时换成单色线描（aria-hidden、currentColor），不再画图标块；默认不画', () => {
+  it('传 art 时换成墨线插画（aria-hidden、currentColor），不再画图标块；默认不画', () => {
     const wrapper = mount(EmptyState, { props: { title: '还没有备份', art: 'archive', icon: 'history' } });
     const svg = wrapper.get('svg');
     expect(svg.attributes('aria-hidden')).toBe('true');

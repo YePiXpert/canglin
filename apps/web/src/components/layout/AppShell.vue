@@ -117,13 +117,13 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
   <!--
     外壳：纸色画布，上面一条顶栏（桌面 56px、手机 52px），下面 <main> 是唯一的滚动容器。
     内边距变量声明在根元素上，顶栏与 <main> 共用（页面里要「抵消外壳内边距」时一律引用变量，别写死数值）：
-      --main-px  左右  手机 16px，桌面 max(32px, (100vw − 1280px) / 2)：版心最宽 1280px 居中，顶栏与内容左右对齐
+      --main-px  左右  手机 16px，桌面 max(32px, (100vw − 1536px) / 2)：版心最宽 1536px 居中，顶栏与内容左右对齐
       --main-pt  顶部  手机 16px，桌面 28px
       --main-pb  底部  手机 96px（另加安全区，给底部标签栏让位），桌面 48px
     变量用 100vw 算：在子元素里展开，写 100% 会按子元素的宽度算错。
   -->
   <div
-    class="flex h-dvh flex-col overflow-hidden bg-canvas [--main-px:1rem] [--main-pt:1rem] [--main-pb:6rem] lg:[--main-px:max(2rem,calc((100vw_-_1280px)/2))] lg:[--main-pt:1.75rem] lg:[--main-pb:3rem]"
+    class="flex h-dvh flex-col overflow-hidden bg-canvas [--main-px:1rem] [--main-pt:1rem] [--main-pb:6rem] lg:[--main-px:max(2rem,calc((100vw_-_1536px)/2))] lg:[--main-pt:1.75rem] lg:[--main-pb:3rem]"
   >
     <!-- 桌面顶栏：方印 + 词标 | 六项主导航（当前项墨色 600 + 朱砂下划线压在顶栏底线上）| 主按钮、AI、深浅色、账号 -->
     <header class="hidden lg:flex h-14 shrink-0 items-center gap-7 border-b border-line bg-canvas px-(--main-px)">
@@ -201,7 +201,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
     </header>
 
     <!--
-      <main> 是唯一的滚动容器。桌面内容最宽 1280px 居中：用 padding 算出两侧留白，不再套一层 max-w 容器——
+      <main> 是唯一的滚动容器。桌面内容最宽 1536px 居中（宽屏上少留白，导入页的原件与明细、长品名有更多地方）：用 padding 算出两侧留白，不再套一层 max-w 容器——
       各页根元素仍是 main 的直接子元素（h-full 照常生效），底部 padding 也能正常计入滚动高度。
       relative：让页面里没有定位祖先的绝对定位元素（sr-only 的读屏文字等）以 main 为包含块、跟着 main 滚动；
       否则它们按初始包含块定位，落在首屏以下时会把整个文档撑出滚动条（外壳跟着上下窜）。

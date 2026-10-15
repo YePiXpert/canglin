@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui';
 import Icon from '@/components/ui/Icon.vue';
+import LineArt from '@/components/ui/LineArt.vue';
 import { buttonClass } from '@/components/ui/button';
 import { aiApi, apiError } from '@/api';
 import { useToastStore } from '@/stores/toast';
@@ -187,6 +188,8 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
           <!-- 对话区 -->
           <div v-else ref="listEl" class="flex-1 overflow-y-auto px-4 py-5 space-y-4">
             <div v-if="messages.length === 0" class="space-y-3">
+              <!-- 还没有对话：一幅墨线插画（一页账、砚台与毛笔） -->
+              <LineArt name="brush" :size="104" class="mx-auto mb-4 text-faint" />
               <p class="text-xs text-muted">试试这样问：</p>
               <div class="flex flex-wrap gap-2">
                 <button

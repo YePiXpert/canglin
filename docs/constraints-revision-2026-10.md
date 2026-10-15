@@ -112,12 +112,12 @@ pnpm --filter @canglin/web test:e2e
 
 ### 现状
 
-`components/layout/AppShell.vue:126` `--main-px: max(2rem, (100vw − 1280px) / 2)`，所有页面版心 1280。申请详情 `RequestDetailView.vue:112` 右栏固定 360px，左栏 1280 − 360 − 28 = 892px，而进度表 `RequestProgress.vue:37` `min-w-[940px]`——**在 1440 笔记本上就横向滚动**；库存行列表 `StockView.vue:124` `sm:min-w-[58rem]`（928px）贴着上限。
+`components/layout/AppShell.vue:126` `--main-px: max(2rem, (100vw − 1280px) / 2)`，所有页面版心 1280。~~申请详情 `RequestDetailView.vue:112` 右栏固定 360px，左栏 1280 − 360 − 28 = 892px，而进度表 `RequestProgress.vue:37` `min-w-[940px]`——在 1440 笔记本上就横向滚动~~（执行时更正：进度表在页面全宽、不在两栏里，1280 版心放得下 940px，原来就不滚动；两栏的是下面的「业务记录 | 原件与附件」）。库存行列表 `StockView.vue:124` `sm:min-w-[58rem]`（928px）。放宽的实际收益是宽屏（≥ 1600px）两侧少留白，导入页 5 : 7 两栏的原件预览与明细更宽，长品名与规格少截断。
 
 ### 改法
 
 - 全局上限 1280 → 1536（Tailwind `2xl`）：`AppShell.vue:126` 改成 `lg:[--main-px:max(2rem,calc((100vw_-_1536px)/2))]`，注释（`:120`、`:204`）与 DESIGN §3 的变量表同步。不按页面区分：顶栏与内容共用这个变量，按页面变会让导航在切页时左右跳。
-- 结果：1440 视口下内容 1376px，申请详情左栏 988px ≥ 940，进度表不再滚动；1920 下内容 1536。
+- 结果：1440 视口下内容 1376px（原 1280），1920 下 1536px（原 1280）；导入页原件预览在 1920 下约 630px（原 523px）。
 - 不动：设置页右侧 760px（`SettingsLayout`）、登录页、各表的 `min-w-[…]`、`RequestProgress` 的 `@container` 断点。
 - 核对：工作台三栏 `200 / 1fr / 180` 中栏变宽后 `WorkbenchRequestRow` 的行内布局；导入页 5 : 7 两栏草稿表在 ≥ 36rem 维持表格；`ImportDraftEditor.vue:64` 注释里的「1280 以下」改写；KPI 行与报表核心指标在 1536 下的留白。
 - 截图：1440 × 浅 / 深色的工作台、申请详情、库存、导入任务页、报表；再用 1920 宽看申请详情与库存。视觉基线由 R2 重建。
@@ -243,3 +243,19 @@ pnpm --filter @canglin/web test:e2e
 - 与方案不同：拉取失败后撤回源码与回退点是方案外加的：原来拉取失败会接着本地构建，现在这条路是「CI 还在跑」时的常态，不撤回的话下次升级会把新提交记成「旧版本」，回退点里的 `old-compose.yml` 也会是新版的。
 - 改动的测试接口：`deploy/tests/test_paths.py` 的 `test_failed_pull_rebuilds_all_three_images` 换成 `test_failed_pull_fails_before_stopping`；新增 `test_failed_pull_restores_previous_source`、`test_build_flag_builds_all_three_images` 与 deploy.sh 的 4 例；假 git 加 `MOVES_HEAD`（merge 之后 HEAD 换成新提交）。
 - 校验：`bash -n` 四个脚本 ✓ `sh -n` pre-push ✓ 部署脚本 25 passed（原 19，含 `docker compose config` 解析试用配置的 1 例）
+
+### R3（2026-10-15）
+
+- 完成：`AppShell.vue` 的 `--main-px` 版心 1280 → 1536，注释与 DESIGN §3 同步。
+- 跳过：`ImportDraftEditor.vue:64` 注释里的「1280 以下的双栏」指视口宽度，与版心无关，没改。
+- 与方案不同：方案「现状」说申请详情的进度表在 1440 下横向滚动，执行时实测不成立（进度表在页面全宽；1440 下容器 1374px、1920 下 1534px，`scrollWidth === clientWidth`，原来 1280 时也放得下）。已在 §4 更正；保留放宽，理由改为宽屏少留白、导入页原件与明细更宽。
+- 改动的测试接口：无。
+- 校验：截图检查 1440 / 1920 的工作台、申请详情、库存、报表（浅色），没有溢出或错位；单测与 e2e 见 R6。
+
+### R6（2026-10-15）
+
+- 完成：`art.ts` 改成按绘制顺序的形状列表（主线 / 细线 / 朱砂 / 蓝线，`paper`·`shade`·`ink`·`amber`·`teal`·`blue`·`accent` 填充，虚线），`LineArt.vue` 按令牌类渲染、淡色先垫纸面、高度按视窗比例；去掉 `accent` 开关（一幅至多一处朱砂，单测检查）。母题 13 个：`ledger`、`shelf`（新，代替 `box`）、`inbox`、`scan`、`archive`、`report`（新）、`shop`（新）、`brush`（新）、`rest`（新）、`granary`、`granary-scene`（新，登录场景 320 × 200）、`lost`（新，代替 `search`）、`spill`（新）。位置：申请单 / 工作台 / 库存 / 备份 / 导入任务 / 报表 / 供应商的首次使用空态，导入上传框，工作台待办清空，AI 助手欢迎，404，页面异常（`RouteErrorBoundary` 改成居中排版，文字与「重新加载」不变），登录左栏场景 + 纸纹（`.paper-grain`，内联 SVG 噪点）+ 手机小粮仓。导入确认成功换成 40px 朱砂「入账」印（`animate-stamp-in`，删掉 `animate-check-draw`）；工作台页头日期后加问候（`greetingLabel`）。DESIGN §1 第 5 条、§2、§3、§5.6、§5.9、§8 同步，CHANGELOG 加了 R3 / R6 / R1 三条。
+- 跳过：无。纸纹看过浅 / 深色截图后保留（颗粒很淡，不显脏）。
+- 与方案不同：登录场景里的「两袋粮」画出来像钱袋，换成一座粮囤加一只小粮袋；`rest` 的视窗裁成 120 × 64、放大到 112px，`spill` 裁成 140 × 56、放大到 200px（原尺寸里留白太多，显小）；问候按 6 个时段（含「夜深了」「中午好」）。
+- 改动的测试接口：`EmptyState.spec.ts` 用例名的措辞；新增 `LineArt.spec.ts`（3 例）、`workbench.spec.ts` 问候 1 例。可见文案没有改动（「已确认导入」「已创建 N 条」「今天的待办都处理完了」「页面出现异常」「重新加载」照旧）。
+- 校验：typecheck ✓ lint ✓ test 259 passed；截图检查（系统 Chromium，隔离 API + 全新库）：登录 1440 / 390 × 浅 / 深、首次使用的工作台 / 申请单 / 库存 / 导入 / 报表 / 供应商 / 备份、AI 助手欢迎、404（1440 / 390）、页面异常（把报表页模块换成 setup 抛错的组件）、待办清空、导入确认成功；每幅插画另在预览页按 1× / 3× × 浅 / 深色核对过。

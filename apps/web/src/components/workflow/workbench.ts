@@ -45,6 +45,17 @@ export function sortByNextStep(requests: readonly WorkflowRequestRow[]): Workflo
 
 
 /** 页头上方的日期：2026 年 10 月 10 日 · 星期六 */
+/** 页头日期后的问候，按本地时间分时段 */
+export function greetingLabel(now: Date = new Date()): string {
+  const hour = now.getHours();
+  if (hour < 5) return '夜深了';
+  if (hour < 9) return '早上好';
+  if (hour < 12) return '上午好';
+  if (hour < 14) return '中午好';
+  if (hour < 18) return '下午好';
+  return '晚上好';
+}
+
 export function todayLabel(now: Date = new Date()): string {
   return `${now.getFullYear()} 年 ${now.getMonth() + 1} 月 ${now.getDate()} 日 · 星期${'日一二三四五六'[now.getDay()]}`;
 }

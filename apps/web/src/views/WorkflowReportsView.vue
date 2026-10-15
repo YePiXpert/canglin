@@ -252,7 +252,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
             </tfoot>
           </table>
         </div>
-        <EmptyState v-else :icon="false" :title="allTime ? '还没有成交记录' : '这段时间没有成交记录'" :description="allTime ? '登记采购成交后会自动计入报表。' : `${dateLabel}；登记采购成交后会自动计入报表。`">
+        <EmptyState v-else :icon="false" :art="allTime ? 'report' : undefined" :title="allTime ? '还没有成交记录' : '这段时间没有成交记录'" :description="allTime ? '登记采购成交后会自动计入报表。' : `${dateLabel}；登记采购成交后会自动计入报表。`">
           <Button v-if="!allTime" size="sm" @click="selectPeriod('all')">查看全部时间</Button>
         </EmptyState>
         <template v-if="report.groups.length" #footer>

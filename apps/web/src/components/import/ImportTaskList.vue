@@ -92,7 +92,7 @@ defineExpose({ refresh });
       列表加载失败：{{ error }}
       <template #actions><Button variant="link" size="sm" @click="refresh()"><Icon name="refresh" :size="14" />重新加载</Button></template>
     </Notice>
-    <!-- 空态：首次使用的线描（inbox） -->
+    <!-- 空态：首次使用的墨线插画（inbox） -->
     <EmptyState
       v-else-if="!rows.length"
       art="inbox"
