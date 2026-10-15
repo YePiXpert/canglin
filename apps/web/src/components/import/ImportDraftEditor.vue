@@ -8,7 +8,9 @@ import Input from '@/components/ui/Input.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
 import type { ImportTaskView } from '@/api';
-import { aiSuggestionKey } from '@canglin/shared';
+import { aiSuggestionKey, isShortLink } from '@canglin/shared';
+import { buttonClass } from '@/components/ui/button';
+import { webLink } from '@/components/workflow/presentation';
 import { importTaskKey } from './useImportTask';
 
 /**
@@ -21,6 +23,12 @@ if (!ctx) throw new Error('ImportDraftEditor 只能放在 ImportView 里：缺�
 const { mobileTab, fields, labels, form, loaded, lines, selected, stackedLabel, suggestions, reviewedAi } = ctx;
 const { line, focusLine, needsReview, localValue, applyLocal, suggestion, apply, acknowledge, addSuggestion } = ctx;
 const { catalogMatch, applyCatalog } = ctx;
+const { fillUnit, unitEdited, chooseUnit, unitHint, unitSuggestions, linkError, tidyLink } = ctx;
+/** 单位来源的小字：自动填的单位要让人一眼看出来，改过就消失 */
+const UNIT_SOURCE_LABEL = { CATALOG: '沿用物品库', AI: 'AI 推测' } as const;
+/** 单位候选药丸：触屏加高到 40px（DESIGN.md §4） */
+const UNIT_CHIP =
+  'inline-flex h-6 min-w-7 items-center justify-center rounded-full border border-line bg-surface px-2 text-xs text-text transition-colors duration-150 hover:border-blue hover:text-blue pointer-coarse:h-10 pointer-coarse:px-3.5';
 /** 只在 ImportView 的 v-else-if="task" 里渲染：task 变回 null 时父组件先更新、卸载本组件，所以收窄为非空 */
 const task = ctx.task as Ref<ImportTaskView>;
 /** 本地 OCR 行最低置信度低于 0.6（与 OCR 服务的告警阈值一致）；文本层与 AI 行没有置信度 */
@@ -62,9 +70,10 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
 
     <!--
       明细表：面板够宽（≥ 36rem）时是表格，窄时（手机、1280 以下的双栏）每条明细堆叠成
-      「品名与规格 / 数量·单位」两行。数量、单位的 Input 用 hideLabel（label 只留给读屏），
+      「品名、规格与链接 / 数量·单位」两行。数量、单位的 Input 用 hideLabel（label 只留给读屏），
       堆叠时列头不在，另显示一行 aria-hidden 的字段名（stackedLabel）。
-      导入不收集单价和采购链接：成交价格与链接在申请详情「登记采购」时按实际成交填写。
+      导入不收集单价：成交价格在申请详情「登记采购」时按实际成交填写；原件上的采购链接随明细入账，登记采购时预填。
+      单位为空时自动填（物品库 > AI 推测），输入框下方标出来源；下方一行给一键候选（docs/import-units-links-2026-10.md U1–U4）。
     -->
     <section class="card @container divide-y divide-line overflow-hidden">
       <div v-if="!loaded" class="space-y-2.5 p-4">
@@ -102,8 +111,31 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                 hide-label
                 placeholder="品名（同名不同规格请明确区分）"
                 :title="l.source?.rawText && l.source.rawText !== l.itemName ? `原文：${l.source.rawText}` : undefined"
+                @blur="fillUnit(l)"
               />
-              <Input v-model="l.spec" size="sm" :label="`第 ${i + 1} 行规格`" hide-label placeholder="规格（可空）" class="mt-1.5" />
+              <Input v-model="l.spec" size="sm" :label="`第 ${i + 1} 行规格`" hide-label placeholder="规格（可空）" class="mt-1.5" @blur="fillUnit(l)" />
+              <div class="mt-1.5 flex items-start gap-1">
+                <Input
+                  v-model="l.purchaseLink"
+                  size="sm"
+                  :label="`第 ${i + 1} 行采购链接`"
+                  hide-label
+                  placeholder="采购链接（可空）"
+                  :error="linkError(l)"
+                  class="min-w-0 flex-1"
+                  @blur="tidyLink(l)"
+                />
+                <a
+                  v-if="webLink(l.purchaseLink)"
+                  :href="webLink(l.purchaseLink)"
+                  target="_blank"
+                  rel="noopener"
+                  :class="buttonClass({ variant: 'ghost', size: 'sm', iconOnly: true })"
+                  :aria-label="`打开第 ${i + 1} 行采购链接`"
+                  title="在新标签页打开"
+                  ><Icon name="arrow-up-right" :size="14"
+                /></a>
+              </div>
             </td>
             <td class="border-b-0 px-1.5 pb-2 pt-3 @max-xl:p-0">
               <span aria-hidden="true" :class="stackedLabel">数量</span>
@@ -119,7 +151,19 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
             </td>
             <td class="border-b-0 pb-2 pl-1.5 pr-4 pt-3 @max-xl:p-0">
               <span aria-hidden="true" :class="stackedLabel">单位</span>
-              <Input v-model="l.unit" size="sm" :label="`第 ${i + 1} 行单位`" hide-label placeholder="单位" />
+              <Input
+                v-model="l.unit"
+                size="sm"
+                :label="`第 ${i + 1} 行单位`"
+                hide-label
+                placeholder="单位"
+                :suggestions="unitSuggestions(l)"
+                class="[&_input::-webkit-calendar-picker-indicator]:hidden"
+                @update:model-value="unitEdited(l)"
+              />
+              <span v-if="l.unit && l.unitSource" class="mt-1 block text-[11.5px] leading-4 text-muted" :data-unit-source="l.unitSource">{{
+                UNIT_SOURCE_LABEL[l.unitSource]
+              }}</span>
             </td>
           </tr>
           <tr class="[&:hover]:bg-transparent @max-xl:block">
@@ -140,6 +184,21 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                     >请核对同名明细的规格。</Badge
                   >
                   <Badge v-if="lowConfidence(l)" tone="amber">识别置信度低，请对照原件。</Badge>
+                  <Badge v-if="isShortLink(l.purchaseLink)" tone="amber">短链接容易失效，建议换成商品页地址。</Badge>
+                  <span v-if="unitHint(l)" class="inline-flex flex-wrap items-center gap-1 text-xs text-muted">
+                    {{ unitHint(l)!.label }}
+                    <button
+                      v-for="u in unitHint(l)!.units"
+                      :key="u"
+                      type="button"
+                      :class="UNIT_CHIP"
+                      :disabled="task.confirmed"
+                      :aria-label="`第 ${i + 1} 行单位填「${u}」`"
+                      @click="chooseUnit(l, u)"
+                    >
+                      {{ u }}
+                    </button>
+                  </span>
                 </div>
                 <Button
                   variant="danger-ghost"
@@ -174,6 +233,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
               >
                 <div class="space-y-3 px-3 pb-3 text-xs leading-5 text-muted">
                   <p class="break-all">原始文本：{{ l.source?.rawText || '无可信文本来源' }}</p>
+                  <p v-if="localValue(l)?.purchaseLink" class="break-all">原件链接：{{ localValue(l)!.purchaseLink }}</p>
                   <div v-if="localValue(l)" class="space-y-2 border-t border-line pt-3">
                     <p>
                       首次识别：<span class="text-text">{{ localValue(l)!.itemName }}</span> · 数量
@@ -187,7 +247,8 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                     <p>
                       AI：<span class="text-text">{{ suggestion(l)!.itemName }}</span
                       ><template v-if="suggestion(l)!.spec">（{{ suggestion(l)!.spec }}）</template>，数量
-                      {{ suggestion(l)!.quantity ?? '未知' }}{{ suggestion(l)!.unit ?? '' }}
+                      {{ suggestion(l)!.quantity ?? '未知' }}{{ suggestion(l)!.unit ?? ''
+                      }}<template v-if="!suggestion(l)!.unit && suggestion(l)!.unitGuess">（推测单位：{{ suggestion(l)!.unitGuess }}）</template>
                     </p>
                     <p v-if="suggestion(l)!.rawText && suggestion(l)!.rawText !== suggestion(l)!.itemName" class="break-all">
                       AI 读到的原文：{{ suggestion(l)!.rawText }}

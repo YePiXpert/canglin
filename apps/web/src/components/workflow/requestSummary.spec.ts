@@ -7,7 +7,7 @@ function line(overrides: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestL
   seq += 1;
   return {
     id: seq, requestId: 1, lineNumber: seq, productId: seq,
-    itemName: `物品 ${seq}`, specification: '', unit: '盒', quantity: '10', note: null,
+    itemName: `物品 ${seq}`, specification: '', unit: '盒', quantity: '10', note: null, purchaseLink: null,
     cancelledQuantity: '0', orderedQuantity: '0', receivedQuantity: '0',
     pendingPurchaseQuantity: '0', pendingReceiptQuantity: '0', pendingAllocationQuantity: '0',
     directQuantity: '0', stockedQuantity: '0', issuedQuantity: '0', stockQuantity: '0',

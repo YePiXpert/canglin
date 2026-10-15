@@ -6,12 +6,12 @@ import type {
   WorkflowStockInInput, WorkflowDistributionInput, WorkflowSupplierReturnInput,
   WorkflowEmployeeReturnInput, WorkflowPurchaseCancelInput, WorkflowRequestCancelInput,
   WorkflowAdjustmentInput, WorkflowVoidInput, WorkflowMetadataInput, WorkflowProductCreateInput,
-  WorkflowPriceRow,
+  WorkflowPriceRow, WorkflowProductRow, WorkflowLinkUpdateInput,
 } from '@canglin/shared';
 
 export type {
   WorkflowDocumentKind, WorkflowDocumentLineRow, WorkflowDocumentRow, WorkflowOverview,
-  WorkflowPage, WorkflowRequestLineRow, WorkflowRequestRow, WorkflowStockRow,
+  WorkflowPage, WorkflowRequestLineRow, WorkflowRequestRow, WorkflowStockRow, WorkflowProductRow,
 } from '@canglin/shared';
 
 /** 业务写操作：经 mutate 带 Idempotency-Key；会话里的键沿用 `canglin-workflow:{path}:{body}` 的写法 */
@@ -25,6 +25,12 @@ export const workflowApi = {
     http.get<WorkflowPage<WorkflowRequestRow>>('/workflow/requests', { params }).then((r) => r.data),
   request: (id: number) => http.get<WorkflowRequestRow>(`/workflow/requests/${id}`).then((r) => r.data),
   createRequest: (body: WorkflowRequestCreateInput) => post<WorkflowRequestRow>('/requests', body),
+  /** 删除没有业务记录的申请；导入的申请删除后导入任务退回待核对 */
+  deleteRequest: (id: number) => post<{ deleted: true; requestId: number; sourceTaskId: string | null }>(`/requests/${id}/delete`, {}),
+  updateRequestLineLink: (id: number, body: WorkflowLinkUpdateInput) => write<WorkflowRequestRow>('patch', `/request-lines/${id}/link`, body),
+  updatePurchaseLineLink: (id: number, body: WorkflowLinkUpdateInput) => write<WorkflowDocumentRow>('patch', `/purchase-lines/${id}/link`, body),
+  /** 物品库（品名 + 规格 + 单位） */
+  products: () => http.get<WorkflowProductRow[]>('/workflow/products').then((r) => r.data),
   purchase: (body: WorkflowPurchaseInput) => post<WorkflowDocumentRow>('/purchases', body),
   receipt: (body: WorkflowReceiptInput) => post<WorkflowDocumentRow>('/receipts', body),
   documents: (params: Partial<WorkflowQuery> & { kind?: WorkflowDocumentKind } = {}) =>

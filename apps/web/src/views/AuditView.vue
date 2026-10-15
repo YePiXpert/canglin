@@ -51,6 +51,9 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   WORKFLOW_REQUEST: { label: '人工录入申请', tone: 'gray', group: '申请' },
   REQUEST_IMPORT_CONFIRM: { label: '导入生成申请', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_CANCEL: { label: '申请余量取消', tone: 'gray', group: '申请' },
+  WORKFLOW_REQUEST_DELETE: { label: '删除申请', tone: 'red', group: '申请' },
+  WORKFLOW_REQUEST_LINE_LINK: { label: '修改申请链接', tone: 'gray', group: '申请' },
+  WORKFLOW_PURCHASE_LINE_LINK: { label: '修改采购链接', tone: 'gray', group: '采购' },
   WORKFLOW_PURCHASE: { label: '登记采购', tone: 'gray', group: '采购' },
   WORKFLOW_PURCHASE_CANCEL: { label: '采购取消', tone: 'gray', group: '采购' },
   WORKFLOW_RECEIPT: { label: '登记到货', tone: 'gray', group: '采购' },
@@ -177,6 +180,8 @@ const DETAIL_KEY_LABELS: Record<string, string> = {
   lines: '明细行数',
   name: '文件名',
   mismatches: '不一致处数',
+  sourceTaskId: '来源导入任务',
+  previous: '原链接',
 };
 
 /**

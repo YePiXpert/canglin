@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, useId, watch } from 'vue';
-import type { WorkflowDocumentKind, WorkflowDocumentRow } from '@/api/workflow';
+import type { WorkflowDocumentKind, WorkflowDocumentLineRow, WorkflowDocumentRow } from '@/api/workflow';
 import { workflowApi } from '@/api/workflow';
 import { useWorkflowResource } from './useWorkflowResource';
 import type { QuantityChoice, QuantityCommand } from './QuantityCommandDialog.vue';
@@ -19,7 +19,7 @@ import { documentKindLabels } from './presentation';
  * 面板里一条记录一行（DocumentCard row），页脚分页；没有记录时不渲染分页。
  */
 const props = defineProps<{ requestId?: number; kind?: WorkflowDocumentKind; initialKind?: WorkflowDocumentKind }>();
-const emit = defineEmits<{ receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number] }>();
+const emit = defineEmits<{ receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number]; link: [line: WorkflowDocumentLineRow, document: WorkflowDocumentRow] }>();
 const titleId = useId();
 const filters = reactive({ kind: (props.initialKind || '') as WorkflowDocumentKind | '', page: 1 });
 const pageSize = 15;
@@ -56,7 +56,7 @@ defineExpose({ refresh: load });
       </EmptyState>
       <EmptyState v-else-if="!data?.items.length" icon="layers" title="没有业务记录" description="发生采购、到货或发放后，会在这里按记录展示" />
       <div v-else class="divide-y divide-line">
-        <DocumentCard v-for="document in data?.items || []" :key="document.id" :document="document" row @receipt="emit('receipt', $event)" @command="(action, choices, context) => emit('command', action, choices, context)" @void="emit('void', $event)" @metadata="emit('metadata', $event)" @attachments="emit('attachments', $event)" @source="emit('source', $event)" />
+        <DocumentCard v-for="document in data?.items || []" :key="document.id" :document="document" row @receipt="emit('receipt', $event)" @command="(action, choices, context) => emit('command', action, choices, context)" @void="emit('void', $event)" @metadata="emit('metadata', $event)" @attachments="emit('attachments', $event)" @source="emit('source', $event)" @link="(line, document) => emit('link', line, document)" />
       </div>
       <template v-if="data" #footer><Pagination :page="filters.page" :page-size="pageSize" :total="data.total" @change="goPage" /></template>
     </Panel>

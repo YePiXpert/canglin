@@ -243,11 +243,16 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     this.enqueue(id, 0, 'auto');
     return { taskId: id, duplicateTaskId: duplicate?.id };
   }
+  /**
+   * 未确认的原件保留 30 天：按上传时间算；撤回过入账的任务（删除申请后退回待核对）按最近一次撤回的时间算，
+   * 免得撤回一份一个多月前的导入后，草稿和原件几小时内就被清理掉。
+   */
   private async sweep() {
+    const cutoff = new Date(Date.now() - 30 * 86400_000);
     const stale = await this.prisma.importTask.findMany({
       where: {
         confirmedAt: null,
-        createdAt: { lt: new Date(Date.now() - 30 * 86400_000) },
+        createdAt: { lt: cutoff },
         status: { notIn: ['PENDING', 'RUNNING'] },
         aiStatus: { notIn: ['PENDING', 'RUNNING'] },
       },
@@ -266,6 +271,8 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
           current.storagePath &&
           (await tx.attachment.count({ where: { storagePath: current.storagePath } }))
         )
+          return false;
+        if (await tx.importRevision.count({ where: { taskId: row.id, kind: 'CONFIRMATION', createdAt: { gte: cutoff } } }))
           return false;
         await tx.importRevision.deleteMany({ where: { taskId: row.id } });
         await tx.aiCall.deleteMany({ where: { taskId: row.id } });
@@ -509,7 +516,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     for (const page of (task?.aiResult ? JSON.parse(task.aiResult) : []) as AiPage[])
       for (const suggestion of page.items) {
         const prior = local?.items.find((i) => i.lineId === suggestion.lineId);
-        // Prices and links are recorded when a purchase is registered; only request-line facts need review.
+        // Prices are recorded when a purchase is registered and links stay editable in the draft; only request-line facts need review.
         const critical =
           !prior ||
           prior.itemName !== suggestion.itemName ||

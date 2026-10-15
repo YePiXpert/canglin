@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { WorkflowDocumentRow } from '@/api/workflow';
+import type { WorkflowDocumentLineRow, WorkflowDocumentRow } from '@/api/workflow';
 import type { QuantityCommand, QuantityChoice } from './QuantityCommandDialog.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
@@ -16,7 +16,7 @@ import { PAYMENT_STATUS_LABELS, moneyText, parseFixed } from '@canglin/shared';
  *   已撤销 / 付款 / 开票 chip，右侧金额；下面是明细行；最后是动作：「登记到货」是主按钮，「撤销登记」ghost 靠右。
  */
 const props = defineProps<{ document: WorkflowDocumentRow; readonly?: boolean; row?: boolean }>();
-const emit = defineEmits<{ receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number] }>();
+const emit = defineEmits<{ receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number]; link: [line: WorkflowDocumentLineRow, document: WorkflowDocumentRow] }>();
 const choices = computed<QuantityChoice[]>(() => props.document.lines.filter((line) => line.remainingQuantity !== '0').map((line) => ({ id: line.id, itemName: line.itemName, specification: line.specification, unit: line.unit, available: line.remainingQuantity, sourceHint: `${documentKindLabels[props.document.kind]} #${props.document.id} · 明细 #${line.id}${line.recipient ? ' · ' + line.recipient : ''}`, location: 'RECEIVING' })));
 function command(action: QuantityCommand) { emit('command', action, choices.value, `${documentKindLabels[props.document.kind]} #${props.document.id}`); }
 const refundReduction = computed(() => moneyText(props.document.lines.reduce((sum, line) => sum + parseFixed(line.purchaseReductionAmount ?? '0', 2), 0n)));
@@ -55,7 +55,7 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
       <li v-for="line in document.lines" :key="line.id" class="flex items-start justify-between gap-x-4 text-[13px]">
         <div class="min-w-0 flex-1">
           <p><span class="font-medium text-ink">{{ line.itemName }}</span><span v-if="line.specification" class="ml-1.5 text-muted">{{ line.specification }}</span></p>
-          <p class="mt-0.5 text-meta">明细 #{{ line.id }}<template v-if="line.sourceLineId"> · <Button variant="link" :aria-label="`查看来源明细 #${line.sourceLineId}`" @click="emit('source', line.sourceLineId)">来源明细 #{{ line.sourceLineId }}</Button></template><template v-if="line.recipient"> · {{ line.recipient }}</template><template v-if="line.unitPrice != null"> · <span class="num">{{ unitPriceLabel(line.unitPrice, line.unit) }}</span></template><template v-if="line.requestId"> · <router-link :to="`/requests/${line.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ line.serialNumber || '#' + line.requestId }}</router-link></template><template v-if="webLink(line.purchaseLink)"> · <a :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">商家链接</a></template></p>
+          <p class="mt-0.5 text-meta">明细 #{{ line.id }}<template v-if="line.sourceLineId"> · <Button variant="link" :aria-label="`查看来源明细 #${line.sourceLineId}`" @click="emit('source', line.sourceLineId)">来源明细 #{{ line.sourceLineId }}</Button></template><template v-if="line.recipient"> · {{ line.recipient }}</template><template v-if="line.unitPrice != null"> · <span class="num">{{ unitPriceLabel(line.unitPrice, line.unit) }}</span></template><template v-if="line.requestId"> · <router-link :to="`/requests/${line.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ line.serialNumber || '#' + line.requestId }}</router-link></template><template v-if="webLink(line.purchaseLink)"> · <a :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">商家链接</a></template><template v-if="document.kind === 'PURCHASE' && document.status === 'POSTED' && !readonly"> · <Button variant="link" :aria-label="`${line.purchaseLink ? '更换' : '添加'}「${line.itemName}」的采购链接`" @click="emit('link', line, document)">{{ line.purchaseLink ? '更换链接' : '添加链接' }}</Button></template></p>
           <p v-if="line.reason" class="mt-0.5 text-meta">{{ line.reason }}</p>
           <ul v-if="!line.sourceLineId && line.sourceAllocations?.length" class="mt-1 space-y-0.5 text-meta">
             <li v-for="allocation in line.sourceAllocations" :key="allocation.originLineId"><Button variant="link" @click="emit('source', allocation.originLineId)">来源 #{{ allocation.originLineId }} · {{ quantityLabel(allocation.quantity, line.unit) }}</Button><template v-if="allocation.requestId"> · <router-link :to="`/requests/${allocation.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ allocation.serialNumber }}</router-link></template></li>

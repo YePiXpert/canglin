@@ -1,5 +1,7 @@
 import { afterEach, it, expect, vi } from 'vitest';
 import { LlmClient, strictSchema } from '../src/ai/llm.client';
+import { z } from 'zod';
+import { aiPageSchema } from '../src/imports/import-result';
 const opts = {
   apiKey: 'test-secret',
   baseUrl: 'https://provider.example/v1',
@@ -173,6 +175,13 @@ it('preserves response items and function call IDs across rounds', async () => {
   );
   expect(body.input[0].call_id).toBe('call_1');
   expect(body.input[1]).toEqual({ type: 'function_call_output', call_id: 'call_1', output: '7' });
+});
+it('drops zod defaults from strict schemas: the AI page contract keeps unitGuess required and nullable', () => {
+  const schema = strictSchema(z.toJSONSchema(aiPageSchema) as Record<string, unknown>);
+  expect(JSON.stringify(schema)).not.toContain('"default"');
+  const item = ((schema.properties as Record<string, { items: Record<string, unknown> }>).items).items;
+  expect(item.required).toContain('unitGuess');
+  expect((item.properties as Record<string, unknown>).unitGuess).toEqual({ type: ['string', 'null'] });
 });
 it('makes optional arguments nullable while preserving required constraints', () => {
   const schema = strictSchema({

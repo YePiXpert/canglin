@@ -24,7 +24,7 @@ let seq = 0;
 function line(overrides: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRow {
   seq += 1;
   return {
-    id: seq, requestId: 1, lineNumber: seq, productId: seq, itemName: `物品 ${seq}`, specification: '', unit: '盒', quantity: '10', note: null,
+    id: seq, requestId: 1, lineNumber: seq, productId: seq, itemName: `物品 ${seq}`, specification: '', unit: '盒', quantity: '10', note: null, purchaseLink: null,
     cancelledQuantity: '0', orderedQuantity: '0', receivedQuantity: '0', pendingPurchaseQuantity: '0', pendingReceiptQuantity: '0', pendingAllocationQuantity: '0',
     directQuantity: '0', stockedQuantity: '0', issuedQuantity: '0', stockQuantity: '0', supplierReturnedQuantity: '0', employeeReturnedQuantity: '0',
     stages: ['COMPLETED'], ...overrides,
@@ -33,7 +33,7 @@ function line(overrides: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestL
 function request(overrides: Partial<WorkflowRequestRow> = {}): WorkflowRequestRow {
   return {
     id: 17, serialNumber: 'OA-2026-1009-017', department: '行政部', handler: '王晓敏', requestDate: '2026-10-09',
-    note: null, sourceTaskId: null, createdAt: '2026-10-09T08:00:00.000Z', lines: [line()], attachments: [], ...overrides,
+    note: null, sourceTaskId: null, createdAt: '2026-10-09T08:00:00.000Z', lines: [line()], attachments: [], deletable: true, ...overrides,
   };
 }
 const pending = request({

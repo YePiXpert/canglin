@@ -5,7 +5,7 @@ import { lineProgress, requestStatusChips } from './lineProgress';
 function line(partial: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRow {
   return {
     id: 1, requestId: 7, lineNumber: 1, productId: 11,
-    itemName: 'A4 复印纸', specification: 'A4 / 80g', unit: '包', quantity: '20', note: null,
+    itemName: 'A4 复印纸', specification: 'A4 / 80g', unit: '包', quantity: '20', note: null, purchaseLink: null,
     cancelledQuantity: '0', orderedQuantity: '0', receivedQuantity: '0',
     pendingPurchaseQuantity: '20', pendingReceiptQuantity: '0', pendingAllocationQuantity: '0',
     directQuantity: '0', stockedQuantity: '0', issuedQuantity: '0', stockQuantity: '0',

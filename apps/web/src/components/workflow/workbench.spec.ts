@@ -7,7 +7,7 @@ import { shortDateTime } from '@/utils/datetime';
 
 function line(over: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRow {
   return {
-    id: 1, requestId: 1, lineNumber: 1, productId: 1, itemName: '复印纸', specification: 'A4 70g', unit: '包', quantity: '10', note: null,
+    id: 1, requestId: 1, lineNumber: 1, productId: 1, itemName: '复印纸', specification: 'A4 70g', unit: '包', quantity: '10', note: null, purchaseLink: null,
     cancelledQuantity: '0', orderedQuantity: '0', receivedQuantity: '0',
     pendingPurchaseQuantity: '0', pendingReceiptQuantity: '0', pendingAllocationQuantity: '0',
     directQuantity: '0', stockedQuantity: '0', issuedQuantity: '0', stockQuantity: '0',
@@ -17,7 +17,7 @@ function line(over: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRo
 function request(id: number, requestDate: string, lines: WorkflowRequestLineRow[]): WorkflowRequestRow {
   return {
     id, serialNumber: `OA-${id}`, department: '行政部', handler: '王晓敏', requestDate, note: null, sourceTaskId: null,
-    createdAt: '2026-10-01T00:00:00.000Z', lines: lines.map((l) => ({ ...l, requestId: id })), attachments: [],
+    createdAt: '2026-10-01T00:00:00.000Z', lines: lines.map((l) => ({ ...l, requestId: id })), attachments: [], deletable: true,
   };
 }
 const purchase = (over: Partial<WorkflowRequestLineRow> = {}) => line({ pendingPurchaseQuantity: '5', stages: ['PENDING_PURCHASE'], ...over });

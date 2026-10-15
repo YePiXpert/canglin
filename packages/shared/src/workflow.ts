@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { quantityUnits, quantityText, priceUnits, priceText } from './decimal.js';
 import { PAYMENT_STATUSES } from './enums.js';
+import { linkSchema } from './links.js';
 
 /** A real Gregorian date, without timezone conversion or JS date rollover. */
 export const workflowDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式应为 YYYY-MM-DD').refine((value) => {
@@ -56,6 +57,8 @@ export const workflowRequestCreateSchema = z.object({
     unit: z.string().trim().min(1, '请确认原件单位').max(16),
     quantity: workflowQuantitySchema,
     note: noteSchema,
+    /** 申请里附的采购链接（OA 原件备注里的商城链接）；登记采购时预填 */
+    purchaseLink: linkSchema.nullish(),
   })).min(1).max(500),
 });
 export type WorkflowRequestCreateInput = z.infer<typeof workflowRequestCreateSchema>;
@@ -68,14 +71,14 @@ export const workflowPurchaseSchema = z.object({
     requestLineId: idSchema,
     quantity: workflowQuantitySchema,
     unitPrice: workflowPriceSchema,
-    purchaseLink: z.string().trim().max(500).refine((value) => {
-      if (!value) return true;
-      try { return ['http:', 'https:'].includes(new URL(value).protocol); }
-      catch { return false; }
-    }, '采购链接须为完整的 http 或 https 地址').optional(),
+    purchaseLink: linkSchema.optional(),
   })).min(1).max(200),
 });
 export type WorkflowPurchaseInput = z.infer<typeof workflowPurchaseSchema>;
+
+/** 更换申请明细或采购明细的链接；null / 空串表示去掉链接 */
+export const workflowLinkUpdateSchema = z.object({ purchaseLink: linkSchema.nullable() });
+export type WorkflowLinkUpdateInput = z.infer<typeof workflowLinkUpdateSchema>;
 
 export const workflowReceiptSchema = z.object({
   date: workflowDateSchema,
@@ -168,6 +171,8 @@ export interface WorkflowAttachment { id: number; kind: string; filename: string
 export interface WorkflowRequestLineRow {
   id: number; requestId: number; lineNumber: number; productId: number;
   itemName: string; specification: string; unit: string; quantity: string; note: string | null;
+  /** 申请里附的采购链接（已精简）；没有为 null */
+  purchaseLink: string | null;
   cancelledQuantity: string; orderedQuantity: string; receivedQuantity: string;
   pendingPurchaseQuantity: string; pendingReceiptQuantity: string; pendingAllocationQuantity: string;
   directQuantity: string; stockedQuantity: string; issuedQuantity: string; stockQuantity: string;
@@ -178,7 +183,11 @@ export interface WorkflowRequestRow {
   id: number; serialNumber: string; department: string; handler: string; requestDate: string;
   note: string | null; sourceTaskId: string | null; createdAt: string;
   lines: WorkflowRequestLineRow[]; attachments: WorkflowAttachment[];
+  /** 没有任何业务记录（采购、取消、到货…，含已撤销的单据）时可以删除 */
+  deletable: boolean;
 }
+/** 物品库的一条（导入时沿用单位、给候选） */
+export interface WorkflowProductRow { id: number; name: string; specification: string; unit: string }
 export interface WorkflowDocumentLineRow {
   id: number; documentId: number; requestLineId: number | null; sourceLineId: number | null;
   requestId: number | null; serialNumber: string | null;

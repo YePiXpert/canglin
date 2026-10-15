@@ -64,6 +64,8 @@ export function strictSchema(raw: Record<string, unknown>): Record<string, unkno
   const schema = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
   delete schema.$schema;
   function walk(node: Record<string, unknown>) {
+    // zod 的 .default() 会带上 default：严格模式的服务商不一定接受这个关键字，缺字段时的默认值由服务端解析补上
+    delete node.default;
     if (node.properties) {
       const properties = node.properties as Record<string, Record<string, unknown>>;
       const required = (node.required ?? []) as string[];

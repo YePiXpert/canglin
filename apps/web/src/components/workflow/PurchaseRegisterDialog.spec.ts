@@ -4,6 +4,7 @@ import { createPinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { WorkflowPriceRow } from '@canglin/shared';
 import PurchaseRegisterDialog from './PurchaseRegisterDialog.vue';
+import Select from '@/components/ui/Select.vue';
 import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestLineRow, type WorkflowRequestRow } from '@/api/workflow';
 import { suppliersApi, type SupplierRow } from '@/api';
 
@@ -33,7 +34,7 @@ const RESULT = { id: 41, kind: 'PURCHASE' } as WorkflowDocumentRow;
 
 function requestLine(overrides: Partial<WorkflowRequestLineRow>): WorkflowRequestLineRow {
   return {
-    id: 0, requestId: 5, lineNumber: 1, productId: 0, itemName: '', specification: '', unit: '盒', quantity: '0', note: null,
+    id: 0, requestId: 5, lineNumber: 1, productId: 0, itemName: '', specification: '', unit: '盒', quantity: '0', note: null, purchaseLink: null,
     cancelledQuantity: '0', orderedQuantity: '0', receivedQuantity: '0',
     pendingPurchaseQuantity: '0', pendingReceiptQuantity: '0', pendingAllocationQuantity: '0',
     directQuantity: '0', stockedQuantity: '0', issuedQuantity: '0', stockQuantity: '0',
@@ -48,7 +49,7 @@ const request = {
     requestLine({ id: 12, productId: 2, itemName: '验收笔', unit: '支', quantity: '5', pendingPurchaseQuantity: '5' }),
     requestLine({ id: 13, productId: 3, itemName: '已采购完的物品', quantity: '2', orderedQuantity: '2' }),
   ],
-  attachments: [],
+  attachments: [], deletable: true,
 } as unknown as WorkflowRequestRow;
 
 const suppliers = [{ id: 7, name: '甲供应商' }, { id: 8, name: '乙供应商' }] as SupplierRow[];
@@ -61,9 +62,9 @@ const paperQuotes = [
   quote({ supplierId: 8, supplierName: '乙供应商', unitPrice: '22', date: '2026-08-15', purchaseLineId: 901 }),
 ];
 
-async function mountDialog(): Promise<VueWrapper> {
+async function mountDialog(target: WorkflowRequestRow = request): Promise<VueWrapper> {
   const wrapper = mount(PurchaseRegisterDialog, {
-    props: { open: true, request },
+    props: { open: true, request: target },
     global: { plugins: [createPinia()], stubs: { Dialog: DialogStub } },
   });
   await flushPromises();
@@ -124,6 +125,37 @@ describe('PurchaseRegisterDialog', () => {
     expect(wrapper.find('[role=combobox]').text()).toBe('甲供应商');
     expect(pill(wrapper, '乙供应商').attributes('disabled')).toBeDefined();
     expect(pill(wrapper, '甲供应商').attributes('disabled')).toBeUndefined();
+  });
+
+  it('申请里附的链接默认填进链接框并标「来自申请」；点历史价换成那家的链接，改选别的供应商退回申请链接；不完整的链接拦下', async () => {
+    const withLink = { ...request, lines: [requestLine({
+      id: 11, productId: 1, itemName: '验收纸', specification: 'A4 / 80g', unit: '盒', quantity: '10', pendingPurchaseQuantity: '10',
+      purchaseLink: 'https://item.jd.com/100012345.html?pcdk=AbCd',
+    })] } as WorkflowRequestRow;
+    const wrapper = await mountDialog(withLink);
+    const link = field(wrapper, '验收纸 采购链接');
+    expect(link.element).toHaveProperty('value', 'https://item.jd.com/100012345.html');
+    expect(wrapper.text()).toContain('来自申请');
+    expect(wrapper.find('a[aria-label="打开 验收纸 的采购链接"]').attributes('href')).toBe('https://item.jd.com/100012345.html');
+
+    await pill(wrapper, '甲供应商').trigger('click');
+    expect(link.element).toHaveProperty('value', 'https://shop.example/a4');
+    expect(wrapper.text()).not.toContain('来自申请');
+    wrapper.findComponent(Select).vm.$emit('update:modelValue', '8');
+    await flushPromises();
+    expect(link.element).toHaveProperty('value', 'https://item.jd.com/100012345.html');
+    expect(field(wrapper, '验收纸 成交单价（元/盒）').element).toHaveProperty('value', '');
+
+    await field(wrapper, '验收纸 成交单价（元/盒）').setValue('20');
+    await link.setValue('item.jd.com/1.html');
+    await submit(wrapper);
+    expect(api.purchase).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('采购链接须为完整的 http 或 https 地址');
+    await link.setValue('https://u.jd.com/AbC');
+    expect(wrapper.text()).toContain('短链接容易失效');
+    await link.setValue('https://item.m.jd.com/product/100012345.html?sid=1');
+    await submit(wrapper);
+    expect(api.purchase.mock.calls[0][0].lines[0].purchaseLink).toBe('https://item.jd.com/100012345.html');
   });
 
   it('本行金额与合计按定点值计算，金额加千分位', async () => {

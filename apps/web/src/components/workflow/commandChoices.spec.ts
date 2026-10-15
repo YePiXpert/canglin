@@ -5,7 +5,7 @@ import { requestCancelChoices, stockIssueChoices, stockSourceChoices } from './c
 function requestLine(partial: Partial<WorkflowRequestLineRow>): WorkflowRequestLineRow {
   return {
     id: 1, requestId: 7, lineNumber: 1, productId: 11,
-    itemName: 'A4 复印纸', specification: 'A4 / 80g', unit: '盒', quantity: '10', note: null,
+    itemName: 'A4 复印纸', specification: 'A4 / 80g', unit: '盒', quantity: '10', note: null, purchaseLink: null,
     cancelledQuantity: '0', orderedQuantity: '0', receivedQuantity: '0',
     pendingPurchaseQuantity: '10', pendingReceiptQuantity: '0', pendingAllocationQuantity: '0',
     directQuantity: '0', stockedQuantity: '0', issuedQuantity: '0', stockQuantity: '0',
@@ -18,7 +18,7 @@ function requestLine(partial: Partial<WorkflowRequestLineRow>): WorkflowRequestL
 function request(lines: WorkflowRequestLineRow[]): WorkflowRequestRow {
   return {
     id: 7, serialNumber: 'OA-2026-007', department: '行政部', handler: '陈静', requestDate: '2026-09-27',
-    note: null, sourceTaskId: null, createdAt: '2026-09-27T00:00:00.000Z', lines, attachments: [],
+    note: null, sourceTaskId: null, createdAt: '2026-09-27T00:00:00.000Z', lines, attachments: [], deletable: true,
   };
 }
 

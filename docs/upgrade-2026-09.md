@@ -93,7 +93,7 @@ services:
 - **约束与索引**：`ImportTask.status`、`BusinessDocument.source` / `returnMode` 增加 CHECK（Prisma 看不到 CHECK，`migrate diff` 不会报漂移）；新增 `AuditLog(entity, entityId)` 与 `OperationReceipt(createdAt)` 索引。
 - **服务器时区**：`docker-compose.yml`、`deploy.sh` 生成的 `.env` 与 `.env.example` 设 `TZ=Asia/Shanghai`（服务端镜像安装 `tzdata`）。每日 03:00 的维护任务按该时区执行：清理 90 天前的操作回执、库存对账；遇到备份/恢复维护锁时每 15 分钟重试，最多 4 次，否则留到次日。
 - **库存对账**：`POST /api/system/stock-check` 立即核对每个库存余额与流水合计，结果也出现在 `GET /api/system/status` 的 `stockCheck`；不一致只写审计日志，不自动修正。
-- **导入只记申请事实**：导入页不再收集单价与采购链接，成交价和链接在登记采购时填写；`workflowImportConfirmSchema` 去掉 `supplierId`、`operationId`（操作编号只走 `Idempotency-Key` 请求头），草稿契约去掉 `supplierId`、`duplicateAction`。OCR/AI 读到的单价字段仍留在原始识别结果里，仅供核对。
+- **导入只记申请事实**：导入页不再收集单价与采购链接，成交价和链接在登记采购时填写（2026-10-15 起原件上的采购链接改为随明细入账、登记采购时预填，见文末「2026-10-15 导入单位、采购链接与删除申请」）；`workflowImportConfirmSchema` 去掉 `supplierId`、`operationId`（操作编号只走 `Idempotency-Key` 请求头），草稿契约去掉 `supplierId`、`duplicateAction`。OCR/AI 读到的单价字段仍留在原始识别结果里，仅供核对。
 - **语义搜索**：开启后 `/api/workflow/requests`、`documents`、`stock` 的 `search` 用词表内的同义词扩展品名匹配，词表来自申请明细品名与物品目录。
 - **验证口径**：`deploy/tests/smoke-api.cjs` 改走新接口（导入确认建申请 → 备份 → 取消一行 → 恢复 → 校验申请与原件）；CI 增加前后端 lint；本地验证数字见 README。
 
@@ -138,7 +138,7 @@ services:
 
 **文本层 PDF 网格重建**：带文本层的 OA 打印页（致远「办公用品领用单」「固定资产购买申请单」及同类表格）按表格边框与词坐标恢复物理行与列：竖线按与表体重叠长度之和计覆盖度，词按水平重叠最大归列，格内换行直接拼接（型号、链接、部门名常按字符拆行），没有序号和数量的行并入上一行，续页沿用上一页的列定义（单页请求先推算前面各页的列）。品名保留名称单元格原文，备注能解释为单位（「50张」「一个」且与数量相符）才取单位，其余备注文字并入规格并提示核对拆行；固定资产单的规格型号、主要技术指标与生产厂家合并为规格，预计总价写入 `amount` 并与数量×单价交叉校验。单据头按「标签词右侧同一行」取值，部门名换行拼接，经办人可以是岗位名。浏览器页眉页脚、插入项、合计、审批链不成行。已识别模板的原件不再退回旧的逐行解析（它在固定资产单上每份产出三十多条假明细）；文本层存在但没有表格的页面不再渲染 OCR。`parserVersion` 为 `4`。
 
-**AI 识别分两种模式**（提示词与版本号集中在 `apps/server/src/ai/prompts.ts`）：
+**AI 识别分两种模式**（提示词与版本号集中在 `apps/server/src/ai/prompts.ts`；2026-10-15 起为 `review-v2` / `recognition-v3`，每行加推测单位 `unitGuess`，见文末）：
 
 | 页面 | 模式 | 模型的任务 | 服务端校验 |
 | --- | --- | --- | --- |
@@ -248,3 +248,14 @@ docker compose --env-file .env -p canglin --project-directory "$PWD" \
 备份应包括 `data/`、`.env`、`docker-compose.override.yml`、`secrets/` 及所需的 `pre-upgrade-backups/`。外部 secret 仍需单独备份。直接复制 data/ 前先停止 server，复制完成后启动；应用内备份可以在服务运行时使用。恢复到另一台主机时先恢复这些文件，再按新部署目录调整 `CANGLIN_DATA_DIR`，保留 uid/gid 与权限。卷名本身不是备份数据。
 
 `rollback.sh` 恢复旧镜像和数据时继续使用当前 data/ 路径，并在发布目录生成 `storage.yml`。回退后手动 Compose 管理也必须追加 `-f <发布目录>/storage.yml`（存在时），以及原说明中的旧配置、机器 override 和旧镜像文件，不能漏掉存储配置。
+
+## 2026-10-15 导入单位、采购链接与删除申请
+
+方案与实施记录见 [导入单位、采购链接与删除申请](import-units-links-2026-10.md)。
+
+- **迁移 `20261015000000_request_line_link`**：`ProcurementLine` 加可空列 `purchaseLink`（申请里附的采购链接）。迁移同时从导入任务的入账快照回填：按入账时的明细顺序（`input.items[i]` 对应第 `i + 1` 行）取 `lineId`，在当时的识别结果（`local.items`）里找同一行的链接，只填 `http` / `https` 开头、不超过 500 字符的链接。列可空，回退旧代码不需要反向迁移（旧代码不读这一列）。升级前后可以运行 `python3 -I scripts/inspect-units-links.py data/canglin.db`（只读，只输出数量与域名）核对能回填多少条、还有多少明细的单位要人工填。
+- **链接**：`linkSchema`（`packages/shared/src/links.ts`）统一校验与精简（先精简再量 500 字，草稿里可以暂存 2000 字以内的原文）：京东、天猫、淘宝、1688、拼多多、苏宁的商品页只留商品编号（去掉跟踪参数与 `#` 后缀，手机版换成电脑版），其他网站原样保留；导入确认、人工录入申请、登记采购、更换链接都经它保存。读接口按规范地址返回链接，存量里带跟踪参数的链接不改写数据也能直接打开。短链接（`u.jd.com`、`m.tb.cn` 等）只提示，不拦保存。不自动检测链接是否有效。
+- **新接口**：`GET /api/workflow/products`（物品库：品名、规格、单位）；`POST /api/workflow/requests/:id/delete`（删除申请）；`PATCH /api/workflow/request-lines/:id/link`、`PATCH /api/workflow/purchase-lines/:id/link`（更换链接，body `{ purchaseLink: string | null }`，空串或 null 去掉链接）。写接口照旧要 `Idempotency-Key`。申请视图每条明细带 `purchaseLink`，申请带 `deletable`。审计动作 `WORKFLOW_REQUEST_DELETE`（详情含流水号、明细数、来源任务）、`WORKFLOW_REQUEST_LINE_LINK`、`WORKFLOW_PURCHASE_LINE_LINK`（详情的 `previous` 是旧链接）。
+- **删除申请**：只有没有任何业务记录（采购、取消、到货…，含已撤销的单据）的申请可以删除，否则 409。明细与原件附件记录一并删除（文件按引用计数回收，导入任务还持有时保留）；只被这张申请用到、并且是随它一起建出来的物品库条目一并删除（手工新增的库存物品保留）。导入的申请删除后导入任务退回待核对：清空 `confirmedAt` 与 `confirmation`，版本加一（旧页面的确认会被拒绝），入账快照存进修改历史（`ImportRevision.kind = CONFIRMATION`），草稿保留入账时的内容。未确认原件的 30 天保留期对撤回过的任务从最近一次撤回算起（按这条修改历史的时间），不按上传时间立刻清理。
+- **AI 推测单位**：输出契约每行新增 `unitGuess`（原件没写单位时的推测单位；写了单位时为 null；带数字或超过 8 个字的由服务端置空）。`unit` 的含义不变，「AI 建议待核对」的判断与 `aiSuggestionKey` 都不含 `unitGuess`，已确认过的建议不受影响。缺这个字段的旧响应按 null 解析；发给服务商的严格 JSON Schema 去掉了 zod 生成的 `default` 关键字。识别结果与草稿里的明细带可选的 `unitGuess`，草稿另带 `unitSource`（`CATALOG` 沿用物品库 / `AI` 推测，人工改过为空）。
+- **草稿里的单位与链接**：单位为空的行由前端按「物品库 > AI 推测」自动填并标出来源（原件写明与人工填写的单位不动），入账契约照旧要求单位。草稿每行带 `purchaseLink`（`null` 表示这一行确实没有链接）；这次修复之前保存的草稿缺这个字段，载入时从识别结果按行补回并随自动保存写入。

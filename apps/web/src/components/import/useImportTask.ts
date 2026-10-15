@@ -3,19 +3,34 @@ import { NavigationFailureType, isNavigationFailure, onBeforeRouteLeave, onBefor
 import { isAxiosError } from 'axios';
 import { importsApi, type ImportTaskView, type AiImportPage } from '@/api';
 import { apiError } from '@/api/client';
-import { aiSuggestionKey, workflowImportConfirmSchema, type ImportDraft, type ParseResult } from '@canglin/shared';
+import { workflowApi, type WorkflowProductRow } from '@/api/workflow';
+import { useToastStore } from '@/stores/toast';
+import {
+  COMMON_UNITS, aiSuggestionKey, canonicalLink, isWebLink, linkIssue, packagingUnits, workflowImportConfirmSchema,
+  type ImportDraft, type ParseResult,
+} from '@canglin/shared';
 import type ImportTaskList from './ImportTaskList.vue';
 import { isRunning, isTaskActive } from './status';
 
-/** 导入只核对原件上的品名、规格、数量和单位；成交单价与采购链接在登记采购时填写 */
+/**
+ * 导入核对原件上的品名、规格、数量、单位与采购链接；成交单价在登记采购时填写。
+ * 单位为空时自动填（docs/import-units-links-2026-10.md U1–U3）：物品库优先，其次 AI 推测，都标出来源，人工改过就不再自动改。
+ */
 export type Line = {
   lineId: string;
   itemName: string;
   spec: string;
   quantity: string;
   unit: string;
+  /** 自动填的单位的来源：CATALOG = 沿用物品库，AI = AI 推测；undefined = 原件写明或人工填写 */
+  unitSource?: 'CATALOG' | 'AI';
+  /** 首次识别时 AI 推测的单位：只用来自动填，不是原件事实 */
+  unitGuess?: string;
+  /** 原件上的采购链接（精简后显示），可改；入账时存到申请明细，登记采购时预填 */
+  purchaseLink: string;
   source?: ParseResult['items'][number]['source'];
 };
+export type UnitSource = NonNullable<Line['unitSource']>;
 
 /**
  * 导入页的全部状态与逻辑：当前任务（只由地址里的 task 决定）、草稿编辑与自动保存、轮询、上传、重试与确认入账。
@@ -117,9 +132,11 @@ export function useImportTask() {
     saveError.value = '';
     await refresh();
   }
+  /** 修改历史的明细：草稿与识别结果是 items；撤回入账时保存的入账快照是确认时提交的 input.items */
   function revisionRows(snapshot: string): ImportDraft['items'] {
     try {
-      return JSON.parse(snapshot).items ?? [];
+      const parsed = JSON.parse(snapshot);
+      return parsed.items ?? parsed.input?.items ?? [];
     } catch {
       return [];
     }
@@ -206,6 +223,9 @@ export function useImportTask() {
       spec: item?.spec ?? '',
       quantity: item?.quantity == null ? '' : String(item.quantity),
       unit: item?.unit ?? '',
+      unitSource: (item?.unit && item.unitSource) || undefined,
+      unitGuess: item?.unitGuess || undefined,
+      purchaseLink: item?.purchaseLink ? canonicalLink(item.purchaseLink) : '',
       source: item?.source,
     };
   }
@@ -219,6 +239,10 @@ export function useImportTask() {
         ...l,
         quantity: number(l.quantity),
         unit: l.unit || null,
+        unitSource: (l.unit.trim() && l.unitSource) || null,
+        unitGuess: l.unitGuess ?? null,
+        // 保存时就精简（不等离开输入框）；null 表示「这一行确实没有链接」，与旧草稿缺这个字段区分开（旧草稿载入时从识别结果补回）
+        purchaseLink: canonicalLink(l.purchaseLink) || null,
       })),
       reviewedPages: reviewedPages.value,
       reviewedAi: reviewedAi.value,
@@ -276,7 +300,14 @@ export function useImportTask() {
         loaded.value = true;
         saved.value = !!d;
         if (!d) changed();
-        if (next.confirmed) error.value = '此任务已经确认入账，仅供查看。';
+        if (next.confirmed) {
+          error.value = '此任务已经确认入账，仅供查看。';
+          void checkRevertable(id);
+        } else {
+          recoverLinks(d?.items ?? []);
+          fillUnits();
+          void loadCatalog(id);
+        }
       }
       clearTimeout(timer);
       if (active.value) timer = setTimeout(() => void refresh(), 1500);
@@ -413,7 +444,12 @@ export function useImportTask() {
     l.itemName = s.itemName;
     l.spec = s.spec ?? '';
     l.quantity = s.quantity == null ? '' : String(s.quantity);
-    l.unit = s.unit ?? '';
+    // AI 读到了原件上的单位就用它；没读到时保留已经填好的单位，空着的再按物品库 / AI 推测自动填
+    if (s.unit) {
+      l.unit = s.unit;
+      l.unitSource = undefined;
+    } else if (!l.unit.trim()) l.unitSource = undefined;
+    fillUnit(l);
     acknowledge(s);
   }
   /** 已有物品建议：与当前品名、规格、单位不同才显示 */
@@ -427,7 +463,10 @@ export function useImportTask() {
     if (!c) return;
     l.itemName = c.name;
     l.spec = c.spec ?? '';
+    // 点了「采用已有物品」就是人工选定这个物品与它的单位：不标自动来源，之后也不会被自动填改掉
     l.unit = c.unit ?? '';
+    l.unitSource = undefined;
+    if (!c.unit) fillUnit(l);
   }
   function addSuggestion(s: AiImportPage['items'][number] & { page: number }) {
     lines.value.push(
@@ -437,6 +476,7 @@ export function useImportTask() {
         source: { page: s.page, method: 'AI' },
       }),
     );
+    fillUnit(lines.value[lines.value.length - 1]);
     acknowledge(s);
   }
   function localValue(l: Line) {
@@ -444,8 +484,170 @@ export function useImportTask() {
   }
   function applyLocal(l: Line) {
     const item = localValue(l);
-    if (item) Object.assign(l, line(item));
+    if (!item) return;
+    Object.assign(l, line(item));
+    fillUnit(l);
   }
+
+  /* ----------------------------- 单位自动填与候选 ----------------------------- */
+  /** 物品库（品名 + 规格 + 单位）：每载入一个未入账的任务取一次，只认最后一次请求的结果 */
+  const catalog = ref<WorkflowProductRow[]>([]);
+  /** 物品库取到过：取到之前（或取失败）不重算「沿用物品库」的单位，免得把上次存下的单位清掉 */
+  const catalogReady = ref(false);
+  let catalogRequest = 0;
+  async function loadCatalog(id: string) {
+    const request = ++catalogRequest;
+    try {
+      const rows = await workflowApi.products();
+      if (request !== catalogRequest || stale(id)) return;
+      catalog.value = rows;
+      catalogReady.value = true;
+      fillUnits();
+    } catch {
+      // 物品库取不到时不按物品库填，AI 推测、包装与常用单位的候选照常
+    }
+  }
+  /**
+   * 物品库里与这一行同名的单位：同名同规格只有一个单位、或同名的都只有一个单位时可以直接填（auto）；
+   * units 是同名物品用过的全部单位（作候选，也用来提示「物品库里是别的单位」）。
+   */
+  function catalogUnits(l: Line): { auto: string | null; units: string[] } {
+    const name = l.itemName.trim();
+    if (!name) return { auto: null, units: [] };
+    const same = catalog.value.filter((p) => p.name === name);
+    const units = [...new Set(same.map((p) => p.unit))];
+    const exact = [...new Set(same.filter((p) => p.specification === l.spec.trim()).map((p) => p.unit))];
+    return { auto: exact.length === 1 ? exact[0] : !exact.length && units.length === 1 ? units[0] : null, units };
+  }
+  /** AI 推测：重试的建议里读到的单位或推测，其次首次识别的推测 */
+  function aiUnit(l: Line): string | undefined {
+    const s = suggestion(l);
+    return s?.unit || s?.unitGuess || l.unitGuess || undefined;
+  }
+  /**
+   * 单位为空、或是自动填的：按 物品库 > AI 推测 重新计算；原件写明与人工填写的单位不动。
+   * 自动填的依据没了（改了品名，物品库里没有这个名字、也没有 AI 推测）就清空，回到「单位未确认」与候选。
+   */
+  function fillUnit(l: Line) {
+    if (!loaded.value || task.value?.confirmed) return;
+    if (l.unit.trim() && !l.unitSource) return;
+    if (!catalogReady.value && l.unitSource === 'CATALOG') return;
+    const fromCatalog = catalogReady.value ? catalogUnits(l).auto : null;
+    const ai = aiUnit(l);
+    const next: { unit: string; source: UnitSource } | null = fromCatalog
+      ? { unit: fromCatalog, source: 'CATALOG' }
+      : ai ? { unit: ai, source: 'AI' } : null;
+    if (!next) {
+      if (l.unitSource) {
+        l.unit = '';
+        l.unitSource = undefined;
+      }
+      return;
+    }
+    if (l.unit !== next.unit || l.unitSource !== next.source) {
+      l.unit = next.unit;
+      l.unitSource = next.source;
+    }
+  }
+  function fillUnits() {
+    for (const l of lines.value) fillUnit(l);
+  }
+  // 重试的 AI 结果到达时，空着的单位按新的建议补上
+  watch(() => task.value?.aiResult, () => fillUnits());
+  /** 人工在单位输入框里改过：不再自动改，也不再标来源 */
+  function unitEdited(l: Line) {
+    l.unitSource = undefined;
+  }
+  /** 点候选：当作人工选择 */
+  function chooseUnit(l: Line, unit: string) {
+    l.unit = unit;
+    l.unitSource = undefined;
+  }
+  /**
+   * 单位候选（一键填入）：单位为空时给物品库里同名物品的单位、规格里的包装层级与 AI 推测；
+   * 自动填的单位给其余几个；人工或原件写明的单位只在物品库里同名物品用的是别的单位时提示。最多 4 个。
+   */
+  function unitHint(l: Line): { label: string; units: string[] } | null {
+    const current = l.unit.trim();
+    const { units } = catalogUnits(l);
+    if (current && !l.unitSource) {
+      return units.length && !units.includes(current) ? { label: '物品库里是', units: units.slice(0, 4) } : null;
+    }
+    const ai = aiUnit(l);
+    const choices = [...new Set([...units, ...packagingUnits(l.spec), ...(ai ? [ai] : [])])].filter((u) => u !== current).slice(0, 4);
+    return choices.length ? { label: current ? '也可能是' : '单位可选', units: choices } : null;
+  }
+  /** 单位输入框的下拉：候选在前，常用单位在后 */
+  function unitSuggestions(l: Line): string[] {
+    return [...new Set([...catalogUnits(l).units, ...packagingUnits(l.spec), ...COMMON_UNITS])];
+  }
+  /** 自动填的单位条数（入账前提示核对，不拦入账） */
+  const autoUnitCount = computed(() => lines.value.filter((l) => l.unit.trim() && l.unitSource).length);
+
+  /* --------------------------------- 采购链接 --------------------------------- */
+  /** 旧草稿（这次修复前保存的）没有 purchaseLink 字段：从识别结果按行补回，随后的自动保存会存下 */
+  function recoverLinks(items: ImportDraft['items']) {
+    items.forEach((item, index) => {
+      if (item.purchaseLink !== undefined || !lines.value[index] || lines.value[index].purchaseLink) return;
+      const recognised = task.value?.result?.items.find((r) => r.lineId === item.lineId)?.purchaseLink;
+      if (recognised) lines.value[index].purchaseLink = canonicalLink(recognised);
+    });
+  }
+  /** 链接有问题时的原因（不完整、精简后仍超过 500 字；入账时同一条规则拦下） */
+  function linkError(l: Line): string | undefined {
+    return linkIssue(l.purchaseLink);
+  }
+  /** 离开链接输入框时精简（常见商城的商品页去掉跟踪参数） */
+  function tidyLink(l: Line) {
+    if (isWebLink(l.purchaseLink)) l.purchaseLink = canonicalLink(l.purchaseLink);
+  }
+
+  /* --------------------------------- 撤回入账 --------------------------------- */
+  /** 已入账、申请还没有任何业务记录时可以撤回：删除申请，任务退回待核对（docs/import-units-links-2026-10.md D2） */
+  const revertable = ref(false), revertOpen = ref(false), reverting = ref(false), revertError = ref('');
+  async function checkRevertable(id: string) {
+    revertable.value = false;
+    const requestId = task.value?.requestId;
+    if (!requestId) return;
+    try {
+      const request = await workflowApi.request(requestId);
+      if (stale(id)) return;
+      revertable.value = request.deletable;
+      // 不能撤回时说明原因：只读提示后面补一句，免得找不到「撤回入账」
+      if (!request.deletable && task.value?.confirmed)
+        error.value = '此任务已经确认入账，仅供查看。申请已有采购等业务记录，不能撤回入账；不再办理的数量可以在申请详情「取消未采购量」。';
+    } catch {
+      // 取不到申请就不显示撤回
+    }
+  }
+  async function revert() {
+    const id = taskId.value;
+    const requestId = finished.value?.requestId ?? task.value?.requestId;
+    if (!requestId || reverting.value) return;
+    reverting.value = true;
+    revertError.value = '';
+    try {
+      await workflowApi.deleteRequest(requestId);
+      if (stale(id)) return;
+      revertOpen.value = false;
+      revertable.value = false;
+      finished.value = null;
+      // 重新载入任务：草稿还是入账时的内容，变回可编辑
+      clearTimeout(timer);
+      loaded.value = false;
+      error.value = '';
+      await refresh();
+      void taskList.value?.refresh();
+      useToastStore().success('已撤回入账：申请已删除，可以修改后重新入账');
+    } catch (e) {
+      if (!stale(id)) revertError.value = apiError(e);
+    } finally {
+      reverting.value = false;
+    }
+  }
+  watch(revertOpen, (open) => {
+    if (open) revertError.value = '';
+  });
   function reviewed(p: number, event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
     reviewedPages.value = reviewedPages.value.filter((r) => r.page !== p);
@@ -513,6 +715,7 @@ export function useImportTask() {
       if (stale(id)) return;
       finished.value = result;
       if (task.value) task.value.confirmed = true;
+      revertable.value = true; // 刚建好的申请还没有业务记录
     } catch (e) {
       if (stale(id)) return;
       error.value = apiError(e);
@@ -542,6 +745,8 @@ export function useImportTask() {
       loaded.value = false; // 先关掉自动保存：下面清空表单不算编辑
       discardOpen.value = false;
       reloadOpen.value = false;
+      revertOpen.value = false;
+      revertable.value = false;
       hydrating = false;
       revision = 0;
       taskId.value = typeof value === 'string' ? value : '';
@@ -582,18 +787,19 @@ export function useImportTask() {
   return {
     // 状态；rootEl、taskList 由 ImportView 绑定为模板 ref
     task, taskId, busy, error, saveError, saved, loaded, form, reviewedAi, lines, reviewedPages, page, selected,
-    discardOpen, discarding, discardError, reloadOpen,
+    discardOpen, discarding, discardError, reloadOpen, revertable, revertOpen, reverting, revertError, catalog,
     finished, duplicateFile, duplicateTaskId, missing, previewFailed, mobileTab, rootEl, taskList, revisions,
     historyLoading, historyError,
     // 派生值与常量
     active, box, pageCount, issuePages, suggestions, localState, aiState, fields, labels, stateDot, stackedLabel,
-    confirmBlockers,
+    confirmBlockers, autoUnitCount,
     // 动作
     loadHistory, reloadDraft, confirmReloadDraft, revisionRows, needsReview, line, persist, upload, uploadFile,
     openDuplicate, cancel,
     discard,
     retry, focusLine, suggestion, acknowledge, apply, catalogMatch, applyCatalog, addSuggestion, localValue, applyLocal,
-    reviewed, confirm,
+    reviewed, confirm, revert,
+    fillUnit, unitEdited, chooseUnit, unitHint, unitSuggestions, linkError, tidyLink,
     scrollToTask,
   };
 }

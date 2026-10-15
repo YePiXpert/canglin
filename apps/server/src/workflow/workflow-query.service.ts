@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  lineAmountUnits, moneyText, priceText, priceUnits, quantityText,
-  type WorkflowQuery, type WorkflowRequestRow, type WorkflowRequestLineRow,
+  canonicalLink, lineAmountUnits, moneyText, priceText, priceUnits, quantityText,
+  type WorkflowQuery, type WorkflowRequestRow, type WorkflowRequestLineRow, type WorkflowProductRow,
   type WorkflowDocumentRow, type WorkflowDocumentLineRow, type WorkflowStockRow, type WorkflowStockEntryRow,
   type WorkflowOverview, type WorkflowStage, type WorkflowLocation, type WorkflowDocumentKind,
   type WorkflowReport, type WorkflowPriceRow,
@@ -10,6 +10,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AiSearchService } from '../ai/ai-search.service';
 import { documentInclude, requestInclude, snapshot, sum, type DocumentRecord, type RequestRecord, type Tx } from './workflow-records';
+
+/** 链接按规范地址返回：存量里带跟踪参数的商城链接（回填的申请链接、早先登记的采购链接）不改写数据也能直接用 */
+const link = (value: string | null) => (value ? canonicalLink(value) : null);
 
 /** Read-side projections. Each public read owns its transaction; requestTx/documentTx also run inside WorkflowService write transactions. */
 @Injectable()
@@ -34,8 +37,10 @@ export class WorkflowQueryService {
 
   private async projectRequests(tx: Tx, requests: RequestRecord[]): Promise<WorkflowRequestRow[]> {
     const ids = requests.flatMap((request) => request.lines.map((line) => line.id));
-    const [lines, balances, entries] = await Promise.all([
+    const [lines, used, balances, entries] = await Promise.all([
       tx.businessLine.findMany({ where: { requestLineId: { in: ids }, document: { status: 'POSTED' } }, include: { document: true } }),
+      // 含已撤销单据的业务明细：有任何一条，申请就不能删除
+      tx.businessLine.findMany({ where: { requestLineId: { in: ids } }, select: { requestLineId: true }, distinct: ['requestLineId'] }),
       tx.stockBalance.findMany({ where: { originLine: { requestLineId: { in: ids } } }, include: { originLine: true } }),
       tx.stockEntry.findMany({ where: { originLine: { requestLineId: { in: ids } } }, include: { originLine: true, businessLine: { include: { document: true } } } }),
     ]);
@@ -43,6 +48,7 @@ export class WorkflowQueryService {
       id: request.id, serialNumber: request.serialNumber, department: request.department, handler: request.handler,
       requestDate: request.requestDate, note: request.note, sourceTaskId: request.sourceTaskId,
       createdAt: request.createdAt.toISOString(), attachments: request.attachments,
+      deletable: !request.lines.some((line) => used.some((entry) => entry.requestLineId === line.id)),
       lines: request.lines.map((line): WorkflowRequestLineRow => {
         const ownLines = lines.filter((entry) => entry.requestLineId === line.id);
         const ownBalances = balances.filter((balance) => balance.originLine.requestLineId === line.id);
@@ -60,7 +66,8 @@ export class WorkflowQueryService {
         if (!stages.length) stages.push(line.quantityUnits === line.cancelledUnits ? 'CANCELLED' : 'COMPLETED');
         return {
           id: line.id, requestId: request.id, lineNumber: line.lineNumber, ...snapshot(line),
-          quantity: quantityText(line.quantityUnits), note: line.note, cancelledQuantity: quantityText(line.cancelledUnits),
+          quantity: quantityText(line.quantityUnits), note: line.note, purchaseLink: link(line.purchaseLink),
+          cancelledQuantity: quantityText(line.cancelledUnits),
           orderedQuantity: quantityText(line.orderedUnits), receivedQuantity: quantityText(received),
           pendingPurchaseQuantity: quantityText(pendingPurchase), pendingReceiptQuantity: quantityText(pendingReceipt),
           pendingAllocationQuantity: quantityText(pendingAllocation), stockQuantity: quantityText(stock),
@@ -102,7 +109,7 @@ export class WorkflowQueryService {
         unitPrice: line.unitPriceUnits === null ? null : priceText(line.unitPriceUnits),
         amount: line.amountUnits === null ? null : moneyText(line.amountUnits),
         purchaseReductionAmount: line.purchaseReductionAmountUnits === null ? null : moneyText(line.purchaseReductionAmountUnits),
-        purchaseLink: line.purchaseLink, recipient: line.recipient, location: line.location as WorkflowLocation | null,
+        purchaseLink: link(line.purchaseLink), recipient: line.recipient, location: line.location as WorkflowLocation | null,
         reason: line.reason, receivedQuantity: quantityText(line.receivedUnits),
         sourceAllocations: allocations.filter((entry) => entry.businessLineId === line.id).map((entry) => ({
           originLineId: entry.originLineId, quantity: quantityText(entry.quantityUnits < 0n ? -entry.quantityUnits : entry.quantityUnits),
@@ -161,6 +168,14 @@ export class WorkflowQueryService {
         tx.businessDocument.count({ where }),
       ]);
       return { items: await this.projectDocuments(tx, records), total, page: query.page, pageSize: query.pageSize };
+    });
+  }
+
+  /** 物品库（品名 + 规格 + 单位）：导入草稿据此沿用单位、给单位候选 */
+  async products(): Promise<WorkflowProductRow[]> {
+    return this.prisma.catalogProduct.findMany({
+      select: { id: true, name: true, specification: true, unit: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
     });
   }
 
@@ -242,7 +257,7 @@ export class WorkflowQueryService {
       const key = `${line.productId}:${line.document.supplierId}`;
       if (!latest.has(key)) latest.set(key, {
         ...snapshot(line), supplierId: line.document.supplierId!, supplierName: line.document.supplierName!,
-        unitPrice: priceText(line.unitPriceUnits!), purchaseLink: line.purchaseLink, date: line.document.date, purchaseLineId: line.id,
+        unitPrice: priceText(line.unitPriceUnits!), purchaseLink: link(line.purchaseLink), date: line.document.date, purchaseLineId: line.id,
       });
     }
     return [...latest.values()].sort((a, b) => priceUnits(a.unitPrice) < priceUnits(b.unitPrice) ? -1 : priceUnits(a.unitPrice) > priceUnits(b.unitPrice) ? 1 : a.purchaseLineId - b.purchaseLineId);

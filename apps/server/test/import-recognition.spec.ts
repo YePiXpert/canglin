@@ -127,7 +127,7 @@ describe('AI review of text-layer PDF pages', () => {
       'AI 读到第 1 页第 1 行数量为 9，已保留文本层的 10',
       'AI 读到的第 1 页第 1 行链接与文本层不同，已保留文本层的链接',
     ]);
-    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v1' });
+    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v2' });
   });
 
   it('treats added or dropped rows as a contract error and keeps the text-layer rows', async () => {
@@ -165,7 +165,7 @@ describe('AI review of text-layer PDF pages', () => {
       expect(sent.messages[0].content).toContain('catalog 是系统已有物品');
       expect(JSON.parse(sent.messages[1].content).catalog).toEqual(expect.arrayContaining([
         { name: 'A4打印纸', spec: '80g', unit: '包' }, { name: '光盘', spec: null, unit: '张' }]));
-      expect(task.calls[0].promptVersion).toBe('review-v1+catalog');
+      expect(task.calls[0].promptVersion).toBe('review-v2+catalog');
       expect(task.aiResult[0].items.map((i) => i.catalogSuggestion)).toEqual([{ name: 'A4打印纸', spec: '80g', unit: '包' }, null]);
       expect(task.draft?.items[0].itemName).toBe('A4打印纸');  // 来自 AI 的拆分，不是目录替换
       expect(task.draft?.items[0].spec).toBe('80g；5包/箱');
@@ -220,7 +220,7 @@ describe('AI review of text-layer PDF pages', () => {
     expect(sent.messages[0].content).toContain('你是采购申请单据的识别器');
     const message = JSON.parse(sent.messages[1].content);
     expect(message).toMatchObject({ page: 1, pageCount: 1, templateHint: 'OFFICE_SUPPLY', textLayer: gridPage().textLayer });
-    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v2' });
+    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v3' });
     expect(task.result?.items[0].purchaseLink).toBeNull();
     expect(task.aiResult[0].warnings).toContain('「原件物品1」的链接不在本页文本层中，已置空，请对照原件');
     cfg = { ...cfg, reviewTextPdf: undefined } as typeof cfg;
@@ -275,7 +275,7 @@ describe('AI primary original recognition', () => {
       expect(sent.messages[1].images).toEqual(['top', 'bottom'].map((s) => `data:image/png;base64,${Buffer.from(s).toString('base64')}`));
       expect(sent.messages[0].content).toContain('本页按自上而下顺序分成 strips 段图像');
       expect(JSON.parse(sent.messages[1].content).strips).toBe(2);
-      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v2+strips' });
+      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v3+strips' });
       ocr.pageStrips.mockRejectedValueOnce(new Error('strips failed'));
       await settle(await upload('long2.png'));
       expect(llm.chat.mock.calls[1][0].messages[1].images).toHaveLength(1);
@@ -507,5 +507,30 @@ describe('AI primary original recognition', () => {
     expect(JSON.parse(llm.chat.mock.calls[0][0].messages[1].content).page).toBe(2);
     expect(task.calls.map((call) => call.status)).toEqual(['UNKNOWN', 'DONE']);
     expect(task.reviewPages.map((page) => page.page)).toEqual([1]);
+  });
+});
+
+describe('AI 推测单位（unitGuess）', () => {
+  it('审核模式：原件没写单位的行带上推测，写了单位的置空；推测进识别结果与草稿，unit 仍只记原件写明的', async () => {
+    ocr.inspect.mockResolvedValue({ pageCount: 1 });
+    ocr.textLayer.mockResolvedValue(gridPage());
+    llm.chat.mockResolvedValueOnce(reviewed([{ unitGuess: '箱' }, { unitGuess: '个' }]));
+    const task = await settle(await upload('office.pdf'));
+    expect(llm.chat.mock.calls[0][0].messages[0].content).toContain('unitGuess');
+    expect(task.result?.items.map((i) => [i.unit ?? null, i.unitGuess ?? null])).toEqual([[null, '箱'], ['张', null]]);
+    expect(task.draft?.items.map((i) => i.unitGuess ?? null)).toEqual(['箱', null]);
+    expect(task.aiResult[0].items.map((i) => i.unitGuess)).toEqual(['箱', null]);
+  });
+
+  it('识别模式：推测去掉空白；带数字或超过 8 个字的不是单位，置空；缺这个字段的旧响应照常解析', async () => {
+    ocr.inspect.mockResolvedValue({ pageCount: 1 });
+    const item = (n: number, unitGuess?: string) => ({ lineId: null, rawText: `物品${n}`, itemName: `物品${n}`, spec: null, quantity: 1, unit: null,
+      unitPrice: null, amount: null, purchaseLink: null, catalogSuggestion: null, ...(unitGuess === undefined ? {} : { unitGuess }) });
+    llm.chat.mockResolvedValueOnce({ content: JSON.stringify({ templateType: null, serialNumber: 'OA-G', department: '行政部', handler: '张三',
+      requestDate: '2026-10-01', items: [item(1, ' 支 '), item(2, '5包'), item(3, '一种很长很长的计量单位'), item(4)], warnings: [] }),
+      usage: { input: 1, output: 1 } });
+    const task = await settle(await upload('photo.png'));
+    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'RECOGNITION' });
+    expect(task.result?.items.map((i) => i.unitGuess ?? null)).toEqual(['支', null, null, null]);
   });
 });

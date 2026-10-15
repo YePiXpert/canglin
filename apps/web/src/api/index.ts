@@ -42,6 +42,8 @@ export interface AiImportPage {
     unitPrice: number | null;
     amount?: number | null;
     purchaseLink: string | null;
+    /** 原件没写单位时 AI 推测的单位（recognition-v3 / review-v2 起；旧结果没有） */
+    unitGuess?: string | null;
     /** 与已有物品明显是同一物品时的建议（品名 + 规格 + 单位），只在用户点「采用」后替换 */
     catalogSuggestion?: { name: string; spec: string | null; unit: string | null } | null;
   }[];

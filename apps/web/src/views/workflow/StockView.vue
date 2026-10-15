@@ -141,9 +141,9 @@ function clearAll() { state.stock = ''; clearSearch(); }
         </div>
       </template>
     </Panel>
-    <DocumentCollection v-else-if="state.tab === 'distributions'" ref="documents" initial-kind="DISTRIBUTION" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" />
+    <DocumentCollection v-else-if="state.tab === 'distributions'" ref="documents" initial-kind="DISTRIBUTION" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="(line, document) => actions?.editLink({ kind: 'purchase', lineId: line.id, itemName: line.itemName, specification: line.specification, purchaseLink: line.purchaseLink, context: `采购成交 #${document.id}` })" />
     <StockEntriesTable v-else-if="state.tab === 'entries'" :entries="entries" :loading="entriesLoading" :error="entriesError" :page="state.page" @retry="loadEntries" @page="page" @inspect-document="actions?.inspectDocument($event)" @inspect-line="actions?.inspectLine($event)" />
     <ProductCreateDialog v-model:open="creatingProduct" @created="refresh" />
-    <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" />
+    <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" @link-changed="refresh" />
   </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { quantityText, quantityUnits } from '@canglin/shared';
 import { workflowApi, type WorkflowStockRow } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
@@ -8,7 +8,13 @@ import PageHeader from '@/components/ui/PageHeader.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Menu from '@/components/ui/Menu.vue';
+import Notice from '@/components/ui/Notice.vue';
+import type { MenuItem } from '@/components/ui/types';
+import { apiError } from '@/api/client';
+import { useToastStore } from '@/stores/toast';
 import { buttonClass } from '@/components/ui/button';
 import ErrorState from '@/components/ui/ErrorState.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
@@ -21,12 +27,15 @@ import WorkflowAttachments from '@/components/workflow/WorkflowAttachments.vue';
 import { requestCancelChoices } from '@/components/workflow/commandChoices';
 import { PROGRESS_SEGMENTS, requestStatusChips } from '@/components/workflow/lineProgress';
 import { setPageTitle } from '@/utils/title';
+import type { WorkflowDocumentLineRow, WorkflowDocumentRow, WorkflowRequestLineRow } from '@/api/workflow';
 
 /*
  * 申请详情（DESIGN.md §8）：页头 → 申请明细与数量进度 → 已到货，待决定去向 → 两栏（业务记录 | OA 原件与附件、付款与开票）。
  * 区块标题在面板外：15px / 600 + 13px 说明，标题到面板 10px，区块之间 28px。
  */
 const route = useRoute();
+const router = useRouter();
+const toast = useToastStore();
 const requestId = computed(() => Number(route.params.id));
 const actions = ref<InstanceType<typeof WorkflowActions>>();
 const documents = ref<InstanceType<typeof DocumentCollection>>();
@@ -60,6 +69,45 @@ async function refresh() {
   try { await Promise.all([load(), loadStock(), documents.value?.refresh(), payments.value?.refresh()]); }
   finally { refreshing.value = false; }
 }
+
+/** 更换 / 添加链接：申请明细（申请里附的链接）与采购明细共用一个弹窗 */
+function editRequestLink(line: WorkflowRequestLineRow) {
+  actions.value?.editLink({ kind: 'request', lineId: line.id, itemName: line.itemName, specification: line.specification, purchaseLink: line.purchaseLink, context: `申请 ${request.value?.serialNumber ?? ''} 第 ${line.lineNumber} 行` });
+}
+function editPurchaseLink(line: WorkflowDocumentLineRow, document: WorkflowDocumentRow) {
+  actions.value?.editLink({ kind: 'purchase', lineId: line.id, itemName: line.itemName, specification: line.specification, purchaseLink: line.purchaseLink, context: `采购成交 #${document.id}` });
+}
+
+/*
+ * 删除申请（docs/import-units-links-2026-10.md D1–D2）：没有任何业务记录（含已撤销的单据）时才能删；
+ * 有记录时确认框说明原因并禁用确认（与删除供应商同一做法）。导入的申请删除后导入任务退回待核对，直接去导入页改。
+ */
+const deleteOpen = ref(false), deleting = ref(false), deleteError = ref('');
+const moreItems = computed<MenuItem[]>(() => [{ label: '删除申请', icon: 'trash', danger: true, onSelect: () => { deleteError.value = ''; deleteOpen.value = true; } }]);
+const deleteMessage = computed(() => {
+  const r = request.value;
+  if (!r) return '';
+  if (!r.deletable) return `「${r.serialNumber}」已有采购、取消等业务记录（含已撤销的），不能删除。不再办理的数量可以用「取消未采购量」。`;
+  return r.sourceTaskId
+    ? `将删除申请「${r.serialNumber}」和 ${r.lines.length} 条明细。它由 OA 原件导入，删除后这份导入退回「待核对入账」，可以修改后重新入账，也可以放弃草稿。`
+    : `将删除申请「${r.serialNumber}」和 ${r.lines.length} 条明细，删除后不能恢复。`;
+});
+async function deleteRequest() {
+  const r = request.value;
+  if (!r || deleting.value) return;
+  deleting.value = true;
+  deleteError.value = '';
+  try {
+    const result = await workflowApi.deleteRequest(r.id);
+    deleteOpen.value = false;
+    toast.success(result.sourceTaskId ? `已删除申请 ${r.serialNumber}，导入已退回待核对` : `已删除申请 ${r.serialNumber}`);
+    await router.replace(result.sourceTaskId ? { path: '/import', query: { task: result.sourceTaskId } } : '/requests');
+  } catch (cause) {
+    deleteError.value = apiError(cause);
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -74,6 +122,9 @@ async function refresh() {
       <template v-if="statusChips.length" #status><Badge v-for="chip in statusChips" :key="chip.key" :tone="chip.tone" :class="chip.struck ? 'line-through' : ''">{{ chip.label }}</Badge></template>
       <template v-if="request" #description>{{ request.department }} · 经办人 {{ request.handler }} · 申请日期 <span class="num">{{ request.requestDate }}</span> · {{ request.sourceTaskId ? '由 OA 原件导入' : '人工录入' }} · {{ request.lines.length }} 条明细</template>
       <Button v-if="request && canPurchase" variant="ghost" @click="actions?.command('REQUEST_CANCEL', requestCancelChoices(request), request.serialNumber)">取消未采购量</Button>
+      <Menu v-if="request" :items="moreItems" trigger-label="更多申请操作">
+        <template #trigger><button type="button" :class="buttonClass({ variant: 'secondary', iconOnly: true })" aria-label="更多申请操作"><Icon name="more-horizontal" :size="16" /></button></template>
+      </Menu>
       <Button variant="secondary" icon-only aria-label="刷新申请" :loading="refreshing" @click="refresh"><Icon v-if="!refreshing" name="refresh" :size="16" /></Button>
       <Button v-if="request && canPurchase" variant="primary" @click="actions?.purchase(request)"><Icon name="plus" :size="16" />登记采购</Button>
     </PageHeader>
@@ -95,7 +146,7 @@ async function refresh() {
           </div>
         </div>
         <Panel flush>
-          <RequestProgress :lines="request.lines" />
+          <RequestProgress :lines="request.lines" editable @link="editRequestLink" />
           <template v-if="request.note" #footer><p class="text-[12.5px] text-muted">申请备注：{{ request.note }}</p></template>
         </Panel>
       </section>
@@ -110,7 +161,7 @@ async function refresh() {
       </section>
 
       <div class="mt-7 grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <DocumentCollection ref="documents" :request-id="request.id" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context, request?.department)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" />
+        <DocumentCollection ref="documents" :request-id="request.id" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context, request?.department)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="editPurchaseLink" />
         <aside class="space-y-7" aria-label="原件与付款">
           <section aria-labelledby="request-originals-title">
             <h2 id="request-originals-title" class="mb-2.5 text-[15px] leading-6 font-semibold text-ink">OA 原件与附件</h2>
@@ -123,6 +174,9 @@ async function refresh() {
         </aside>
       </div>
     </template>
-    <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" />
+    <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" @link-changed="refresh" />
+    <ConfirmDialog v-if="request" v-model:open="deleteOpen" title="删除申请？" :message="deleteMessage" confirm-text="删除申请" danger :loading="deleting" :confirm-disabled="!request.deletable" @confirm="deleteRequest">
+      <Notice v-if="deleteError" tone="red" role="alert">{{ deleteError }}</Notice>
+    </ConfirmDialog>
   </div>
 </template>

@@ -3,6 +3,7 @@
  * 申请、采购、到货与领用等业务单据契约在 workflow.ts，导入确认建单在 workflow-import.ts。
  */
 import { z } from 'zod';
+import { linkSchema } from './links.js';
 
 /** YYYY-MM-DD 本地日期字符串 */
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式应为 YYYY-MM-DD');
@@ -60,9 +61,14 @@ export const parsedItemSchema = z.object({
   unitPrice: z.number().finite().nonnegative().nullish(),
   /** 原件上的金额（预计总价）；只用于与数量×单价交叉校验，不入账 */
   amount: z.number().finite().nonnegative().nullish(),
-  purchaseLink: z.string().trim().max(500).nullish(),
+  /** 原件或草稿里的链接原文：草稿可以暂存未精简的长链接（入账时按 linkSchema 精简并限 500 字） */
+  purchaseLink: z.string().trim().max(2000).nullish(),
   /** 原件备注里链接以外的原文（如「50张」「三种型号各两个」），供 AI 审核判断单位与拆行 */
   note: z.string().trim().max(1000).nullish(),
+  /** AI 推测的单位：原件没写单位时按品名、规格、包装与物品库推测；只用来填草稿，不是原件事实（unit 仍只记原件写明的） */
+  unitGuess: z.string().trim().max(16).nullish(),
+  /** 草稿里单位的来源：CATALOG = 沿用物品库，AI = AI 推测（都是自动填的，人工改过就清空）；空 = 原件写明或人工填写 */
+  unitSource: z.enum(['CATALOG', 'AI']).nullish(),
   source: sourceSchema.optional(),
 });
 /** 已识别的 OA 表单模板；GENERIC 为其他版式 */
@@ -90,13 +96,17 @@ export const parseResultSchema = z.object({
   mode: z.enum(['PDF_TEXT', 'PDF_OCR', 'IMAGE_OCR', 'PDF_MIXED', 'TEXT', 'AI_IMAGE']),
 });
 export type ParseResult = z.infer<typeof parseResultSchema>;
-/** 确认导入的明细只记申请事实（品名、规格、数量、单位）；成交价与链接在登记采购时填写。 */
+/**
+ * 确认导入的明细记申请事实：品名、规格、数量、单位与原件上的采购链接（精简后保存，登记采购时预填）；
+ * 成交价在登记采购时按实际成交填写。
+ */
 export const confirmedItemSchema = z.object({
   lineId: z.string().optional(),
   itemName: z.string().trim().min(1).max(200),
   spec: z.string().trim().max(200).nullish(),
   quantity: positiveNumber,
   unit: z.string().trim().max(16).nullish(),
+  purchaseLink: linkSchema.nullish(),
 });
 export const importDraftSchema = z.object({
   serialNumber: z.string().default(''),

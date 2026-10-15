@@ -42,6 +42,11 @@ export const aiPageSchema = z.object({
         unitPrice: z.number().nonnegative().nullable(),
         amount: z.number().nonnegative().nullable(),
         purchaseLink: z.string().trim().max(500).nullable(),
+        /**
+         * 原件没写单位时推测的单位（v3 / review-v2 起）：只用来填草稿，不参与「AI 建议待核对」的判断；
+         * 旧响应与合成替身没有这个字段时按 null。长度与格式不合要求时由 checkAiPage 置空，不让整页失败。
+         */
+        unitGuess: z.string().nullable().default(null),
         /** 与已有物品明显是同一物品时，原样给出目录里的那一条；只是建议，界面由用户决定是否采用 */
         catalogSuggestion: z.object({ name: z.string(), spec: z.string().nullable(), unit: z.string().nullable() }).nullable(),
       }),
@@ -55,9 +60,18 @@ export type AiPage = z.infer<typeof aiPageSchema> & { page: number; mode?: 'RECO
 export class AiContractError extends Error {}
 const HEADER_FIELDS = ['serialNumber', 'department', 'handler', 'requestDate'] as const;
 
-/** 服务端校验 AI 单页结果（原地修改）：日期不合法置空；识别模式另外丢弃空品名的行、回填 rawText、提示数量×单价与金额不符 */
+/**
+ * 推测单位只要一个短词：去掉空白；原件写了单位（unit 不为空）时不需要推测；带数字或超过 8 个字的不是单位。
+ */
+function cleanUnitGuess(item: { unit: string | null; unitGuess: string | null }) {
+  const guess = item.unitGuess?.trim() ?? '';
+  item.unitGuess = !item.unit && guess && guess.length <= 8 && !/\d/.test(guess) ? guess : null;
+}
+
+/** 服务端校验 AI 单页结果（原地修改）：日期不合法置空、推测单位清理；识别模式另外丢弃空品名的行、回填 rawText、提示数量×单价与金额不符 */
 export function checkAiPage(parsed: z.infer<typeof aiPageSchema>, review = false) {
   const warnings: string[] = [];
+  for (const item of parsed.items) cleanUnitGuess(item);
   const date = parsed.requestDate;
   const time = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? Date.parse(`${date}T00:00:00Z`) : NaN;
   // 13 月、0 日等无法解析，2 月 30 日之类会顺延：两种都不是原件上的日期

@@ -7,8 +7,11 @@ import {
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput,
-  type WorkflowProductCreateInput,
+  type WorkflowProductCreateInput, type WorkflowLinkUpdateInput,
 } from '@canglin/shared';
+import fs from 'node:fs';
+import path from 'node:path';
+import { config } from '../config';
 import { PrismaService } from '../prisma/prisma.service';
 import { operation } from '../common/operation';
 import { WorkflowQueryService } from './workflow-query.service';
@@ -30,13 +33,15 @@ function nonnegative(value: bigint, message: string): bigint {
 export class WorkflowService {
   constructor(private readonly prisma: PrismaService, private readonly query: WorkflowQueryService) {}
 
-  private async write<T>(scope: string, input: unknown, key: string, ip: string | undefined, action: (tx: Tx) => Promise<T>): Promise<T> {
+  /** audit：动作往里补充的审计字段（改链接时的旧值、删除申请时的流水号与明细数），与 operationId、input 一起记入审计详情 */
+  private async write<T>(scope: string, input: unknown, key: string, ip: string | undefined, action: (tx: Tx, audit: Record<string, unknown>) => Promise<T>): Promise<T> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key))
       throw new BadRequestException('缺少或无效的 Idempotency-Key 操作编号');
     try {
       return await this.prisma.$transaction((tx) => operation(tx, key, `workflow:${scope}`, input, async () => {
-        const result = await action(tx);
-        await tx.auditLog.create({ data: { action: `WORKFLOW_${scope.toUpperCase()}`, entity: 'workflow', detail: JSON.stringify({ operationId: key, input }), operatorIp: ip } });
+        const audit: Record<string, unknown> = {};
+        const result = await action(tx, audit);
+        await tx.auditLog.create({ data: { action: `WORKFLOW_${scope.toUpperCase()}`, entity: 'workflow', detail: JSON.stringify({ operationId: key, input, ...audit }), operatorIp: ip } });
         return result;
       }), { timeout: 30_000 });
     } catch (error) {
@@ -71,7 +76,7 @@ export class WorkflowService {
       await tx.procurementLine.create({ data: {
         requestId: request.id, lineNumber: index + 1, productId: product.id,
         itemName: line.itemName, specification: line.specification, unit: line.unit,
-        quantityUnits: quantityUnits(line.quantity), note: line.note,
+        quantityUnits: quantityUnits(line.quantity), note: line.note, purchaseLink: line.purchaseLink ?? null,
       } });
     }
     // Copy metadata instead of moving an old attachment: its original owner can be removed independently.
@@ -80,6 +85,75 @@ export class WorkflowService {
       storagePath: attachment.storagePath, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes,
     } });
     return this.query.requestTx(tx, request.id);
+  }
+
+  /**
+   * 删除申请（docs/import-units-links-2026-10.md D1–D4）：只有没有任何业务记录（含已撤销的单据）的申请可以删除。
+   * 导入的申请删除后导入任务退回待核对（草稿保留，版本加一）；原件附件记录随申请删除，文件仍由导入任务持有，
+   * 人工录入申请复制的原件附件按引用计数回收；只被这张申请用到的物品库条目一并删除。
+   */
+  async deleteRequest(id: number, key: string, ip?: string) {
+    const released: string[] = [];
+    const result = await this.write('request_delete', { id }, key, ip, async (tx, audit) => {
+      const request = await tx.procurementRequest.findUnique({ where: { id }, include: { lines: true, attachments: true } });
+      if (!request) throw new NotFoundException('申请不存在');
+      const lineIds = request.lines.map((line) => line.id);
+      if (await tx.businessLine.count({ where: { requestLineId: { in: lineIds } } }))
+        throw new ConflictException('这张申请已有采购、取消等业务记录（含已撤销的），不能删除；不再办理的数量请用「取消未采购量」');
+      await tx.attachment.deleteMany({ where: { procurementRequestId: id } });
+      await tx.procurementLine.deleteMany({ where: { requestId: id } });
+      await tx.procurementRequest.delete({ where: { id } });
+      // 只清理随这张申请一起建出来的物品（建申请时 upsert 新建的，创建时间不早于申请）：手工新增的库存物品即使没人用也保留
+      const productIds = [...new Set(request.lines.map((line) => line.productId))];
+      await tx.catalogProduct.deleteMany({ where: {
+        id: { in: productIds }, createdAt: { gte: request.createdAt },
+        requestLines: { none: {} }, businessLines: { none: {} }, balances: { none: {} }, entries: { none: {} },
+      } });
+      if (request.sourceTaskId) {
+        // 入账快照（确认时的明细、草稿与识别结果）存进修改历史再清空，任务回到待核对；版本加一，旧页面的确认会被拒绝
+        const task = await tx.importTask.findUnique({ where: { id: request.sourceTaskId } });
+        if (!task?.confirmedAt) throw new ConflictException('来源导入任务状态已变化，请重新载入');
+        if (task.confirmation)
+          await tx.importRevision.create({ data: { taskId: task.id, kind: 'CONFIRMATION', version: task.version, snapshot: task.confirmation } });
+        const reverted = await tx.importTask.updateMany({
+          where: { id: task.id, version: task.version, confirmedAt: { not: null } },
+          data: { confirmedAt: null, confirmation: null, version: { increment: 1 } },
+        });
+        if (reverted.count !== 1) throw new ConflictException('来源导入任务状态已变化，请重新载入');
+      }
+      for (const attachment of request.attachments) if (!released.includes(attachment.storagePath)) released.push(attachment.storagePath);
+      Object.assign(audit, { serialNumber: request.serialNumber, lines: request.lines.length, sourceTaskId: request.sourceTaskId });
+      return { deleted: true as const, requestId: id, sourceTaskId: request.sourceTaskId };
+    });
+    // 文件在事务提交后按引用计数回收（导入任务或别的附件还引用时保留）
+    for (const storagePath of released) {
+      const used = await this.prisma.attachment.count({ where: { storagePath } }) + await this.prisma.importTask.count({ where: { storagePath } });
+      if (!used) fs.rmSync(path.join(config.uploadsDir, storagePath), { force: true });
+    }
+    return result;
+  }
+
+  /** 更换申请明细的链接；审计记下旧链接 */
+  async updateRequestLineLink(id: number, input: WorkflowLinkUpdateInput, key: string, ip?: string) {
+    return this.write('request_line_link', { id, ...input }, key, ip, async (tx, audit) => {
+      const line = await tx.procurementLine.findUnique({ where: { id } });
+      if (!line) throw new NotFoundException('申请明细不存在');
+      audit.previous = line.purchaseLink;
+      await tx.procurementLine.update({ where: { id }, data: { purchaseLink: input.purchaseLink } });
+      return this.query.requestTx(tx, line.requestId);
+    });
+  }
+
+  /** 更换采购明细的链接（只改链接，不动数量与金额）；已撤销的采购不能改，审计记下旧链接 */
+  async updatePurchaseLineLink(id: number, input: WorkflowLinkUpdateInput, key: string, ip?: string) {
+    return this.write('purchase_line_link', { id, ...input }, key, ip, async (tx, audit) => {
+      const line = await tx.businessLine.findUnique({ where: { id }, include: { document: true } });
+      if (!line || line.document.kind !== 'PURCHASE') throw new NotFoundException('采购明细不存在');
+      if (line.document.status !== 'POSTED') throw new ConflictException('已撤销的采购不能修改');
+      audit.previous = line.purchaseLink;
+      await tx.businessLine.update({ where: { id }, data: { purchaseLink: input.purchaseLink } });
+      return this.query.documentTx(tx, line.documentId);
+    });
   }
 
   private ensureProduct(tx: Tx, input: WorkflowProductCreateInput) {
@@ -177,7 +251,7 @@ export class WorkflowService {
         total = bounded(total + amount);
         await tx.businessLine.create({ data: {
           documentId: document.id, requestLineId: line.id, ...snapshot(line), quantityUnits: quantity,
-          unitPriceUnits: price, amountUnits: amount, purchaseLink: inputLine.purchaseLink,
+          unitPriceUnits: price, amountUnits: amount, purchaseLink: inputLine.purchaseLink ?? null,
         } });
       }
       await tx.businessDocument.update({ where: { id: document.id }, data: { totalAmountUnits: total } });

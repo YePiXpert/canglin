@@ -1,4 +1,4 @@
-import { lineAmountUnits, moneyText, priceUnits, quantityUnits } from '@canglin/shared';
+import { canonicalLink, isWebLink, lineAmountUnits, moneyText, priceUnits, quantityUnits } from '@canglin/shared';
 import type { WorkflowDocumentKind } from '@canglin/shared';
 
 export const documentKindLabels: Record<WorkflowDocumentKind, string> = { PURCHASE: '采购成交', RECEIPT: '到货登记', STOCK_IN: '入库', DISTRIBUTION: '领用发放', SUPPLIER_RETURN: '供应商退货', EMPLOYEE_RETURN: '员工归还', PURCHASE_CANCEL: '采购取消', REQUEST_CANCEL: '申请余量取消', ADJUSTMENT: '库存盘点' };
@@ -54,6 +54,7 @@ export function priceError(value: string): string | undefined {
 }
 
 /** 商家链接只在是 http(s) 地址时渲染成 <a href>（不区分大小写）；其它内容（javascript: 之类、纯文字）返回 undefined */
+/** 可点开的链接：完整的 http / https 地址按规范地址返回（常见商城的商品页去掉跟踪参数），否则 undefined */
 export function webLink(value: string | null | undefined): string | undefined {
-  return value && /^https?:\/\//i.test(value) ? value : undefined;
+  return isWebLink(value) ? canonicalLink(value) : undefined;
 }

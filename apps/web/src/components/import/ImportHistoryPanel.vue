@@ -59,7 +59,7 @@ function costText(call: ImportTaskView['calls'][number]): string {
         <Disclosure v-for="r in revisions" :key="r.id" summary-class="px-5 py-2.5 text-xs text-muted hover:text-ink">
           <template #summary>
             <span class="num"
-              >{{ r.kind === 'DRAFT' ? '人工草稿' : '识别结果' }} · 版本 {{ r.version }} ·
+              >{{ r.kind === 'DRAFT' ? '人工草稿' : r.kind === 'CONFIRMATION' ? '已撤回的入账' : '识别结果' }} · 版本 {{ r.version }} ·
               {{ formatDateTime(r.createdAt, true) }}</span
             >
           </template>

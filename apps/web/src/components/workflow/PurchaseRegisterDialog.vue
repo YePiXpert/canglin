@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { lineAmountUnits, moneyText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@canglin/shared';
+import { canonicalLink, isShortLink, isWebLink, linkIssue, lineAmountUnits, moneyText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestRow } from '@/api/workflow';
 import { suppliersApi, type SupplierRow } from '@/api';
 import { apiError } from '@/api/client';
@@ -17,7 +17,8 @@ import { todayString } from '@/utils/datetime';
 import { issueText } from '@/utils/form';
 import RegisterLineTable from './RegisterLineTable.vue';
 import { useRegisterLines } from './useRegisterLines';
-import { draftLineAmount, moneyLabel, priceError, quantityError, quantityLabel, unitPriceLabel } from './presentation';
+import { buttonClass } from '@/components/ui/button';
+import { draftLineAmount, moneyLabel, priceError, quantityError, quantityLabel, unitPriceLabel, webLink } from './presentation';
 
 const props = defineProps<{ open: boolean; request: WorkflowRequestRow }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
@@ -33,23 +34,27 @@ const clearedPrices = ref(0);
 const newSupplierName = ref('');
 const newSupplierOpen = ref(false);
 const creatingSupplier = ref(false);
-const lines = ref<{ id: number; productId: number; itemName: string; specification: string; unit: string; maximum: string; selected: boolean; quantity: string; unitPrice: string; purchaseLink: string; quotes: WorkflowPriceRow[]; quotesFailed: boolean; appliedFrom: number | null; appliedLink: string | null }[]>([]);
+/** requestLink：申请里附的链接（OA 原件上的商城链接），链接框默认填它，换供应商清掉历史价时退回它 */
+const lines = ref<{ id: number; productId: number; itemName: string; specification: string; unit: string; maximum: string; selected: boolean; quantity: string; unitPrice: string; purchaseLink: string; requestLink: string; quotes: WorkflowPriceRow[]; quotesFailed: boolean; appliedFrom: number | null; appliedLink: string | null }[]>([]);
 type Line = (typeof lines.value)[number];
 const snapshot = () => JSON.stringify({ form, lines: lines.value.map((line) => ({ id: line.id, selected: line.selected, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink })), newSupplierName: newSupplierName.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 const supplierOptions = computed(() => suppliers.value.map((supplier) => ({ label: supplier.name, value: String(supplier.id) })));
 /** 行级错误的顺序与列一致：本次数量在前、成交单价在后 */
-const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.id}`, `price.${line.id}`]);
+const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.id}`, `price.${line.id}`, `link.${line.id}`]);
 watch(() => props.open, async (open, _previous, onCleanup) => {
   let current = true;
   onCleanup(() => { current = false; });
   if (!open) return;
   Object.assign(form, { date: todayString(), supplierId: '', note: '' });
-  lines.value = props.request.lines.filter((line) => line.pendingPurchaseQuantity !== '0').map((line) => ({
-    id: line.id, productId: line.productId, itemName: line.itemName, specification: line.specification, unit: line.unit,
-    maximum: line.pendingPurchaseQuantity, selected: true, quantity: line.pendingPurchaseQuantity,
-    unitPrice: '', purchaseLink: '', quotes: [], quotesFailed: false, appliedFrom: null, appliedLink: null,
-  }));
+  lines.value = props.request.lines.filter((line) => line.pendingPurchaseQuantity !== '0').map((line) => {
+    const requestLink = line.purchaseLink ? canonicalLink(line.purchaseLink) : '';
+    return {
+      id: line.id, productId: line.productId, itemName: line.itemName, specification: line.specification, unit: line.unit,
+      maximum: line.pendingPurchaseQuantity, selected: true, quantity: line.pendingPurchaseQuantity,
+      unitPrice: '', purchaseLink: requestLink, requestLink, quotes: [], quotesFailed: false, appliedFrom: null, appliedLink: null,
+    };
+  });
   newSupplierName.value = '';
   newSupplierOpen.value = false;
   clearedPrices.value = 0;
@@ -89,7 +94,7 @@ watch(() => form.supplierId, (value) => {
   for (const line of lines.value) {
     if (line.appliedFrom == null || line.appliedFrom === Number(value)) continue;
     line.unitPrice = '';
-    if (line.purchaseLink === line.appliedLink) line.purchaseLink = '';
+    if (line.purchaseLink === line.appliedLink) line.purchaseLink = line.requestLink;
     line.appliedFrom = null;
     line.appliedLink = null;
     clearedPrices.value++;
@@ -99,9 +104,15 @@ function applyQuote(line: Line, quote: WorkflowPriceRow) {
   if (form.supplierId && Number(form.supplierId) !== quote.supplierId) return;
   form.supplierId = String(quote.supplierId);
   line.unitPrice = quote.unitPrice;
-  if (quote.purchaseLink) line.purchaseLink = quote.purchaseLink;
+  const link = quote.purchaseLink ? canonicalLink(quote.purchaseLink) : null;
+  if (link) line.purchaseLink = link;
   line.appliedFrom = quote.supplierId;
-  line.appliedLink = quote.purchaseLink;
+  line.appliedLink = link;
+}
+/** 离开链接框时精简（常见商城的商品页去掉跟踪参数） */
+function tidyLink(line: Line) {
+  if (isWebLink(line.purchaseLink)) line.purchaseLink = canonicalLink(line.purchaseLink);
+  if (errors.value[`link.${line.id}`] && !linkIssue(line.purchaseLink)) delete errors.value[`link.${line.id}`];
 }
 
 
@@ -148,6 +159,8 @@ async function save() {
     const price = priceError(line.unitPrice);
     if (quantity) invalid[`quantity.${line.id}`] = quantity;
     if (price) invalid[`price.${line.id}`] = price;
+    const link = linkIssue(line.purchaseLink);
+    if (link) invalid[`link.${line.id}`] = link;
   }
   const parsed = workflowPurchaseSchema.safeParse({ ...form, supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
   errors.value = invalid;
@@ -239,9 +252,15 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
             </div>
           </td>
           <td colspan="2" data-label="采购链接" class="sm:pt-0 sm:pb-3">
-            <div class="flex items-center gap-2 max-sm:min-w-0 max-sm:flex-1">
-              <span class="shrink-0 text-meta max-sm:hidden">采购链接</span>
-              <Input v-model="line.purchaseLink" size="sm" hide-label :label="`${line.itemName} 采购链接`" placeholder="https://…（可空）" :disabled="saving" class="min-w-0 flex-1" />
+            <!-- 一个容器：手机卡片里单元格是「列名 | 内容」两栏，输入行与下面的提示要整体放在内容栏里 -->
+            <div class="max-sm:min-w-0 max-sm:flex-1">
+              <div class="flex items-center gap-1.5">
+                <span class="shrink-0 text-meta max-sm:hidden">采购链接</span>
+                <Input v-model="line.purchaseLink" size="sm" hide-label :label="`${line.itemName} 采购链接`" placeholder="https://…（可空）" :error="errors[`link.${line.id}`]" :disabled="saving" class="min-w-0 flex-1" @blur="tidyLink(line)" />
+                <a v-if="webLink(line.purchaseLink)" :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'ghost', size: 'sm', iconOnly: true })" :aria-label="`打开 ${line.itemName} 的采购链接`" title="在新标签页打开"><Icon name="arrow-up-right" :size="14" /></a>
+              </div>
+              <p v-if="line.requestLink && line.purchaseLink === line.requestLink" class="mt-1 text-xs text-muted sm:pl-14">来自申请（OA 原件上的链接）</p>
+              <p v-if="isShortLink(line.purchaseLink)" class="mt-1 text-xs text-amber sm:pl-14">短链接容易失效，建议换成商品页地址</p>
             </div>
           </td>
         </tr>

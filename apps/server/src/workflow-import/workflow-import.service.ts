@@ -34,6 +34,7 @@ export class WorkflowImportService {
             specification: line.spec ?? '',
             unit: line.unit ?? '',
             quantity: String(line.quantity),
+            purchaseLink: line.purchaseLink ?? null,
           })),
         });
         if (!parsed.success) throw new BadRequestException(parsed.error.issues.map((issue) => issue.message).join('；'));

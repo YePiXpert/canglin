@@ -29,8 +29,9 @@ provide(importTaskKey, ctx);
 const router = useRouter();
 // rootEl、taskList 要绑定模板里的 ref="rootEl" / ref="taskList"，所以解构成顶层绑定
 const { task, taskId, busy, error, saveError, loaded, finished, missing, mobileTab, rootEl, taskList } = ctx;
-const { active, persist, reloadDraft, confirm, scrollToTask, confirmBlockers } = ctx;
+const { active, persist, reloadDraft, confirm, scrollToTask, confirmBlockers, autoUnitCount } = ctx;
 const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloadDraft } = ctx;
+const { revertable, revertOpen, reverting, revertError, revert } = ctx;
 </script>
 
 <template>
@@ -66,9 +67,12 @@ const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloa
           已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过 {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。
         </p>
       </div>
-      <Button variant="primary" class="max-sm:h-11 max-sm:w-full" @click="router.push(`/requests/${finished.requestId}`)">
-        继续办理申请<Icon name="arrow-right" :size="16" />
-      </Button>
+      <div class="flex flex-wrap gap-2 max-sm:w-full">
+        <Button variant="ghost" class="max-sm:h-11 max-sm:flex-1" :disabled="reverting" @click="revertOpen = true">撤回入账</Button>
+        <Button variant="primary" class="max-sm:h-11 max-sm:flex-1" @click="router.push(`/requests/${finished.requestId}`)">
+          继续办理申请<Icon name="arrow-right" :size="16" />
+        </Button>
+      </div>
     </section>
 
     <!-- 处理中 / 待核对 / 已确认（只读） -->
@@ -122,8 +126,14 @@ const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloa
           <Notice v-if="confirmBlockers.length && !active" id="import-confirm-blockers" variant="inline" size="sm">
             还不能导入：{{ confirmBlockers.join('；') }}
           </Notice>
+          <!-- 自动填的单位（物品库 / AI 推测）只提示核对，不拦入账 -->
+          <p v-else-if="autoUnitCount && !active && !task.confirmed" class="text-[12.5px] leading-5 text-muted">
+            有 {{ autoUnitCount }} 条明细的单位是自动填写的，请核对后再导入。
+          </p>
         </template>
         <Button v-if="!task.confirmed" variant="danger-ghost" class="max-sm:basis-full" :disabled="busy || discarding" @click="discardOpen = true">放弃草稿</Button>
+        <!-- 已入账、申请还没有任何业务记录：可以撤回（删除申请，任务退回待核对） -->
+        <Button v-else-if="revertable" variant="danger-ghost" class="max-sm:basis-full" :disabled="reverting" @click="revertOpen = true">撤回入账</Button>
         <Button
           variant="secondary"
           class="max-sm:flex-1"
@@ -169,6 +179,11 @@ const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloa
       :message="`将删除「${task?.filename ?? ''}」的草稿和原件，并停止识别。不会创建申请；需要时可重新上传原件。`"
       confirm-text="放弃草稿" danger :loading="discarding" @confirm="discard">
       <Notice v-if="discardError" tone="red" role="alert">{{ discardError }}</Notice>
+    </ConfirmDialog>
+    <ConfirmDialog v-model:open="revertOpen" title="撤回入账？"
+      message="将删除这次导入创建的申请。这份导入退回「待核对入账」，草稿保留入账时的内容，可以修改后重新入账，也可以放弃草稿。已登记采购等业务的申请不能撤回。"
+      confirm-text="撤回入账" danger :loading="reverting" @confirm="revert">
+      <Notice v-if="revertError" tone="red" role="alert">{{ revertError }}</Notice>
     </ConfirmDialog>
     <ConfirmDialog v-model:open="reloadOpen" title="重新载入已保存版本？"
       message="当前未保存的编辑会被替换成上次成功保存的草稿，替换后不能找回。"

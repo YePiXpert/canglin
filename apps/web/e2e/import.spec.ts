@@ -533,3 +533,82 @@ test.describe('手机 390px', () => {
     await expect(page.getByText(name, { exact: true })).toBeVisible();
   });
 });
+
+test('单位按物品库自动填；采购链接精简后随导入入账，可撤回入账再入账；申请详情打开、更换链接，登记采购预填；删除导入的申请回到待核对', async ({ page, request }) => {
+  await loginWithoutAi(page, request);
+  const stamp = Date.now();
+  const known = `链接测试纸-${stamp}`;
+  const created = await page.request.post('/api/workflow/products', {
+    data: { itemName: known, specification: '', unit: '包' },
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  await page.goto('/import');
+  await page.locator('input[type=file]').setInputFiles({ name: `links-${stamp}.png`, mimeType: 'image/png', buffer: imageFile(`links-${stamp}`) });
+  const qty = page.getByPlaceholder('数量：待确认');
+  await expect(qty).toBeVisible();
+  await qty.fill('8');
+  await page.locator('input[type=date]').fill(businessDate);
+
+  // 单位：清空后把品名改成物品库里已有的，离开品名框时按物品库填上并标出来源
+  const unit = page.getByPlaceholder('单位', { exact: true });
+  await unit.fill('');
+  const name = page.getByPlaceholder('品名（同名不同规格请明确区分）');
+  await name.fill(known);
+  await name.blur();
+  await expect(unit).toHaveValue('包');
+  await expect(page.getByText('沿用物品库', { exact: true })).toBeVisible();
+  await expect(page.getByText('有 1 条明细的单位是自动填写的，请核对后再导入。')).toBeVisible();
+
+  // 链接：粘贴带跟踪参数的京东链接，离开输入框时精简，可以直接打开
+  const link = page.getByPlaceholder('采购链接（可空）');
+  await link.fill('https://item.jd.com/100012345.html?pcdk=AbCd&spmTag=x');
+  await link.blur();
+  await expect(link).toHaveValue('https://item.jd.com/100012345.html');
+  await expect(page.getByRole('link', { name: '打开第 1 行采购链接' })).toHaveAttribute('href', 'https://item.jd.com/100012345.html');
+  await page.getByRole('button', { name: '确认全部内容并导入' }).click();
+  await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+
+  // 刚入账就发现数量错了：撤回入账，任务退回待核对，草稿还是入账时的内容
+  await page.getByRole('button', { name: '撤回入账', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: '撤回入账？' });
+  await dialog.getByRole('button', { name: '撤回入账', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeEnabled();
+  await expect(link).toHaveValue('https://item.jd.com/100012345.html');
+  await qty.fill('6');
+  await page.getByRole('button', { name: '确认全部内容并导入' }).click();
+  await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+  await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
+  await expect(page).toHaveURL(/\/requests\/\d+$/);
+  const row = page.locator('tr[data-request-line]');
+  await expect(row.locator('td[data-label="申请"]')).toHaveText('6 包');
+  await expect(row.getByRole('link', { name: '京东商品' })).toHaveAttribute('href', 'https://item.jd.com/100012345.html');
+
+  // 登记采购：链接框默认填申请里的链接
+  await page.getByRole('button', { name: '登记采购', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: '登记本次采购', exact: true });
+  await expect(dialog.getByLabel(`${known} 采购链接`, { exact: true })).toHaveValue('https://item.jd.com/100012345.html');
+  await expect(dialog.getByText('来自申请（OA 原件上的链接）')).toBeVisible();
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // 更换申请链接：保存前显示精简后的地址
+  await row.getByRole('button', { name: `更换「${known}」的采购链接` }).click();
+  dialog = page.getByRole('dialog', { name: '更换采购链接' });
+  await dialog.getByLabel('采购链接', { exact: true }).fill('https://detail.tmall.com/item.htm?id=654&spm=x');
+  await expect(dialog.getByText('将保存为：https://detail.tmall.com/item.htm?id=654')).toBeVisible();
+  await dialog.getByRole('button', { name: '保存链接', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row.getByRole('link', { name: '天猫商品' })).toHaveAttribute('href', 'https://detail.tmall.com/item.htm?id=654');
+
+  // 删除申请：导入的申请删除后回到导入页，任务退回待核对
+  await page.getByRole('button', { name: '更多申请操作' }).click();
+  await page.getByRole('menuitem', { name: '删除申请' }).click();
+  dialog = page.getByRole('dialog', { name: '删除申请？' });
+  await expect(dialog).toContainText('退回「待核对入账」');
+  await dialog.getByRole('button', { name: '删除申请', exact: true }).click();
+  await expect(page).toHaveURL(/\/import\?task=/);
+  await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeEnabled();
+  await expect(qty).toHaveValue('6');
+});
