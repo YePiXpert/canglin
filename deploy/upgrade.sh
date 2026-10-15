@@ -50,6 +50,17 @@ fi
 
 OLD_COMMIT=$(git rev-parse HEAD)
 STAMP=$(date +%Y%m%d-%H%M%S)
+# 停机前失败时撤回这次尝试，下次升级照常从运行中的版本记起：源码退回升级前的提交（--keep 不碰未跟踪文件，
+# 前面已确认没有已跟踪文件的改动），删掉这次的回退点记录与回退标签（只是标签，镜像仍被运行中的容器使用）。
+# SOURCE_NOTE 写明源码现在停在哪个提交，给调用处的报错用。
+undo_attempt() {
+  SOURCE_NOTE="源码仍是 ${OLD_COMMIT:0:7}"
+  if [ "$NEW_COMMIT" != "$OLD_COMMIT" ] && ! git reset -q --keep "$OLD_COMMIT"; then
+    SOURCE_NOTE="源码没能退回 ${OLD_COMMIT:0:7}、仍是 ${NEW_COMMIT:0:7}，请在部署目录执行 git reset --keep ${OLD_COMMIT:0:7}"
+  fi
+  for service in web server ocr; do docker rmi "canglin-rollback-$service:$STAMP" >/dev/null 2>&1 || true; done
+  rm -rf "$RELEASE_DIR"
+}
 BACKUP_DIR="pre-upgrade-backups"
 RELEASE_DIR="$BACKUP_DIR/release-$STAMP"
 mkdir -p "$RELEASE_DIR"
@@ -93,7 +104,7 @@ info "代码版本：$OLD_COMMIT → $NEW_COMMIT"
 RESOLVED=$(docker compose config)
 case "$RESOLVED" in
   "name: $PROJECT"$'\n'*"name: $VOLUME"*) ;;
-  *) die "Compose 解析出的项目或数据卷不是 $PROJECT / $VOLUME（检查 .env 与环境变量 COMPOSE_PROJECT_NAME）；服务未停止" ;;
+  *) undo_attempt; die "Compose 解析出的项目或数据卷不是 $PROJECT / $VOLUME（检查 .env 与环境变量 COMPOSE_PROJECT_NAME）；服务未停止，$SOURCE_NOTE" ;;
 esac
 
 # ---------- 获取镜像（不停机） ----------
@@ -101,18 +112,12 @@ esac
 if [ "$BUILD" = 1 ]; then
   SERVICES="web server ocr"
   info "本地构建镜像：$SERVICES …"
-  docker compose build --build-arg "SOURCE_REVISION=$NEW_COMMIT" $SERVICES
+  docker compose build --build-arg "SOURCE_REVISION=$NEW_COMMIT" $SERVICES || { undo_attempt; die "本地构建失败，服务未停止，$SOURCE_NOTE"; }
 else
   info "拉取镜像 $RELEASE_TAG（未变更的层不会重复下载）…"
   if ! docker compose pull; then
-    # 撤回这次尝试，下次升级照常从运行中的版本记起：源码退回升级前的提交（--keep 不碰未跟踪文件，
-    # 前面已确认没有已跟踪文件的改动），删掉这次的回退点记录与回退标签（只是标签，镜像仍被运行中的容器使用）。
-    if [ "$NEW_COMMIT" != "$OLD_COMMIT" ]; then
-      git reset -q --keep "$OLD_COMMIT" || warn "源码没能退回 $OLD_COMMIT；请在部署目录执行 git reset --keep $OLD_COMMIT"
-    fi
-    for service in web server ocr; do docker rmi "canglin-rollback-$service:$STAMP" >/dev/null 2>&1 || true; done
-    rm -rf "$RELEASE_DIR"
-    die "镜像 $RELEASE_TAG 拉取失败，服务未停止，源码仍是 ${OLD_COMMIT:0:7}。可能的原因与出路：
+    undo_attempt
+    die "镜像 $RELEASE_TAG 拉取失败，服务未停止，$SOURCE_NOTE。可能的原因与出路：
   1. 该提交的镜像尚未发布——CI 还在跑或已失败：到 GitHub Actions（https://github.com/YePiXpert/canglin/actions）查看，通过后重新运行本脚本
   2. 镜像为私有包：先 docker login ghcr.io（GitHub PAT 需 read:packages 权限），或把包改为 Public
   3. 确认要用本地源码构建（未经 CI 测试）：加 --build 重新运行（curl 一行命令末尾改为 bash -s -- --build）"

@@ -272,3 +272,28 @@ pnpm --filter @canglin/web test:e2e
 
 - 全量：`pnpm --filter @canglin/shared build && pnpm typecheck && pnpm lint && pnpm test` ✓（前端 259、服务端 192），e2e functional 21 passed，视觉回归 4 passed（容器），部署脚本 25 passed，`scripts/tests` 通过。
 - 没有提交；用户要提交时可以按项提交（每项结束时都拍了树对象）。
+
+### 验收（2026-10-15）
+
+- R1：`grep -rn e2e apps/web/src`（不含 spec）为 0 处；DESIGN 只剩 §7 定位约定与 §9 的命令；functional 组 21 passed、0 skipped。
+- R2：容器里基线重建后连续比较两次 4 passed（68 张）；`test --list` functional 21 / visual 4；CI 的 visual job 要推送后才会第一次运行。
+- R3：1440 下申请详情进度表 `scrollWidth === clientWidth`（1374），1920 下 1534；390 走卡片不受影响。
+- R4：真实 dist 服务端 + vite 端到端——`LLM_ALLOWED_MODELS=*` 时 `config.models` 为 null、任意模型名可保存、设置页是输入框并能回填与保存；`'grok-4.7, house-model,'` 时去空格去尾逗号得到两项、已知模型沿用显示名、列表外模型 400「不在允许列表」、列表内可保存、设置页下拉只有这两项。已知行为：允许列表改了之后，库里存着的旧模型不在列表里时，保存任何 AI 设置（包括只是关闭）都会 400，要先选一个列表里的模型。
+- R5：`bash -n` 四个脚本 ✓，部署脚本 25 passed；`sh scripts/githooks/pre-push` 直接运行一次通过（34 秒）。
+- R6：减少动态效果下「入账」印在元素插入后两帧内停在终态（opacity 1、transform 单位矩阵、rotate −4°，动画时长被压到 0.01ms）；正常动效 180ms、`both`；手机登录 844 高显示小粮仓、660 高隐藏，页面不横向溢出；错误边界显示插画 + 文字 + 重新加载，切页后恢复；404 / 供应商空态 / AI 欢迎的插画都在。
+- 另有一位没参与实现的审查代理独立审了 diff，结论见下。
+
+### 验收后修正（2026-10-15）
+
+独立审查（没参与实现的代理，只读 diff）：无阻塞；1 条应修、9 条可选。处理如下：
+
+- 已修：
+  1. R4 应修——允许列表收窄后库里的旧模型不在列表里时，连关闭 AI 都存不了：服务端改为只在 `enabled` 时校验列表（`ai-config.service.ts`）；设置页在模型框下提示「已保存的模型「X」不在服务器的允许列表里…」，启用状态下保存先被前端拦下（「请选择允许列表里的模型」）；升级说明写明这一行为。
+  2. `LLM_ALLOWED_MODELS` 只有分隔符（如 `,`）解析成空列表：改为回退默认的三个；`parseAllowedModels` 导出并新增 `apps/server/test/config.spec.ts`。
+  3. `upgrade.sh` 停机前的三种失败（compose 解析不符、`--build` 构建失败、拉取失败）统一走 `undo_attempt`：退回源码、删回退点与回退标签；reset 失败时的提示不再自相矛盾。新增 5 个测试（含 `--no-pull` 不 reset、没有容器、reset 失败、构建失败、项目名不符）。
+  4. `deploy.sh` 结尾的常用命令改成 `docker compose up -d server`（`restart` 不会读新的 `.env`），升级说明同步。
+  5. `visual.sh`：写回宿主机的基线与差异图 `chown` 成当前用户（非 root 用户第二次运行不会被 root 文件挡住）；派生镜像标签带 Dockerfile 哈希；容器 `--cpus 4 --memory 6g`；`npm install -g` 的错误不再吞掉；打包改成逐个核对文件存在的可移植写法。
+  6. e2e：`getByTestId` 的文字断言前补回 `toBeVisible()`（import 9 处、workflow 5 处、visual 1 处）。
+  7. `apps/server/test/setup.ts` 清掉 `LLM_ALLOWED_MODELS`；`ImportView.vue`「绿色对勾」与 `workbench.ts` 错位的 JSDoc 两处过期注释。
+- 未改（可选）：运行时 `isReady` / `canImport` 对列表外的已保存模型仍放行——收窄列表不该让正在用的识别与问答静默停掉，设置页已有提示；CI 的 `visual` job 首次运行要等推送。
+- 复验：服务端 194 passed（原 192）、前端 260 passed（原 259）、部署脚本 30 passed（原 25）、functional e2e 21 passed、容器视觉比对 4 passed（68 张基线未变）、R4 端到端 15 项通过（含收窄列表后的提示与切换）、减少动态效果等行为验收 5 项通过。

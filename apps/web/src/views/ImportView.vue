@@ -56,7 +56,7 @@ const { discardOpen, discarding, discardError, discard, reloadOpen, confirmReloa
       </Notice>
     </template>
 
-    <!-- 完成：一张 sheet，绿色对勾 + 结果 + 主动作「继续办理申请」 -->
+    <!-- 完成：一张 sheet，「入账」方印 + 结果 + 主动作「继续办理申请」 -->
     <section v-if="finished" class="card flex flex-col items-start gap-4 px-5 py-4 sm:flex-row sm:items-center">
       <!-- 「入账」朱砂方印盖下来（animate-stamp-in，180ms；减少动态效果时直接是盖好的印）：朱砂只做印记，完成的绿色在申请页的 chip 上 -->
       <span class="flex size-10 shrink-0 -rotate-4 animate-stamp-in items-center justify-center rounded-[5px] bg-accent text-sm leading-none font-bold text-primary-fg select-none" aria-hidden="true">入账</span>

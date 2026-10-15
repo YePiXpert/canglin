@@ -75,6 +75,8 @@ const aiConnectionDirty = computed(
 /** 服务端的模型允许列表（LLM_ALLOWED_MODELS）：有列表时下拉选择；null = 不限制，直接填写模型名（候选来自「获取模型列表」） */
 const allowedModels = ref<AiModelOption[] | null>([]);
 const modelOptions = computed(() => allowedModels.value?.map((m) => ({ value: m.id, label: m.label })) ?? null);
+/** 已保存的模型不在允许列表里（运维收窄了 LLM_ALLOWED_MODELS）：下拉显示不出它，这里给一行说明 */
+const modelMissing = computed(() => !!modelOptions.value && !!aiForm.model.trim() && !modelOptions.value.some((o) => o.value === aiForm.model.trim()));
 /** 有的模型固定推理强度（GPT 6.1 Sol 固定中等思考），这时高级配置里的推理强度不能改 */
 const fixedEffort = computed(() => fixedReasoningEffort(aiForm.model.trim()));
 watch(fixedEffort, (effort) => {
@@ -138,6 +140,7 @@ function validateAi(): boolean {
   Object.keys(aiErrors).forEach((k) => delete aiErrors[k]);
   if (!/^https?:\/\/.+/.test(aiForm.baseUrl)) aiErrors.baseUrl = '接口地址需以 http(s):// 开头';
   if (!aiForm.model.trim()) aiErrors.model = '模型名不能为空';
+  else if (aiForm.enabled && modelMissing.value) aiErrors.model = '请选择允许列表里的模型';
   if (aiForm.enabled && !aiForm.apiKey && !aiKeySet.value) aiErrors.apiKey = '启用前需填写 API Key';
   return Object.keys(aiErrors).length === 0;
 }
@@ -285,6 +288,9 @@ async function testAi(): Promise<void> {
         <p v-if="aiConnectionDirty" class="text-xs text-muted">
           连接信息已修改，保存后即可获取模型。
         </p>
+        <Notice v-if="modelMissing" variant="inline" size="sm" role="status">
+          已保存的模型「{{ aiForm.model }}」不在服务器的允许列表里：识别与问答会继续用它，换成列表里的模型并保存后才切换；关闭 AI 助手可以直接保存。
+        </Notice>
         <Notice v-if="aiModelsError" variant="inline" size="sm" role="status">{{ aiModelsError }}</Notice>
       </div>
 

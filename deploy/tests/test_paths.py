@@ -28,6 +28,8 @@ if tool == "git":
         shutil.copy(os.environ["STORAGE_HELPER"], p / "deploy/storage.sh")
     elif args[0] == "diff" and os.environ.get("DIRTY_TRACKED") == "1":
         sys.exit(1)
+    elif args[0] == "reset" and os.environ.get("FAIL_RESET") == "1":
+        sys.exit(1)
     elif args[0] == "rev-parse":
         # MOVES_HEAD=1：merge 之后 HEAD 换成新提交（默认新旧提交相同）
         moved = os.environ.get("MOVES_HEAD") == "1" and any(
@@ -35,6 +37,8 @@ if tool == "git":
         print("def5678" if moved else "abc1234")
 elif tool == "docker":
     if os.environ.get("FAIL_PULL") == "1" and args[:2] == ["compose", "pull"]:
+        sys.exit(1)
+    if os.environ.get("FAIL_BUILD") == "1" and args[:2] == ["compose", "build"]:
         sys.exit(1)
     if os.environ.get("STOP_DOCKER") == "1":
         sys.exit(23)
@@ -249,6 +253,53 @@ class DeploymentPaths(unittest.TestCase):
         self.assertLess(git_calls.index(["merge", "--ff-only", "origin/main"]), git_calls.index(["reset", "-q", "--keep", "abc1234"]))
         removed = [c[2][1] for c in self.commands() if c[0] == "docker" and c[2][:1] == ["rmi"]]
         self.assertEqual([name.split(":")[0] for name in removed], ["canglin-rollback-web", "canglin-rollback-server", "canglin-rollback-ocr"])
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_failed_pull_with_no_pull_does_not_reset(self):
+        # --no-pull 时 HEAD 没动：不调用 reset，提示里写源码仍是原来的提交
+        target = self.repository("no-image-no-pull")
+        r = self.run_script("upgrade.sh", str(target), "--no-pull", FAIL_PULL="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("源码仍是 abc1234", r.stderr)
+        self.assertFalse(any(c[2][:1] == ["reset"] for c in self.commands() if c[0] == "git"))
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_failed_pull_reports_when_reset_fails(self):
+        target = self.repository("no-image-reset-fails")
+        r = self.run_script("upgrade.sh", str(target), FAIL_PULL="1", MOVES_HEAD="1", FAIL_RESET="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("没能退回 abc1234", r.stderr)
+        self.assertIn("git reset --keep abc1234", r.stderr)
+        self.assertNotIn("源码仍是 abc1234", r.stderr)
+        self.assertFalse(any(c[2][:2] == ["compose", "down"] for c in self.commands()))
+
+    def test_failed_pull_without_containers_still_cleans_release_dir(self):
+        target = self.repository("no-image-no-containers")
+        r = self.run_script("upgrade.sh", str(target), FAIL_PULL="1", NO_CONTAINERS="web,server,ocr")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(any(c[2][:1] == ["tag"] for c in self.commands() if c[0] == "docker"))
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_failed_build_undoes_attempt_before_stopping(self):
+        # --build 构建失败同样在停机前退出、撤回源码与回退点
+        target = self.repository("build-fails")
+        r = self.run_script("upgrade.sh", str(target), "--build", FAIL_BUILD="1", MOVES_HEAD="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("本地构建失败", r.stderr)
+        self.assertIn("源码仍是 abc1234", r.stderr)
+        git_calls = [c[2] for c in self.commands() if c[0] == "git"]
+        self.assertIn(["reset", "-q", "--keep", "abc1234"], git_calls)
+        compose = [c[2][:2] for c in self.commands() if c[0] == "docker"]
+        for verb in ("down", "up"):
+            self.assertNotIn(["compose", verb], compose)
+        self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
+
+    def test_bad_compose_project_undoes_attempt_before_stopping(self):
+        target = self.repository("bad-project")
+        r = self.run_script("upgrade.sh", str(target), MOVES_HEAD="1", RESOLVED_CONFIG="name: other\nvolumes: {}")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("服务未停止", r.stderr)
+        self.assertIn(["reset", "-q", "--keep", "abc1234"], [c[2] for c in self.commands() if c[0] == "git"])
         self.assertEqual(list((target / "pre-upgrade-backups").glob("release-*")), [])
 
     def test_build_flag_builds_all_three_images(self):

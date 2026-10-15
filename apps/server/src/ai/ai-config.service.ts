@@ -120,8 +120,9 @@ export class AiConfigService {
     return result;
   }
   async updateConfig(input: AiConfigInput, ip?: string) {
+    // 允许列表只拦启用状态的保存：列表收窄后库里的旧模型可能已不在列表里，关闭 AI 助手或改别的设置仍要能保存
     const allowed = config.llmAllowedModels;
-    if (allowed && !allowed.some((m) => m.id === input.model))
+    if (input.enabled && allowed && !allowed.some((m) => m.id === input.model))
       throw new BadRequestException(`模型不在允许列表中，请选择 ${allowed.map((m) => m.id).join('、')}`);
     const current = await this.getConfig();
     const stored: StoredAiConfig = {

@@ -145,6 +145,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await dialog.getByLabel(`${paper} 本次数量（盒）`, { exact: true }).fill('2');
   await dialog.getByLabel(`${paper} 领用人`, { exact: true }).fill('王五');
   await dialog.getByRole('button', { name: '确认库存领用', exact: true }).click();
+  await expect(product(page, paper).getByTestId('product-quantity')).toBeVisible();
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('1 盒');
   await page.getByRole('button', { name: '领用与归还', exact: true }).click();
   const issue = documentCard(page, paper, '王五');
@@ -155,6 +156,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await dialog.getByRole('button', { name: '确认撤销登记', exact: true }).click();
   await expect(issue).toContainText('已撤销');
   await page.getByRole('button', { name: /^库存物品( \d+)?$/ }).click();
+  await expect(product(page, paper).getByTestId('product-quantity')).toBeVisible();
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('3 盒');
 
   await page.getByRole('button', { name: '领用与归还', exact: true }).click();
@@ -166,6 +168,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await dialog.getByLabel('原因', { exact: true }).fill('验收：员工归还未使用用品');
   await dialog.getByRole('button', { name: '确认员工归还', exact: true }).click();
   await page.getByRole('button', { name: /^库存物品( \d+)?$/ }).click();
+  await expect(product(page, paper).getByTestId('product-quantity')).toBeVisible();
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('4 盒');
 
   await product(page, paper).getByRole('button', { name: '退回供应商', exact: true }).click();
@@ -178,6 +181,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await returnA.getByLabel(`${paper} 本次数量（盒）`, { exact: true }).fill('1');
   await dialog.getByLabel('原因', { exact: true }).fill('验收：供应商退款退货');
   await dialog.getByRole('button', { name: '确认供应商退货', exact: true }).click();
+  await expect(product(page, paper).getByTestId('product-quantity')).toBeVisible();
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('3 盒');
   const request = await (await page.request.get(`/api/workflow/requests/${requestId}`)).json();
   const paperRow = request.lines.find((line: { itemName: string }) => line.itemName === paper);
@@ -220,6 +224,7 @@ test('手机 390px：人工申请、采购、部分到货、入库与库存领�
   await dialog.getByLabel(`${paper} 领用人`, { exact: true }).fill('手机领用人');
   await expect(dialog.getByRole('button', { name: '确认库存领用', exact: true })).toBeInViewport();
   await dialog.getByRole('button', { name: '确认库存领用', exact: true }).click();
+  await expect(product(page, paper).getByTestId('product-quantity')).toBeVisible();
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('1 盒');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('workflow-mobile.png'), fullPage: true });

@@ -69,11 +69,11 @@ async function seedRequest(itemName: string, quantity = '10'): Promise<void> {
 }
 
 describe('AI 配置', () => {
-  it('只接受三个模型，GPT 保存和恢复加载均使用中等思考', async () => {
+  it('启用时只接受允许列表里的模型，GPT 保存和恢复加载均使用中等思考', async () => {
     const service = ctx.app.get(AiConfigService);
     const current = await service.getConfig();
     const input = { enabled: false, baseUrl: current.baseUrl, model: 'gpt-6.1-sol', semanticSearch: true, reasoningEffort: 'high' };
-    const rejected = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...input, model: 'arbitrary-model' } }) });
+    const rejected = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...input, model: 'arbitrary-model', enabled: true, apiKey: 'k' } }) });
     expect(rejected.statusCode).toBe(400);
     const saved = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: input }) });
     expect(saved.statusCode).toBe(200);
@@ -96,12 +96,19 @@ describe('AI 配置', () => {
       expect(current.json().models[1]).toMatchObject({ label: 'gpt-6.1-sol（中等思考）', reasoningEffort: 'medium' });
 
       Object.defineProperty(config, 'llmAllowedModels', { value: [{ id: 'grok-4.7', label: 'grok-4.7' }, { id: 'house-model', label: 'house-model' }] });
-      const outside = await put('gemini-3.8-flash-high');
+      const outside = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model: 'gemini-3.8-flash-high', enabled: true, apiKey: 'k' } }) });
       expect(outside.statusCode).toBe(400);
       expect(outside.json().message).toContain('grok-4.7、house-model');
       const inside = await put('house-model');
       expect(inside.statusCode).toBe(200);
       expect(ids(inside.json())).toEqual(['grok-4.7', 'house-model']);
+      // 列表再收窄、库里存的 house-model 不在列表里：关闭状态照常能保存，启用状态才要求换模型
+      Object.defineProperty(config, 'llmAllowedModels', { value: [{ id: 'grok-4.7', label: 'grok-4.7' }] });
+      const disabled = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model: 'house-model', enabled: false } }) });
+      expect(disabled.statusCode).toBe(200);
+      const enabled = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model: 'house-model', enabled: true, apiKey: 'k' } }) });
+      expect(enabled.statusCode).toBe(400);
+      expect(enabled.json().message).toContain('不在允许列表');
 
       Object.defineProperty(config, 'llmAllowedModels', { value: null });
       const free = await put('anything-goes');

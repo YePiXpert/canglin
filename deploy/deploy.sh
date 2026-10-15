@@ -151,6 +151,6 @@ done
 info "部署完成 ✓  访问 http://<服务器IP>:${WEB_PORT} 设置管理员密码"
 info "常用命令："
 info "  docker compose logs -f          # 看日志"
-info "  docker compose restart server   # 重启 API"
+info "  docker compose up -d server     # 改了 .env 后重建 API 容器（restart 不会读新的 .env）"
 info "  curl -fsSL https://raw.githubusercontent.com/YePiXpert/canglin/main/deploy/upgrade.sh | bash"
 info "                                  # 一行升级（任意目录；默认 /opt/canglin；其他目录用 bash -s -- <目录> 指定）"

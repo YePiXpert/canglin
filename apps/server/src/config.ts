@@ -13,12 +13,15 @@ function resolveDataDir(): string {
 
 const dataDir = resolveDataDir();
 
-/** LLM_ALLOWED_MODELS：逗号分隔的模型名；未设置（compose 传空串）用默认的三个，`*` 不限制。已知模型沿用默认的显示名与固定推理强度 */
-function allowedModels(raw: string | undefined): AiModelOption[] | null {
+/**
+ * LLM_ALLOWED_MODELS：逗号分隔的模型名；未设置（compose 传空串）或只有分隔符时用默认的三个，`*` 不限制（null）。
+ * 去空格、去空项、去重；已知模型沿用默认的显示名与固定推理强度，其它用 id 当显示名。
+ */
+export function parseAllowedModels(raw: string | undefined): AiModelOption[] | null {
   const value = raw?.trim();
-  if (!value) return DEFAULT_AI_MODELS;
   if (value === '*') return null;
-  const ids = [...new Set(value.split(',').map((id) => id.trim()).filter(Boolean))];
+  const ids = [...new Set((value ?? '').split(',').map((id) => id.trim()).filter(Boolean))];
+  if (!ids.length) return DEFAULT_AI_MODELS;
   return ids.map((id) => DEFAULT_AI_MODELS.find((m) => m.id === id) ?? { id, label: id });
 }
 
@@ -41,7 +44,7 @@ export const config = {
     model: process.env.LLM_MODEL || 'gpt-6.1-sol',
   },
   /** 设置页可选的模型：LLM_ALLOWED_MODELS 逗号分隔；未设置为默认的三个，`*` 为不限制（null） */
-  llmAllowedModels: allowedModels(process.env.LLM_ALLOWED_MODELS),
+  llmAllowedModels: parseAllowedModels(process.env.LLM_ALLOWED_MODELS),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 30) * 1024 * 1024,
   /** AI_IMAGE_STRIPS=1：长截图按空白带切成最多 3 段、作为同一页的多张图识别（评测通过前默认关闭） */
   aiImageStrips: process.env.AI_IMAGE_STRIPS === '1',

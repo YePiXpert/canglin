@@ -51,6 +51,22 @@ describe('AiSettingsPanel', () => {
     expect(vi.mocked(aiApi.updateConfig).mock.calls[0][0]).toMatchObject({ model: 'house-model', reasoningEffort: 'off' });
   });
 
+  it('已保存的模型不在允许列表里：有提示；启用状态下保存被前端拦下，关闭状态照常提交', async () => {
+    vi.mocked(aiApi.updateConfig).mockResolvedValue({ ...view, enabled: false, model: 'legacy-model' });
+    const on = mount(AiSettingsPanel, { props: { initial: { ...view, model: 'legacy-model' } }, global: { plugins: [createPinia()], stubs: { Teleport: true } } });
+    await flushPromises();
+    expect(on.text()).toContain('已保存的模型「legacy-model」不在服务器的允许列表里');
+    await on.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    await flushPromises();
+    expect(aiApi.updateConfig).not.toHaveBeenCalled();
+    expect(on.text()).toContain('请选择允许列表里的模型');
+    const off = mount(AiSettingsPanel, { props: { initial: { ...view, enabled: false, model: 'legacy-model' } }, global: { plugins: [createPinia()], stubs: { Teleport: true } } });
+    await flushPromises();
+    await off.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    await flushPromises();
+    expect(vi.mocked(aiApi.updateConfig).mock.calls[0][0]).toMatchObject({ enabled: false, model: 'legacy-model' });
+  });
+
   it('高级配置里的推理强度随配置回填，并在保存时提交', async () => {
     vi.mocked(aiApi.updateConfig).mockResolvedValue(view);
     const wrapper = mount(AiSettingsPanel, {

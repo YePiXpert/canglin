@@ -159,6 +159,7 @@ for (const variant of VARIANTS) {
       await shot(page, `${v}-import-empty`);
       await page.goto(`/import?task=${s.taskId}`);
       await expect(page.getByPlaceholder('品名（同名不同规格请明确区分）')).toHaveValue('测试用品1');
+      await expect(page.getByTestId('import-save-state')).toBeVisible();
       await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
       await shot(page, `${v}-import-task`);
       await page.goto('/insights');

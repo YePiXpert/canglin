@@ -13,6 +13,7 @@ const dataDir = mkdtempSync(path.join(tmpdir(), 'canglin-test-'));
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 process.env.DATA_DIR = dataDir;
 process.env.OCR_BASE_URL = 'http://127.0.0.1:59999'; // 不会真实调用
+delete process.env.LLM_ALLOWED_MODELS; // 用默认的三个模型，不受开发机 shell 的影响
 
 const databaseUrl = `file:${path.join(dataDir, 'canglin.db').replace(/\\/g, '/')}`;
 process.env.DATABASE_URL = databaseUrl;
