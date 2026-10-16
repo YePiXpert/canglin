@@ -53,11 +53,14 @@ describe('StockProductCard', () => {
   });
 
   it('库存为 0：数量后面是 amber「已空」，不给库存领用；没有库存来源也不给退回供应商', () => {
-    const empty = { ...product, stockQuantity: '0', sources: product.sources.map((source) => ({ ...source, stockQuantity: '0' })) };
+    const empty = { ...product, stockQuantity: '0', receivingQuantity: '0', sources: product.sources.map((source) => ({ ...source, stockQuantity: '0', receivingQuantity: '0' })) };
     const wrapper = mountCard({ product: empty, layout: 'row' });
     expect(wrapper.find('header').text()).toContain('0 盒');
     expect(wrapper.findAll('.badge').map((badge) => badge.text())).toContain('已空');
     expect(actionNames(wrapper)).toEqual(['盘点调整']);
+    // 库存为 0 但还有到货待处理：不叫已空（与库存页的「已空」筛选同一规则）
+    const pending = mountCard({ product: { ...product, stockQuantity: '0', sources: product.sources.map((source) => ({ ...source, stockQuantity: '0' })) }, layout: 'row' });
+    expect(pending.findAll('.badge').map((badge) => badge.text())).not.toContain('已空');
   });
 
   it('到货待处理模式：直接发放 / 登记入库 / 退回供应商，传出有待处理数量的到货来源；行里直接发放是描边按钮，卡片里是主按钮', async () => {
@@ -97,6 +100,6 @@ describe('StockProductCard', () => {
     expect(mountCard({ receiving: true, layout: 'row' }).find('header').text()).toContain('甲供应商 · ¥20.00 / 盒');
     const usedUp = { ...product, stockQuantity: '0', receivingQuantity: '0', sources: product.sources.map((source) => ({ ...source, stockQuantity: '0', receivingQuantity: '0' })) };
     expect(mountCard({ product: usedUp, layout: 'row' }).find('header').text()).toContain('已用完 · 2 批 · 甲供应商、乙供应商');
-    expect(mountCard({ product: { ...product, sources: [] }, layout: 'row' }).find('header').text()).toContain('暂无来源记录');
+    expect(mountCard({ product: { ...product, sources: [] }, layout: 'row' }).find('header').text()).toContain('还没入过库');
   });
 });

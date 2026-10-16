@@ -47,7 +47,7 @@ const overviewItems = computed(() => [
   { key: 'arrival', value: overview.value?.pendingReceiptLines, label: '条明细待到货', to: '/requests?stage=PENDING_ARRIVAL' },
   { key: 'purchase', value: overview.value?.pendingPurchaseLines, label: '条明细待采购', to: '/requests?stage=PENDING_PURCHASE' },
   { key: 'imports', value: importTotal.value ?? undefined, label: '份导入未完成', to: '/import' },
-  { key: 'stock', value: overview.value?.productCount, label: '种库存物品', to: '/stock', end: true },
+  { key: 'stock', value: overview.value?.stockProductCount, label: '种库存物品', to: '/stock', end: true },
 ].map((item) => ({ ...item, urgent: !!item.urgent && !!item.value })));
 
 function refresh() {

@@ -34,7 +34,7 @@ function request(id: number, requestDate: string, pending: Partial<WorkflowReque
 }
 const OVERVIEW: WorkflowOverview = {
   requestCount: 128, purchaseCount: 0, receiptCount: 0, pendingPurchaseLines: 4, pendingReceiptLines: 3,
-  pendingAllocationLines: 1, purchaseAmount: '0.00', receiptAmount: '0.00', productCount: 12,
+  pendingAllocationLines: 1, purchaseAmount: '0.00', receiptAmount: '0.00', stockProductCount: 12,
 };
 const page = <T>(items: T[], total = items.length) => ({ items, total, page: 1, pageSize: 10 });
 

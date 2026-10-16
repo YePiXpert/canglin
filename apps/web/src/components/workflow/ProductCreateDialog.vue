@@ -9,7 +9,7 @@ import Notice from '@/components/ui/Notice.vue';
 import { useDialogForm } from '@/composables/useDialogForm';
 import { issueText } from '@/utils/form';
 const props = defineProps<{ open: boolean }>();
-const emit = defineEmits<{ 'update:open': [value: boolean]; created: [] }>();
+const emit = defineEmits<{ 'update:open': [value: boolean]; created: [product: { productId: number; itemName: string; specification: string; unit: string }] }>();
 const form = reactive({ itemName: '', specification: '', unit: '' });
 /** 任一字段非空就算改动（干净时三项都是空串） */
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(() => form.itemName + form.specification + form.unit);
@@ -24,7 +24,7 @@ async function save() {
   // 清空字段放在 run 里：成功时记下的干净快照是清空之后的内容
   const created = await submit(async () => { const product = await workflowApi.createProduct(parsed.data); form.itemName = ''; form.specification = ''; form.unit = ''; return product; });
   if (created === undefined) return;
-  emit('update:open', false); emit('created');
+  emit('update:open', false); emit('created', created);
 }
 </script>
 <template>

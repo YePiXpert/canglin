@@ -281,7 +281,9 @@ export interface WorkflowStockEntryRow {
 export interface WorkflowOverview {
   requestCount: number; purchaseCount: number; receiptCount: number;
   pendingPurchaseLines: number; pendingReceiptLines: number; pendingAllocationLines: number;
-  purchaseAmount: string; receiptAmount: string; productCount: number;
+  purchaseAmount: string; receiptAmount: string;
+  /** 有库存（当前库存大于 0）的物品种数；库存为 0 的、申请带进来还没入库的物品不算 */
+  stockProductCount: number;
 }
 export interface WorkflowReport {
   grossPurchaseAmount: string; cancelledPurchaseAmount: string; refundedPurchaseAmount: string;

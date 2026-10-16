@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { workflowApi, type WorkflowStockRow } from '@/api/workflow';
+import { workflowApi } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
 import { useUrlState } from '@/composables/useUrlState';
 import PageHeader from '@/components/ui/PageHeader.vue';
@@ -18,9 +18,11 @@ import StockEntriesTable from '@/components/workflow/StockEntriesTable.vue';
 import ProductCreateDialog from '@/components/workflow/ProductCreateDialog.vue';
 import DocumentCollection from '@/components/workflow/DocumentCollection.vue';
 import WorkflowActions from '@/components/workflow/WorkflowActions.vue';
+import { useToastStore } from '@/stores/toast';
+import { STOCK_FILTERS, STOCK_FILTER_LABELS, filterStock, hasStock, stockCounts, stockFilterOf, type StockFilter } from '@/components/workflow/stockFilter';
 
-/** stock：库存物品 / 到货待处理两个页签共用的开关筛选，'' = 全部、in = 有库存、empty = 已空 */
-const defaults = { search: '', tab: 'products', stock: '', page: 1 };
+/** stock：库存物品页签的筛选（stockFilter.ts）：in = 有库存（默认）、empty = 已空、all = 全部物品；到货待处理页签不用它 */
+const defaults = { search: '', tab: 'products', stock: 'in', page: 1 };
 const state = reactive({ ...defaults });
 useUrlState(state, defaults);
 const actions = ref<InstanceType<typeof WorkflowActions>>();
@@ -32,15 +34,14 @@ const { data: stock, loading, refreshing, error, load } = useWorkflowResource(()
 const { data: entries, loading: entriesLoading, error: entriesError, load: loadEntries } = useWorkflowResource(() => workflowApi.entries({ page: state.page, pageSize: 20 }));
 
 const receivingTab = computed(() => state.tab === 'receiving');
-const stockFilter = computed(() => (state.stock === 'in' || state.stock === 'empty' ? state.stock : ''));
-const filterLabel = computed(() => (stockFilter.value === 'empty' ? '已空' : '有库存'));
+const stockFilter = computed<StockFilter>(() => stockFilterOf(state.stock));
+const filterLabel = computed(() => STOCK_FILTER_LABELS[stockFilter.value]);
 /** 当前页签的物品（搜索在接口里做，结果已按品名排序）：到货待处理页签只留有待处理数量的 */
 const tabProducts = computed(() => (stock.value || []).filter((product) => !receivingTab.value || product.receivingQuantity !== '0'));
-/** 已空 = 当前库存为 0 且有过来源批次；从没入过库的物品只在「全部」里出现 */
-const isEmptied = (product: WorkflowStockRow) => product.stockQuantity === '0' && product.sources.length > 0;
-const emptyCount = computed(() => tabProducts.value.filter(isEmptied).length);
-const inStockCount = computed(() => tabProducts.value.filter((product) => product.stockQuantity !== '0').length);
-const products = computed(() => tabProducts.value.filter((product) => !stockFilter.value || (stockFilter.value === 'empty' ? isEmptied(product) : product.stockQuantity !== '0')));
+/** 当前库存为 0 的不算库存：库存物品页签默认只列有库存的；已空、还没入过库的分别在「已空」「全部」里 */
+const counts = computed(() => stockCounts(stock.value || []));
+const filterTabs = computed(() => STOCK_FILTERS.map((value) => ({ value, label: STOCK_FILTER_LABELS[value], count: stock.value ? counts.value[value] : undefined })));
+const products = computed(() => (receivingTab.value ? tabProducts.value : filterStock(tabProducts.value, stockFilter.value)));
 /**
  * 接口一次返回全部物品（按品名排序），列表每次只画 50 种，底部「显示更多」再追加 50 种；
  * 换页签、筛选或搜索时回到前 50 种。
@@ -49,18 +50,20 @@ const BATCH = 50;
 const visibleCount = ref(BATCH);
 const shownProducts = computed(() => products.value.slice(0, visibleCount.value));
 watch(() => [state.tab, state.stock, state.search], () => { visibleCount.value = BATCH; });
-/* 页签计数跟着当前搜索：库存物品 = 物品种数，到货待处理 = 有待处理数量的种数；没加载完不显示 */
+/* 页签计数跟着当前搜索：库存物品 = 有库存的种数（0 不算库存），到货待处理 = 有待处理数量的种数；没加载完不显示 */
 const tabs = computed(() => [
-  { value: 'products', label: '库存物品', count: stock.value?.length },
+  { value: 'products', label: '库存物品', count: stock.value?.filter(hasStock).length },
   { value: 'receiving', label: '到货待处理', count: stock.value?.filter((product) => product.receivingQuantity !== '0').length },
   { value: 'distributions', label: '领用与归还' },
   { value: 'entries', label: '库存流水' },
 ]);
-const noMatchTitle = computed(() => (state.search ? `没有找到「${state.search}」相关的物品` : `没有符合「${filterLabel.value}」的物品`));
+const noMatchTitle = computed(() => (state.search ? `没有找到「${state.search}」相关的物品` : `没有「${filterLabel.value}」的物品`));
 const noMatchDescription = computed(() => {
-  if (state.search && stockFilter.value) return `当前筛选：${receivingTab.value ? '到货待处理' : '库存物品'} · ${filterLabel.value}。试试放宽条件。`;
-  return state.search ? '品名和规格都能搜索，换个关键词试试。' : '去掉筛选就能看到全部物品。';
+  if (state.search && !receivingTab.value && stockFilter.value !== 'all') return `当前筛选：${filterLabel.value}。试试看「全部」。`;
+  return state.search ? '品名和规格都能搜索，换个关键词试试。' : '切到「全部」能看到物品库里的每一种物品。';
 });
+/** 默认的「有库存」没有一件、但物品库里有物品（申请带进来还没入库的、已用完的）：说明 0 不算库存，给「全部」入口 */
+const nothingInStock = computed(() => !receivingTab.value && stockFilter.value === 'in' && !state.search && !products.value.length && tabProducts.value.length > 0);
 
 onMounted(() => { void load(); if (state.tab === 'entries') void loadEntries(); });
 function switchTab(tab: string) { state.tab = tab; if (tab === 'entries') void loadEntries(); }
@@ -70,9 +73,17 @@ async function refresh() {
   finally { refreshCount.value--; }
 }
 function page(page: number) { state.page = page; void loadEntries(); }
-function toggleStock(value: 'in' | 'empty') { state.stock = stockFilter.value === value ? '' : value; }
+function setStockFilter(value: string) { state.stock = stockFilterOf(value); }
 function clearSearch() { state.search = ''; void load(); }
-function clearAll() { state.stock = ''; clearSearch(); }
+/** 新增的物品还没有库存：切到「全部」并按品名搜出来，接着点「盘点调整」录入现有数量 */
+const toast = useToastStore();
+async function productCreated(product: { itemName: string }) {
+  state.tab = 'products';
+  state.stock = 'all';
+  state.search = product.itemName;
+  await refresh();
+  toast.success(`已新增「${product.itemName}」，现有的数量用「盘点调整」录入`);
+}
 </script>
 
 <template>
@@ -86,8 +97,7 @@ function clearAll() { state.stock = ''; clearSearch(); }
     <Panel v-if="state.tab === 'products' || state.tab === 'receiving'" flush>
       <template #toolbar>
         <SearchInput v-model="state.search" placeholder="搜索品名或规格" aria-label="搜索库存物品" class="w-full sm:w-75" @search="load" />
-        <Button size="sm" :pressed="stockFilter === 'in'" @click="toggleStock('in')">有库存 <span v-if="stock" class="num">{{ inStockCount }}</span></Button>
-        <Button size="sm" :pressed="stockFilter === 'empty'" @click="toggleStock('empty')">已空 <span v-if="stock" class="num">{{ emptyCount }}</span></Button>
+        <Tabs v-if="!receivingTab" :model-value="stockFilter" variant="segmented" :tabs="filterTabs" aria-label="库存筛选" @change="setStockFilter" />
         <span v-if="stock && (refreshing || products.length)" class="ml-auto text-meta num">{{ refreshing ? '刷新中…' : `按品名排序 · 共 ${products.length} 种` }}</span>
       </template>
       <h2 class="sr-only">{{ receivingTab ? '到货待处理' : '库存物品' }}</h2>
@@ -111,13 +121,17 @@ function clearAll() { state.stock = ''; clearSearch(); }
         <Button variant="primary" size="sm" @click="creatingProduct = true">新增库存物品</Button>
         <router-link to="/requests" :class="buttonClass({ variant: 'secondary', size: 'sm' })">查看申请单</router-link>
       </EmptyState>
+      <EmptyState v-else-if="nothingInStock" art="shelf" title="现在没有库存" :description="`到货后登记入库的物品才算库存，库存为 0 的不在这里。物品库里的 ${counts.all} 种物品（申请带进来还没入库的、已经用完的）在「全部」里。`">
+        <Button size="sm" @click="setStockFilter('all')">看全部物品</Button>
+        <Button variant="ghost" size="sm" @click="creatingProduct = true">新增库存物品</Button>
+      </EmptyState>
       <EmptyState v-else-if="!products.length" :icon="false" :title="noMatchTitle" :description="noMatchDescription">
-        <template v-if="state.search && stockFilter">
-          <Button size="sm" @click="clearAll">清除全部条件</Button>
-          <Button size="sm" variant="ghost" @click="clearSearch">只清除关键词</Button>
+        <template v-if="state.search && !receivingTab && stockFilter !== 'all'">
+          <Button size="sm" @click="setStockFilter('all')">在全部物品里找</Button>
+          <Button size="sm" variant="ghost" @click="clearSearch">清除关键词</Button>
         </template>
         <Button v-else-if="state.search" size="sm" @click="clearSearch">清除关键词</Button>
-        <Button v-else size="sm" @click="state.stock = ''">显示全部</Button>
+        <Button v-else size="sm" @click="setStockFilter('all')">看全部物品</Button>
       </EmptyState>
       <!-- 行式列表：--stock-cols 是表头与每一行（StockProductCard layout="row"）共用的列宽；≥ 640px 放不下时在面板里横向滚动，< 640px 每行堆叠成卡片 -->
       <div v-else class="sm:overflow-x-auto">
@@ -143,7 +157,7 @@ function clearAll() { state.stock = ''; clearSearch(); }
     </Panel>
     <DocumentCollection v-else-if="state.tab === 'distributions'" ref="documents" initial-kind="DISTRIBUTION" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="(line, document) => actions?.editLink({ kind: 'purchase', lineId: line.id, itemName: line.itemName, specification: line.specification, purchaseLink: line.purchaseLink, context: `采购成交 #${document.id}` })" />
     <StockEntriesTable v-else-if="state.tab === 'entries'" :entries="entries" :loading="entriesLoading" :error="entriesError" :page="state.page" @retry="loadEntries" @page="page" @inspect-document="actions?.inspectDocument($event)" @inspect-line="actions?.inspectLine($event)" />
-    <ProductCreateDialog v-model:open="creatingProduct" @created="refresh" />
+    <ProductCreateDialog v-model:open="creatingProduct" @created="productCreated" />
     <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" @link-changed="refresh" />
   </div>
 </template>

@@ -292,13 +292,14 @@ export class WorkflowQueryService {
     return this.prisma.$transaction(async (tx) => {
       const requests = await this.projectRequests(tx, await tx.procurementRequest.findMany({ include: requestInclude }));
       const lines = requests.flatMap((request) => request.lines);
-      const [purchases, receipts, productCount] = await Promise.all([
+      const [purchases, receipts, stocked] = await Promise.all([
         tx.businessDocument.findMany({ where: { kind: 'PURCHASE', status: 'POSTED' }, include: { lines: true } }),
         tx.businessDocument.findMany({ where: { kind: 'RECEIPT', status: 'POSTED' } }),
-        tx.catalogProduct.count(),
+        // 库存为 0 的不算库存：只数现在库里还有数量的物品（余额不会为负，有一笔大于 0 就是有库存）
+        tx.stockBalance.findMany({ where: { location: 'STOCK', quantityUnits: { gt: 0 } }, select: { productId: true }, distinct: ['productId'] }),
       ]);
       return {
-        requestCount: requests.length, purchaseCount: purchases.length, receiptCount: receipts.length, productCount,
+        requestCount: requests.length, purchaseCount: purchases.length, receiptCount: receipts.length, stockProductCount: stocked.length,
         pendingPurchaseLines: lines.filter((line) => line.stages.includes('PENDING_PURCHASE')).length,
         pendingReceiptLines: lines.filter((line) => line.stages.includes('PENDING_ARRIVAL')).length,
         pendingAllocationLines: lines.filter((line) => line.stages.includes('PENDING_DISTRIBUTION')).length,

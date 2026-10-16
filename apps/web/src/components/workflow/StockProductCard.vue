@@ -2,6 +2,7 @@
 import { computed, ref, useId } from 'vue';
 import type { WorkflowStockSourceRow } from '@canglin/shared';
 import type { WorkflowStockRow } from '@/api/workflow';
+import { isEmptied } from './stockFilter';
 import type { QuantityChoice, QuantityCommand } from './QuantityCommandDialog.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
@@ -29,8 +30,8 @@ const sourcesId = `stock-sources-${useId()}`;
 const row = computed(() => props.layout === 'row');
 const unit = computed(() => props.product.unit || '（单位未填写）');
 const empty = computed(() => props.product.stockQuantity === '0');
-/** 「已空」只给曾经有过来源批次的物品；只在申请里出现过、从没入过库的物品不叫已空 */
-const emptied = computed(() => empty.value && props.product.sources.length > 0);
+/** 「已空」与库存页的筛选同一规则（stockFilter.ts）：入过库、用完了、也没有到货待处理；从没入过库的、还在到货待处理的不叫已空 */
+const emptied = computed(() => isEmptied(props.product));
 const pending = computed(() => props.product.receivingQuantity !== '0');
 /** 主数量：到货待处理模式是待处理量（蓝），否则是当前库存（为 0 时淡色 + 已空）；次数量是另一个 */
 const primary = computed(() => (props.receiving ? props.product.receivingQuantity : props.product.stockQuantity));
@@ -45,7 +46,7 @@ const summary = computed(() => {
   const { sources } = props.product;
   const active = sources.filter((source) => source.receivingQuantity !== '0' || (!props.receiving && source.stockQuantity !== '0'));
   const list = active.length ? active : sources;
-  if (!list.length) return '暂无来源记录';
+  if (!list.length) return '还没入过库';
   const names = [...new Set(list.map(sourceName))].join('、');
   const text = list.length === 1 && list[0].unitPrice != null ? `${names} · ${unitPriceLabel(list[0].unitPrice, unit.value)}` : `${list.length} 批 · ${names}`;
   return active.length ? text : `已用完 · ${text}`;
