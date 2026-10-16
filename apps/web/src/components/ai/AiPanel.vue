@@ -33,9 +33,14 @@ const settingsLink = ref<{ $el: HTMLElement } | null>(null);
 /** 配置过（已启用且有 Key）才展示对话；否则显示引导 */
 const configured = computed(() => config.value?.enabled && config.value.apiKeySet);
 
+/** 回答下方「已查询」里的查询名（工具名对用户没有意义） */
+const STEP_LABELS: Record<string, string> = {
+  query_requests: '查询申请', query_documents: '查询业务记录', query_stock: '查询库存',
+  query_workflow_reports: '查询报表', query_suppliers: '查询供应商',
+};
 const EXAMPLES = [
   '本月各部门采购金额是多少？',
-  '哪些申请还有待采购的数量？',
+  '哪些申请还没采购完？',
   '上个月谁领用东西最多？',
   '未付款的采购单有哪些？',
 ];
@@ -172,7 +177,7 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
             </span>
             <p class="mt-4 text-sm font-semibold text-ink">AI 助手尚未启用</p>
             <p class="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted">
-              在系统设置选择 Gemini、GPT 或 Grok 并配置接口后，即可用自然语言查询申请、采购与领用单据和库存。
+              在系统设置里连接 AI 服务并启用后，就能用自然语言查询申请、采购与领用记录和库存。
             </p>
             <router-link
               ref="settingsLink"
@@ -222,8 +227,8 @@ watch([messages, asking], () => scrollToBottom(), { deep: true });
                     已查询 {{ m.steps.length }} 次数据
                   </summary>
                   <ul class="mt-1 space-y-0.5 pl-4">
-                    <li v-for="(s, j) in m.steps" :key="j" class="font-mono">
-                      {{ s.name }}（{{ s.count }} 条）
+                    <li v-for="(s, j) in m.steps" :key="j">
+                      {{ STEP_LABELS[s.name] ?? s.name }}（{{ s.count }} 条）
                     </li>
                   </ul>
                 </details>

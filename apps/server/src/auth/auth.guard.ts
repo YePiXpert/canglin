@@ -29,12 +29,12 @@ export class AuthGuard implements CanActivate {
     const res = context.switchToHttp().getResponse<FastifyReply>();
     const token = (req.cookies as Record<string, string> | undefined)?.[config.session.cookieName];
     const payload = this.session.verify(token);
-    if (!payload) throw new UnauthorizedException('未登录或会话已过期');
+    if (!payload) throw new UnauthorizedException('未登录或登录已过期');
 
     const security = await this.prisma.systemSecurity.findUnique({ where: { id: 1 } });
     if (!security) throw new UnauthorizedException('系统尚未初始化');
     if (payload.epoch !== security.sessionEpoch) {
-      throw new UnauthorizedException('会话已失效，请重新登录');
+      throw new UnauthorizedException('登录已失效，请重新登录');
     }
 
     this.session.issue(res, req, security.sessionEpoch);

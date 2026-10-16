@@ -165,13 +165,13 @@ export function useImportTask() {
   const fields = ['serialNumber', 'department', 'handler', 'requestDate'] as const;
   const labels = {
     serialNumber: '流水号',
-    department: '申领部门',
+    department: '申请部门',
     handler: '经办人',
     requestDate: '申请日期',
   };
   const localState = computed(
     () =>
-      ({ PENDING: '排队中', RUNNING: '解析中', DONE: '已完成', FAILED: '失败' })[
+      ({ PENDING: '排队中', RUNNING: '识别中', DONE: '已完成', FAILED: '失败' })[
         task.value?.status ?? 'PENDING'
       ],
   );

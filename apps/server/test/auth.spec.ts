@@ -2,6 +2,8 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { createApp, closeApp, cookieFrom, type TestApp } from './utils';
 
 let ctx: TestApp;
+/** 初始化时发的恢复码：最后一个用例拿它重置密码 */
+let firstRecoveryCode = '';
 
 beforeAll(async () => {
   ctx = await createApp({ login: false });
@@ -28,6 +30,7 @@ describe('认证流程', () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().recoveryCode).toMatch(/^[A-Z2-9]{16}$/);
+    firstRecoveryCode = res.json().recoveryCode;
 
     const dup = await ctx.inject({
       method: 'POST',
@@ -113,5 +116,19 @@ describe('认证流程', () => {
     });
     // 已初始化时也会 409/400，但校验先于业务 —— 顺序上 zod 校验在 pipe 中先执行
     expect([400, 409]).toContain(res.statusCode);
+  });
+
+  it('用恢复码重置密码：返回换新的恢复码（用过的作废），之后能用新码与新密码', async () => {
+    const reset = await ctx.inject({ method: 'POST', url: '/api/auth/recover', payload: { recoveryCode: firstRecoveryCode, newPassword: 'reset-secret-8' } });
+    expect(reset.statusCode, reset.body).toBe(200);
+    const next = reset.json().recoveryCode;
+    expect(next).toMatch(/^[A-Z2-9]{16}$/);
+    expect(next).not.toBe(firstRecoveryCode);
+    const reused = await ctx.inject({ method: 'POST', url: '/api/auth/recover', payload: { recoveryCode: firstRecoveryCode, newPassword: 'another-secret-8' } });
+    expect(reused.statusCode).toBe(401);
+    const again = await ctx.inject({ method: 'POST', url: '/api/auth/recover', payload: { recoveryCode: next, newPassword: 'final-secret-8' } });
+    expect(again.statusCode, again.body).toBe(200);
+    const login = await ctx.inject({ method: 'POST', url: '/api/auth/login', payload: { password: 'final-secret-8' } });
+    expect(login.statusCode).toBe(200);
   });
 });

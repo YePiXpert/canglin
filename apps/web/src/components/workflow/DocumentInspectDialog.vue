@@ -32,7 +32,7 @@ function back() {
 </script>
 
 <template>
-  <Dialog :open="open" title="查看业务来源" description="按稳定的业务明细逐层查看原到货、采购及 OA 申请" width="760px" @update:open="emit('update:open', $event)">
+  <Dialog :open="open" title="查看业务来源" description="从这条记录往上逐层查看对应的到货、采购和申请" width="760px" @update:open="emit('update:open', $event)">
     <Button v-if="history.length" variant="ghost" size="sm" class="-ml-2.5 mb-3" @click="back"><Icon name="chevron-left" :size="14" />返回上层记录</Button>
     <!-- 首次加载：按单据卡片的形状拼骨架（标题行 + 两条明细） -->
     <div v-if="loading" class="card relative" aria-busy="true">

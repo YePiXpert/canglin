@@ -259,7 +259,7 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
                 <Input v-model="line.purchaseLink" size="sm" hide-label :label="`${line.itemName} 采购链接`" placeholder="https://…（可空）" :error="errors[`link.${line.id}`]" :disabled="saving" class="min-w-0 flex-1" @blur="tidyLink(line)" />
                 <a v-if="webLink(line.purchaseLink)" :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'ghost', size: 'sm', iconOnly: true })" :aria-label="`打开 ${line.itemName} 的采购链接`" title="在新标签页打开"><Icon name="arrow-up-right" :size="14" /></a>
               </div>
-              <p v-if="line.requestLink && line.purchaseLink === line.requestLink" class="mt-1 text-xs text-muted sm:pl-14">来自申请（OA 原件上的链接）</p>
+              <p v-if="line.requestLink && line.purchaseLink === line.requestLink" class="mt-1 text-xs text-muted sm:pl-14">来自申请</p>
               <p v-if="isShortLink(line.purchaseLink)" class="mt-1 text-xs text-amber sm:pl-14">短链接容易失效，建议换成商品页地址</p>
             </div>
           </td>

@@ -49,7 +49,7 @@ export class WorkflowService {
       }), { timeout: 30_000 });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        throw new ConflictException('该来源或操作已经使用，请重新载入');
+        throw new ConflictException('这条记录刚被处理过或已经存在，请刷新后再试');
       throw error;
     }
   }
@@ -253,7 +253,7 @@ export class WorkflowService {
     if (!line) throw new NotFoundException('申请明细不存在');
     const ordered = nonnegative(line.orderedUnits + orderedDelta, '采购数量账不一致');
     const cancelled = nonnegative(line.cancelledUnits + cancelledDelta, '取消数量账不一致');
-    if (ordered + cancelled > line.quantityUnits) throw new ConflictException(`「${line.itemName}」超过净申请需求，剩余可采购 ${quantityText(line.quantityUnits - line.cancelledUnits - line.orderedUnits)} ${line.unit}`);
+    if (ordered + cancelled > line.quantityUnits) throw new ConflictException(`「${line.itemName}」超过了还没采购的数量，最多还能采购 ${quantityText(line.quantityUnits - line.cancelledUnits - line.orderedUnits)} ${line.unit}`);
     const result = await tx.procurementLine.updateMany({ where: { id, orderedUnits: line.orderedUnits, cancelledUnits: line.cancelledUnits }, data: { orderedUnits: ordered, cancelledUnits: cancelled } });
     if (!result.count) throw new ConflictException('申请明细已发生变化，请重新载入');
     return line;
@@ -263,7 +263,7 @@ export class WorkflowService {
     const line = await this.sourceLine(tx, id, 'PURCHASE');
     const received = nonnegative(line.receivedUnits + receivedDelta, '收货数量账不一致');
     const cancelled = nonnegative(line.cancelledUnits + cancelledDelta, '采购取消数量账不一致');
-    if (received + cancelled > line.quantityUnits) throw new ConflictException(`「${line.itemName}」超过采购剩余数量（${quantityText(line.quantityUnits - line.cancelledUnits - line.receivedUnits)} ${line.unit}）`);
+    if (received + cancelled > line.quantityUnits) throw new ConflictException(`「${line.itemName}」超过了这批采购还没到的数量（${quantityText(line.quantityUnits - line.cancelledUnits - line.receivedUnits)} ${line.unit}）`);
     const result = await tx.businessLine.updateMany({ where: { id, receivedUnits: line.receivedUnits, cancelledUnits: line.cancelledUnits }, data: { receivedUnits: received, cancelledUnits: cancelled } });
     if (!result.count) throw new ConflictException('采购明细已发生变化，请重新载入');
     return line;
@@ -271,7 +271,7 @@ export class WorkflowService {
 
   private async sourceLine(tx: Tx, id: number, kind: WorkflowDocumentKind): Promise<SourceLine> {
     const line = await tx.businessLine.findUnique({ where: { id }, include: { document: true, sourceLine: { include: { document: true } } } });
-    if (!line || line.document.kind !== kind) throw new NotFoundException(`${kind === 'PURCHASE' ? '采购' : kind === 'RECEIPT' ? '收货' : '来源'}明细不存在`);
+    if (!line || line.document.kind !== kind) throw new NotFoundException(`${kind === 'PURCHASE' ? '采购' : kind === 'RECEIPT' ? '到货' : '来源'}明细不存在`);
     if (line.document.status !== 'POSTED') throw new ConflictException('来源单据已撤销');
     return line;
   }
@@ -282,7 +282,7 @@ export class WorkflowService {
     if (!origin || origin.productId !== data.productId || !['RECEIPT', 'ADJUSTMENT'].includes(origin.document.kind))
       throw new BadRequestException('库存来源与物品不一致');
     const latest = await tx.stockEntry.findFirst({ where: { originLineId: data.originLineId, location: data.location }, orderBy: { date: 'desc' } });
-    if (latest && data.date < latest.date) throw new BadRequestException('业务日期不能早于该来源已登记的后续库存动作');
+    if (latest && data.date < latest.date) throw new BadRequestException('业务日期不能早于这批物品之后已登记的出入库日期');
     const where = { productId: data.productId, originLineId: data.originLineId, location: data.location };
     const prior = await tx.stockBalance.findUnique({ where: { productId_originLineId_location: where } });
     if (!prior) {
@@ -346,7 +346,7 @@ export class WorkflowService {
         const quantity = quantityUnits(inputLine.quantity);
         const source = await this.changePurchaseCounters(tx, inputLine.purchaseLineId, quantity);
         suppliers.set(source.document.supplierId!, source.document.supplierName!);
-        if (input.date < source.document.date) throw new BadRequestException('收货日期不能早于采购日期');
+        if (input.date < source.document.date) throw new BadRequestException('到货日期不能早于采购日期');
         const amount = bounded(lineAmountUnits(quantity, source.unitPriceUnits!));
         total = bounded(total + amount);
         const line = await tx.businessLine.create({ data: {
@@ -397,7 +397,7 @@ export class WorkflowService {
   }
 
   private afterSourceDate(date: string, sourceDate: string) {
-    if (date < sourceDate) throw new BadRequestException('业务日期不能早于来源单据日期');
+    if (date < sourceDate) throw new BadRequestException('业务日期不能早于前一步登记的日期（如申请、采购或到货日期）');
   }
 
   // Cumulative rounding apportions the final cent exactly, including many partial reductions.
@@ -415,7 +415,7 @@ export class WorkflowService {
         const purchase = await this.sourceLine(tx, receipt.sourceLineId!, 'PURCHASE');
         if (supplierId !== undefined && supplierId !== purchase.document.supplierId) throw new BadRequestException('一张退货单只能对应一个供应商');
         supplierId = purchase.document.supplierId!;
-        if (receipt.cancelledUnits + quantity > receipt.quantityUnits) throw new ConflictException('退货数量超过该次收货尚未退回的数量');
+        if (receipt.cancelledUnits + quantity > receipt.quantityUnits) throw new ConflictException('退货数量超过了这批到货还能退回的数量');
         const amount = this.reductionAmount(receipt, quantity);
         const reduction = input.returnMode === 'REFUND' ? this.reductionAmount(purchase, quantity) : 0n;
         const line = await tx.businessLine.create({ data: {
@@ -511,7 +511,7 @@ export class WorkflowService {
     return this.write('metadata', { id, ...input }, key, ip, async (tx) => {
       const document = await tx.businessDocument.findUnique({ where: { id } });
       if (!document) throw new NotFoundException('业务单据不存在');
-      if (document.status !== 'POSTED') throw new ConflictException('已撤销单据不可修改');
+      if (document.status !== 'POSTED') throw new ConflictException('已撤销的记录不能修改');
       if (document.kind !== 'PURCHASE' && (input.paymentStatus !== undefined || input.invoiceIssued !== undefined)) throw new BadRequestException('付款和开票状态请在采购单上登记');
       await tx.businessDocument.update({ where: { id }, data: input });
       return this.query.documentTx(tx, id);
@@ -522,10 +522,10 @@ export class WorkflowService {
     return this.write('void', { id, ...input }, key, ip, async (tx) => {
       const document = await tx.businessDocument.findUnique({ where: { id }, include: { lines: true } });
       if (!document) throw new NotFoundException('业务单据不存在');
-      if (document.status !== 'POSTED') throw new ConflictException('业务单据已经撤销');
+      if (document.status !== 'POSTED') throw new ConflictException('这条记录已经撤销');
       this.afterSourceDate(input.date, document.date);
       const downstream = await tx.businessLine.findFirst({ where: { sourceLineId: { in: document.lines.map((line) => line.id) }, document: { status: 'POSTED' } } });
-      if (downstream) throw new ConflictException('存在后续业务，请先撤销后续单据');
+      if (downstream) throw new ConflictException('之后还有用到它的登记，请先撤销那些记录');
       for (const line of document.lines) {
         // Reductions apportion rounding cents cumulatively. Later reductions depend on that allocation.
         if (document.kind === 'PURCHASE_CANCEL' || document.kind === 'SUPPLIER_RETURN') {

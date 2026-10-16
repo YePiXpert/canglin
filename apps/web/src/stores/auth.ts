@@ -48,8 +48,10 @@ export const useAuthStore = defineStore('auth', () => {
     return res.data.recoveryCode;
   }
 
-  async function recover(recoveryCode: string, newPassword: string): Promise<void> {
-    await http.post('/auth/recover', { recoveryCode, newPassword });
+  /** 返回换新后的恢复码（用过的旧码已作废），页面要显示给用户保存 */
+  async function recover(recoveryCode: string, newPassword: string): Promise<string> {
+    const res = await http.post<{ recoveryCode: string }>('/auth/recover', { recoveryCode, newPassword });
+    return res.data.recoveryCode;
   }
 
   async function logout(): Promise<void> {

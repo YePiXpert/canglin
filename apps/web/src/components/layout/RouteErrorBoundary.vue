@@ -42,7 +42,7 @@ function reload(): void {
   <div v-if="failed" class="card flex flex-col items-center px-6 py-10 text-center">
     <LineArt name="spill" :size="200" class="text-faint" />
     <h2 class="mt-5 text-[15px] leading-6 font-semibold text-ink">页面出现异常</h2>
-    <p class="mt-1 max-w-sm text-[13px] text-muted">这一页显示时出错了，错误已记录在浏览器控制台。重新加载通常可以恢复；切换到其它页面也会重置。</p>
+    <p class="mt-1 max-w-sm text-[13px] text-muted">这一页显示时出错了。点「重新加载」通常就能恢复，也可以先去其他页面。</p>
     <Button size="sm" class="mt-4" @click="reload"><Icon name="refresh" :size="14" />重新加载</Button>
   </div>
   <slot v-else />

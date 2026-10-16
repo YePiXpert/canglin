@@ -37,7 +37,7 @@ const { revertable, revertOpen, reverting, revertError, revert } = ctx;
 <template>
   <div ref="rootEl" class="space-y-6">
     <PageHeader
-      title="导入 OA 单据"
+      title="导入 OA 单"
       description="保存原件 → AI 原件识别（本地 OCR 备用）→ 人工核对后入账。识别完成不等于入账，最终由你确认。"
     >
       <ImportServiceStatus />
@@ -64,7 +64,7 @@ const { revertable, revertOpen, reverting, revertError, revert } = ctx;
       <div class="min-w-0 flex-1">
         <p class="text-[15px] leading-6 font-semibold text-ink">已确认导入</p>
         <p class="text-[13px] leading-5 text-muted">
-          已创建 {{ finished.created }} 条，合并 {{ finished.merged }} 条，跳过 {{ finished.skipped }} 条；关联 {{ finished.attached }} 份原件。
+          已创建申请：{{ finished.created }} 条明细，关联 {{ finished.attached }} 份原件。
         </p>
       </div>
       <div class="flex flex-wrap gap-2 max-sm:w-full">

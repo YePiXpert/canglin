@@ -19,7 +19,7 @@ import { stockIssueChoices, stockSourceChoices } from './commandChoices';
  * - layout="card"（默认）：独立的一张卡片、一物一行（申请详情「已到货，待决定去向」）：品名 + 规格 / 来源 | 主数量 | 动作。
  * - receiving：主数量是到货待处理（蓝），动作是直接发放 / 登记入库 / 退回供应商；否则主数量是当前库存（为 0 时 amber「已空」），
  *   动作是库存领用 / 退回供应商 / 盘点调整。动作全部可见：行里是 secondary sm（盘点调整 ghost），卡片里第一个动作是 primary。
- * - 首格的展开按钮（可访问名称「采购来源与数量」）列出来源批次：供应商 · 单价、库存、待处理、来源明细 / 到货明细 / 申请。
+ * - 首格的展开按钮（可访问名称「{品名} 的来源批次」）列出来源批次：供应商 · 单价、库存、待处理、来源明细 / 到货明细 / 申请。
  */
 const props = withDefaults(defineProps<{ product: WorkflowStockRow; receiving?: boolean; layout?: 'card' | 'row' }>(), { layout: 'card' });
 const emit = defineEmits<{ command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; adjust: [product: WorkflowStockRow]; source: [lineId: number] }>();
@@ -38,8 +38,13 @@ const primary = computed(() => (props.receiving ? props.product.receivingQuantit
 const secondary = computed(() => (props.receiving ? props.product.stockQuantity : props.product.receivingQuantity));
 const primaryTone = computed(() => (props.receiving ? 'text-blue' : empty.value ? 'text-faint' : 'text-ink'));
 
+/** 来源行的叫法：到货来的批次，来源行就是那条到货明细；盘点来的写盘点调整；其余写来源明细 */
+function sourceLineLabel(source: WorkflowStockSourceRow): string {
+  if (source.receiptLineId && source.receiptLineId === source.originLineId) return '到货明细';
+  return source.supplierName ? '来源明细' : '盘点调整';
+}
 function sourceName(source: WorkflowStockSourceRow): string {
-  return source.supplierName || '盘点 / 补录';
+  return source.supplierName || '盘点调整';
 }
 /** 来源摘要：只数还有数量的批次（到货待处理模式只数有待处理的）；都用完了就说明一下，仍列出原来的供应商 */
 const summary = computed(() => {
@@ -85,7 +90,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
       class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 p-4 transition-colors duration-150 sm:grid-cols-(--stock-cols) sm:gap-y-0 sm:py-2.5 sm:hover:bg-surface-2/40"
       :class="open ? 'sm:bg-surface-2/40' : ''"
     >
-      <Button variant="ghost" size="sm" icon-only aria-label="采购来源与数量" :aria-expanded="open" :aria-controls="open ? sourcesId : undefined" class="max-sm:col-start-2 max-sm:row-start-1 max-sm:-mr-2 max-sm:size-9" @click="open = !open">
+      <Button variant="ghost" size="sm" icon-only :aria-label="`${product.itemName} 的来源批次`" :aria-expanded="open" :aria-controls="open ? sourcesId : undefined" class="max-sm:col-start-2 max-sm:row-start-1 max-sm:-mr-2 max-sm:size-9" @click="open = !open">
         <Icon name="chevron-right" :size="14" class="transition-transform duration-150" :class="open ? 'rotate-90' : ''" />
       </Button>
       <div class="min-w-0 max-sm:col-start-1 max-sm:row-start-1">
@@ -116,7 +121,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
 
     <header v-else class="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3.5">
       <div class="flex min-w-0 flex-[1_1_18rem] items-center gap-3">
-        <Button variant="ghost" size="sm" icon-only aria-label="采购来源与数量" :aria-expanded="open" :aria-controls="open ? sourcesId : undefined" class="max-sm:order-last max-sm:-mr-2 max-sm:size-9" @click="open = !open">
+        <Button variant="ghost" size="sm" icon-only :aria-label="`${product.itemName} 的来源批次`" :aria-expanded="open" :aria-controls="open ? sourcesId : undefined" class="max-sm:order-last max-sm:-mr-2 max-sm:size-9" @click="open = !open">
           <Icon name="chevron-right" :size="14" class="transition-transform duration-150" :class="open ? 'rotate-90' : ''" />
         </Button>
         <div class="min-w-0 flex-1">
@@ -140,16 +145,16 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
       <div class="hidden gap-x-3 py-1 text-meta sm:grid" :class="SOURCE_GRID" aria-hidden="true">
         <span>来源批次</span><span class="text-right">库存</span><span class="text-right">待处理</span><span>追溯</span>
       </div>
-      <ul :aria-label="`${product.itemName} 的采购来源与数量`" class="divide-y divide-line sm:divide-y-0">
+      <ul :aria-label="`${product.itemName} 的来源批次`" class="divide-y divide-line sm:divide-y-0">
         <li v-for="source in product.sources" :key="source.originLineId" class="grid gap-1 py-2 text-[12.5px] text-muted sm:items-baseline sm:gap-x-3 sm:py-1" :class="SOURCE_GRID">
           <span class="break-words text-text">{{ sourceName(source) }}<template v-if="source.unitPrice != null"> · {{ unitPriceLabel(source.unitPrice, unit) }}</template></span>
           <span class="flex flex-wrap gap-x-3 sm:contents">
             <span class="num sm:text-right"><span class="sm:sr-only">库存 </span>{{ quantityLabel(source.stockQuantity, product.unit) }}</span>
             <span class="num sm:text-right" :class="source.receivingQuantity !== '0' ? 'text-blue' : ''"><span class="sm:sr-only">待处理 </span>{{ quantityLabel(source.receivingQuantity, product.unit) }}</span>
           </span>
-          <span class="text-meta"><Button variant="link" :aria-label="`查看来源明细 #${source.originLineId}`" @click="emit('source', source.originLineId)">来源明细 #{{ source.originLineId }}</Button><template v-if="source.receiptLineId"> · 到货明细 #{{ source.receiptLineId }}</template> · <router-link v-if="source.requestId" :to="`/requests/${source.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ source.serialNumber || '#' + source.requestId }}</router-link><span v-else>没有来源申请</span></span>
+          <span class="text-meta"><Button variant="link" :aria-label="`查看${sourceLineLabel(source)} #${source.originLineId}`" @click="emit('source', source.originLineId)">{{ sourceLineLabel(source) }} #{{ source.originLineId }}</Button><template v-if="source.receiptLineId && source.receiptLineId !== source.originLineId"> · 到货明细 #{{ source.receiptLineId }}</template> · <router-link v-if="source.requestId" :to="`/requests/${source.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ source.serialNumber || '#' + source.requestId }}</router-link><span v-else>没有来源申请</span></span>
         </li>
-        <li v-if="!product.sources.length" class="py-2 text-[12.5px] text-muted">还没有来源批次：新增的物品要先用盘点调整录入数量。</li>
+        <li v-if="!product.sources.length" class="py-2 text-[12.5px] text-muted">还没入过库：申请里的物品登记到货后才有批次；本来就有的库存用「盘点调整」录入。</li>
       </ul>
     </div>
   </article>

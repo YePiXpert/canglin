@@ -41,9 +41,9 @@ async function save() {
 
 <template>
   <!-- 确认框排版（ConfirmDialog 的样式）：420 宽、16px 标题、手机上不全屏；需要日期与原因，所以用 Dialog compact 自带未保存确认 -->
-  <Dialog :open="open" title="撤销业务登记" :description="`${documentKindLabels[document.kind]} #${document.id} · ${document.date}`" width="420px" compact :mobile-fullscreen="false" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
-    <p class="text-[13px] leading-relaxed text-muted">撤销会回冲本次数量和金额，原登记与撤销原因继续保留。</p>
-    <p class="mt-1.5 text-xs leading-relaxed text-muted">已有后续到货、发放、退回或库存使用时，需要先处理相关操作；系统会检查依赖并说明无法撤销的原因。</p>
+  <Dialog :open="open" title="撤销登记" :description="`${documentKindLabels[document.kind]} #${document.id} · ${document.date}`" width="420px" compact :mobile-fullscreen="false" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
+    <p class="text-[13px] leading-relaxed text-muted">撤销会把这次登记的数量和金额退回去，原登记和撤销原因都会保留。</p>
+    <p class="mt-1.5 text-xs leading-relaxed text-muted">如果之后已有到货、发放、退回或领用用到了这次登记，要先撤销那些记录；不能撤销时会说明原因。</p>
     <Input v-model="form.date" label="撤销日期" type="date" required :disabled="saving" class="mt-4" />
     <Textarea v-model="form.reason" label="撤销原因" :rows="2" placeholder="如：数量登记错误" required :error="errors.reason" :disabled="saving" class="mt-4" />
     <Notice v-if="failure" tone="red" size="sm" role="alert" class="mt-4">{{ failure }}</Notice>

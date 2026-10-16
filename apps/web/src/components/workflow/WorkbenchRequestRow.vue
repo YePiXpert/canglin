@@ -67,7 +67,7 @@ const action = computed((): { label: string; variant: ButtonVariant; reason: str
   if (step === 'allocate') {
     const arrived = lines('allocate');
     const what = arrived.length === 1 ? quantityLabel(arrived[0].pendingAllocationQuantity, arrived[0].unit) : `${arrived.length} 条明细`;
-    return { label: '定去向', variant: 'primary', reason: `${what}已到，直发或入库` };
+    return { label: '定去向', variant: 'primary', reason: `${what}已到，直接发放或入库` };
   }
   if (step === 'receive') return { label: '登记到货', variant: 'secondary', reason: `${lines('receive').length} 条明细待到货` };
   if (step === 'purchase') return { label: '登记采购', variant: 'secondary', reason: `${lines('purchase').length} 条明细待采购` };

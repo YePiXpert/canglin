@@ -39,7 +39,7 @@ const expanded = ref<Set<number>>(new Set());
  * 失败、删除、作废与库存核对不一致 red · 覆盖或回退数据的动作（恢复备份、改密、重置恢复码、回滚、撤销登记）amber · 其余 gray。
  * group 是筛选下拉里的分组前缀。
  */
-const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gray'; group: string }> = {
+const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gray'; group: string; legacy?: boolean }> = {
   AUTH_SETUP: { label: '初始化', tone: 'gray', group: '账号' },
   AUTH_LOGIN: { label: '登录', tone: 'gray', group: '账号' },
   AUTH_LOGIN_FAILED: { label: '登录失败', tone: 'red', group: '账号' },
@@ -50,60 +50,67 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   // 申请、采购、到货、库存与领用的业务登记（服务端按 WORKFLOW_<操作> 记录）
   WORKFLOW_REQUEST: { label: '人工录入申请', tone: 'gray', group: '申请' },
   REQUEST_IMPORT_CONFIRM: { label: '导入生成申请', tone: 'gray', group: '申请' },
-  WORKFLOW_REQUEST_CANCEL: { label: '申请余量取消', tone: 'gray', group: '申请' },
+  WORKFLOW_REQUEST_CANCEL: { label: '取消未采购量', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_DELETE: { label: '删除申请', tone: 'red', group: '申请' },
   WORKFLOW_REQUEST_UPDATE: { label: '修改申请信息', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_LINE_LINK: { label: '修改申请链接', tone: 'gray', group: '申请' },
   WORKFLOW_PURCHASE_LINE_LINK: { label: '修改采购链接', tone: 'gray', group: '采购' },
   WORKFLOW_PURCHASE: { label: '登记采购', tone: 'gray', group: '采购' },
-  WORKFLOW_PURCHASE_CANCEL: { label: '采购取消', tone: 'gray', group: '采购' },
+  WORKFLOW_PURCHASE_CANCEL: { label: '取消未到货量', tone: 'gray', group: '采购' },
   WORKFLOW_RECEIPT: { label: '登记到货', tone: 'gray', group: '采购' },
-  WORKFLOW_SUPPLIER_RETURN: { label: '供应商退货', tone: 'gray', group: '采购' },
+  WORKFLOW_SUPPLIER_RETURN: { label: '退回供应商', tone: 'gray', group: '采购' },
   WORKFLOW_STOCK_IN: { label: '登记入库', tone: 'gray', group: '库存' },
-  WORKFLOW_ADJUSTMENT: { label: '库存盘点', tone: 'gray', group: '库存' },
+  WORKFLOW_ADJUSTMENT: { label: '盘点调整', tone: 'gray', group: '库存' },
   WORKFLOW_PRODUCT: { label: '新增库存物品', tone: 'gray', group: '库存' },
   STOCK_RECONCILE_MISMATCH: { label: '库存核对不一致', tone: 'red', group: '库存' },
   WORKFLOW_DISTRIBUTION: { label: '领用发放', tone: 'gray', group: '领用' },
   WORKFLOW_EMPLOYEE_RETURN: { label: '员工归还', tone: 'gray', group: '领用' },
-  WORKFLOW_METADATA: { label: '修改单据信息', tone: 'gray', group: '单据' },
-  WORKFLOW_VOID: { label: '撤销登记', tone: 'amber', group: '单据' },
+  WORKFLOW_METADATA: { label: '修改付款与发票', tone: 'gray', group: '采购' },
+  WORKFLOW_VOID: { label: '撤销登记', tone: 'amber', group: '业务记录' },
   // 旧版台账已删除，保留这些动作名只为显示历史审计记录
-  ITEM_CREATE: { label: '新增台账', tone: 'gray', group: '旧台账' },
-  ITEM_UPDATE: { label: '修改台账', tone: 'gray', group: '旧台账' },
-  ITEM_BATCH_UPDATE: { label: '批量修改', tone: 'gray', group: '旧台账' },
-  ITEM_PURCHASE: { label: '下单登记', tone: 'gray', group: '旧台账' },
-  ITEM_DELETE: { label: '删除台账', tone: 'red', group: '旧台账' },
-  ITEM_RESTORE: { label: '恢复台账', tone: 'gray', group: '旧台账' },
-  ITEM_PURGE: { label: '彻底删除', tone: 'red', group: '旧台账' },
-  ITEM_ROLLBACK: { label: '回滚', tone: 'amber', group: '旧台账' },
-  ITEM_STOCK_IN: { label: '采购入库', tone: 'gray', group: '库存' },
-  ITEM_STOCK_IN_BATCH: { label: '整单入库', tone: 'gray', group: '库存' },
+  ITEM_CREATE: { label: '新增台账', tone: 'gray', group: '旧台账', legacy: true },
+  ITEM_UPDATE: { label: '修改台账', tone: 'gray', group: '旧台账', legacy: true },
+  ITEM_BATCH_UPDATE: { label: '批量修改台账', tone: 'gray', group: '旧台账', legacy: true },
+  ITEM_PURCHASE: { label: '下单登记', tone: 'gray', group: '旧台账', legacy: true },
+  ITEM_DELETE: { label: '删除台账', tone: 'red', group: '旧台账', legacy: true },
+  ITEM_RESTORE: { label: '恢复台账', tone: 'gray', group: '旧台账', legacy: true },
+  ITEM_PURGE: { label: '彻底删除台账', tone: 'red', group: '旧台账', legacy: true },
+  ITEM_ROLLBACK: { label: '回滚台账', tone: 'amber', group: '旧台账', legacy: true },
+  ITEM_STOCK_IN: { label: '采购入库', tone: 'gray', group: '旧台账', legacy: true },
+  ITEM_STOCK_IN_BATCH: { label: '整单入库', tone: 'gray', group: '旧台账', legacy: true },
   AI_CONFIG_UPDATE: { label: '修改 AI 设置', tone: 'gray', group: 'AI' },
   AI_QUERY: { label: 'AI 问答', tone: 'gray', group: 'AI' },
-  AI_OCR_REVIEW: { label: 'AI 复核单据', tone: 'gray', group: 'AI' },
-  DISTRIBUTION_CREATE: { label: '发放登记', tone: 'gray', group: '发放' },
-  DISTRIBUTION_REVOKE: { label: '作废发放', tone: 'red', group: '发放' },
-  IMPORT_UPLOAD: { label: '上传单据', tone: 'gray', group: '导入' },
-  IMPORT_CONFIRM: { label: '确认导入', tone: 'gray', group: '导入' },
-  PRODUCT_CREATE: { label: '新增物品', tone: 'gray', group: '库存' },
-  PRODUCT_UPDATE: { label: '修改物品', tone: 'gray', group: '库存' },
-  PRODUCT_DELETE: { label: '删除物品', tone: 'red', group: '库存' },
-  INVENTORY_MOVEMENT: { label: '库存流水', tone: 'gray', group: '库存' },
-  INVENTORY_MOVEMENT_DELETE: { label: '删流水', tone: 'red', group: '库存' },
+  AI_OCR_REVIEW: { label: 'AI 复核单据', tone: 'gray', group: 'AI', legacy: true },
+  DISTRIBUTION_CREATE: { label: '发放登记', tone: 'gray', group: '旧台账', legacy: true },
+  DISTRIBUTION_REVOKE: { label: '作废发放', tone: 'red', group: '旧台账', legacy: true },
+  IMPORT_UPLOAD: { label: '上传原件', tone: 'gray', group: '导入' },
+  IMPORT_DISCARD: { label: '放弃草稿', tone: 'red', group: '导入' },
+  IMPORT_CONFIRM: { label: '确认导入', tone: 'gray', group: '导入', legacy: true },
+  PRODUCT_CREATE: { label: '新增物品', tone: 'gray', group: '旧台账', legacy: true },
+  PRODUCT_UPDATE: { label: '修改物品', tone: 'gray', group: '旧台账', legacy: true },
+  PRODUCT_DELETE: { label: '删除物品', tone: 'red', group: '旧台账', legacy: true },
+  INVENTORY_MOVEMENT: { label: '库存流水', tone: 'gray', group: '旧台账', legacy: true },
+  INVENTORY_MOVEMENT_DELETE: { label: '删除库存流水', tone: 'red', group: '旧台账', legacy: true },
   SUPPLIER_CREATE: { label: '新增供应商', tone: 'gray', group: '供应商' },
   SUPPLIER_UPDATE: { label: '修改供应商', tone: 'gray', group: '供应商' },
   SUPPLIER_DELETE: { label: '删除供应商', tone: 'red', group: '供应商' },
-  PRICE_RECORD_CREATE: { label: '记价', tone: 'gray', group: '供应商' },
-  PRICE_RECORD_DELETE: { label: '删价', tone: 'red', group: '供应商' },
-  ATTACHMENT_UPLOAD: { label: '传附件', tone: 'gray', group: '附件' },
-  ATTACHMENT_DELETE: { label: '删附件', tone: 'red', group: '附件' },
+  PRICE_RECORD_CREATE: { label: '记录报价', tone: 'gray', group: '旧台账', legacy: true },
+  PRICE_RECORD_DELETE: { label: '删除报价', tone: 'red', group: '旧台账', legacy: true },
+  ATTACHMENT_UPLOAD: { label: '上传附件', tone: 'gray', group: '附件' },
+  ATTACHMENT_DELETE: { label: '删除附件', tone: 'red', group: '附件' },
   BACKUP_CREATE: { label: '创建备份', tone: 'gray', group: '系统' },
   BACKUP_RESTORE: { label: '恢复备份', tone: 'amber', group: '系统' },
-  BACKUP_DELETE: { label: '删备份', tone: 'red', group: '系统' },
+  BACKUP_DELETE: { label: '删除备份', tone: 'red', group: '系统' },
 };
 
+/** 「对象」列：服务端记的对象类型配中文名 */
+const ENTITY_LABELS: Record<string, string> = {
+  system: '系统', workflow: '业务登记', supplier: '供应商', procurementRequest: '申请', attachment: '附件', stock: '库存',
+};
+/** 筛选只列现在会记的动作；旧版本（旧台账等）的动作名只用来显示以前的记录 */
 const actionOptions = computed(() =>
   Object.entries(ACTION_LABELS)
+    .filter(([, meta]) => !meta.legacy)
     .map(([value, meta]) => ({ label: `${meta.group} · ${meta.label}`, value }))
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
 );
@@ -316,7 +323,7 @@ function clearSearch(): void {
               </Badge>
             </td>
             <td data-label="对象" class="align-top text-[13px] text-muted whitespace-nowrap num max-sm:col-span-2">
-              {{ log.entity ?? '—' }}<template v-if="log.entityId"> #{{ log.entityId }}</template>
+              {{ log.entity ? (ENTITY_LABELS[log.entity] ?? log.entity) : '—' }}<template v-if="log.entityId"> #{{ log.entityId }}</template>
             </td>
             <!-- sm:w-full sm:max-w-0：详情列吃掉剩余宽度、摘要按列宽截断（760px 的面板里其余列不被挤出视野） -->
             <td data-label="详情" class="align-top text-[13px] text-muted sm:w-full sm:max-w-0 max-sm:col-span-2 max-sm:has-[dl]:flex-wrap max-sm:has-[dl]:gap-y-1.5">

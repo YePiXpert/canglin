@@ -30,7 +30,13 @@ const applied = ref({ ...defaults });
 const loading = ref(false);
 const failure = ref('');
 const guard = createRequestGuard();
-const dateLabel = computed(() => `${applied.value.dateFrom || '最早'} 至 ${applied.value.dateTo || '最新'}`);
+/** 日期范围的说法：都没填是「全部时间」，只填一头写「…起」「截至 …」 */
+const dateLabel = computed(() => {
+  const { dateFrom, dateTo } = applied.value;
+  if (dateFrom && dateTo) return `${dateFrom} 至 ${dateTo}`;
+  if (dateFrom) return `${dateFrom} 起`;
+  return dateTo ? `截至 ${dateTo}` : '全部时间';
+});
 async function load() {
   const isCurrent = guard.begin();
   failure.value = '';
@@ -53,7 +59,7 @@ function exportAmounts() {
 }
 function exportRecipients() {
   if (!report.value) return;
-  downloadCsv(`领用记录_${dateLabel.value}`, ['领用人', '部门', '物品', '规格', '单位', '发放数量', '归还数量', '净领用', '发放单数'], report.value.recipients.map((row) => [row.recipient, row.department, row.itemName, row.specification, row.unit, row.quantity, row.returnedQuantity, row.netQuantity, row.times]));
+  downloadCsv(`员工领用_${dateLabel.value}`, ['领用人', '部门', '物品', '规格', '单位', '发放数量', '归还数量', '净领用', '发放单数'], report.value.recipients.map((row) => [row.recipient, row.department, row.itemName, row.specification, row.unit, row.quantity, row.returnedQuantity, row.netQuantity, row.times]));
 }
 onMounted(load);
 onUnmounted(() => guard.abandon());
@@ -151,11 +157,11 @@ const kpis = computed(() => {
     {
       label: '采购单数',
       value: `${purchaseCount.value} 单`,
-      hint: applied.value.groupBy === 'department' ? '跨部门单据各计一次' : '期间内的采购成交单',
+      hint: applied.value.groupBy === 'department' ? '跨部门的采购单，每个部门各算一单' : '这段时间的采购单',
     },
     { label: '到货原额', value: moneyLabel(r.grossReceiptAmount), hint: '登记到货的物品金额' },
-    { label: '净到货金额', value: moneyLabel(r.netReceiptAmount), hint: '到货原额 − 实物退货' },
-    { label: '实物退货金额', value: moneyLabel(r.supplierReturnAmount), hint: '包含退款与换货' },
+    { label: '净到货金额', value: moneyLabel(r.netReceiptAmount), hint: '到货原额 − 供应商退货' },
+    { label: '供应商退货金额', value: moneyLabel(r.supplierReturnAmount), hint: '含退款退货与换货补货' },
   ];
 });
 /** 查的是「全部」时，没有记录就是还没有业务；否则给一个回到全部时间的入口 */
@@ -164,7 +170,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
 
 <template>
   <div>
-    <PageHeader title="统计报表" description="采购、退款和领用均按实际业务日期统计；作废单据已排除" />
+    <PageHeader title="报表" description="采购、到货、退货和领用都按登记的业务日期统计；已撤销的登记不计入" />
 
     <!-- 筛选一行：期间（快捷分段）· 起始 / 结束日期 · 金额分组 · 查询报表 -->
     <form class="mb-6 flex flex-wrap items-end gap-3" @submit.prevent="load">
@@ -192,7 +198,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
             = 成交原额 <span class="num font-medium text-text">{{ moneyLabel(report.grossPurchaseAmount) }}</span>
             − 采购取消 <span class="num font-medium text-text">{{ moneyLabel(report.cancelledPurchaseAmount) }}</span>
             − 退款退货 <span class="num font-medium text-text">{{ moneyLabel(report.refundedPurchaseAmount) }}</span>
-            <span class="ml-1 text-meta">换货保留成交金额</span>
+            <span class="ml-1 text-meta">（换货补货不扣成交金额）</span>
           </p>
         </div>
         <dl class="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4 lg:flex lg:border-t-0 lg:border-l">
@@ -207,7 +213,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
       <!-- 分组方式与区间写在说明里，标题只写「采购金额」 -->
       <Panel title="采购金额" :description="`${appliedGroup.label}汇总 · ${dateLabel}`" flush>
         <template #actions>
-          <Button size="sm" :disabled="!report.groups.length" @click="exportAmounts"><Icon name="download" :size="14" />导出 CSV</Button>
+          <Button size="sm" :disabled="!report.groups.length" aria-label="导出采购金额 CSV" @click="exportAmounts"><Icon name="download" :size="14" />导出 CSV</Button>
         </template>
         <div v-if="report.groups.length" class="overflow-x-auto">
           <table class="table-base table-cards min-w-[720px]">
@@ -216,8 +222,8 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
                 <th scope="col" class="w-40">{{ groupColumn }}</th>
                 <th scope="col">净成交</th>
                 <th scope="col" class="w-32 text-right">成交原额</th>
-                <th scope="col" class="w-28 text-right">取消金额</th>
-                <th scope="col" class="w-28 text-right">退款金额</th>
+                <th scope="col" class="w-28 text-right">采购取消</th>
+                <th scope="col" class="w-28 text-right">退款退货</th>
                 <th scope="col" class="w-24 text-right">采购单数</th>
               </tr>
             </thead>
@@ -234,8 +240,8 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
                   </div>
                 </td>
                 <td data-label="成交原额" class="text-right num" :class="zeroClass(row.grossPurchaseAmount)">{{ moneyLabel(row.grossPurchaseAmount) }}</td>
-                <td data-label="取消金额" class="text-right num" :class="zeroClass(row.cancelledPurchaseAmount)">{{ moneyLabel(row.cancelledPurchaseAmount) }}</td>
-                <td data-label="退款金额" class="text-right num" :class="zeroClass(row.refundedPurchaseAmount)">{{ moneyLabel(row.refundedPurchaseAmount) }}</td>
+                <td data-label="采购取消" class="text-right num" :class="zeroClass(row.cancelledPurchaseAmount)">{{ moneyLabel(row.cancelledPurchaseAmount) }}</td>
+                <td data-label="退款退货" class="text-right num" :class="zeroClass(row.refundedPurchaseAmount)">{{ moneyLabel(row.refundedPurchaseAmount) }}</td>
                 <td data-label="采购单数" class="text-right num">{{ row.purchaseCount }}</td>
               </tr>
             </tbody>
@@ -256,13 +262,13 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
           <Button v-if="!allTime" size="sm" @click="selectPeriod('all')">查看全部时间</Button>
         </EmptyState>
         <template v-if="report.groups.length" #footer>
-          <p class="text-meta">各笔按实际发生日期计入；跨期退款可能使当期净额为负。</p>
+          <p class="text-meta">取消和退款按各自的登记日期计入，可能让某一期的净额为负。</p>
         </template>
       </Panel>
 
-      <Panel title="员工领用" description="按领用人、物品、规格和单位分别统计；每次领用按发放单计数，不同单位的数量不相加" flush>
+      <Panel title="员工领用" description="每人每种物品一行（品名、规格、单位都相同才算同一种）；发放单数是领了几次" flush>
         <template #actions>
-          <Button size="sm" :disabled="!report.recipients.length" @click="exportRecipients"><Icon name="download" :size="14" />导出 CSV</Button>
+          <Button size="sm" :disabled="!report.recipients.length" aria-label="导出员工领用 CSV" @click="exportRecipients"><Icon name="download" :size="14" />导出 CSV</Button>
         </template>
         <div v-if="report.recipients.length" class="overflow-x-auto">
           <table class="table-base table-cards min-w-[720px]">
@@ -291,7 +297,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
             </tbody>
           </table>
         </div>
-        <EmptyState v-else :icon="false" :title="allTime ? '还没有领用记录' : '这段时间没有领用记录'" description="直发和库存领用都会在此展示，员工归还单独列明。">
+        <EmptyState v-else :icon="false" :title="allTime ? '还没有领用记录' : '这段时间没有领用记录'" description="直接发放和库存领用都会算进来，员工归还记在「归还数量」一列。">
           <Button v-if="!allTime" size="sm" @click="selectPeriod('all')">查看全部时间</Button>
         </EmptyState>
       </Panel>

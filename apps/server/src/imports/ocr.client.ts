@@ -33,7 +33,7 @@ export class OcrClient {
       const detail = axios.isAxiosError(error)
         ? (error.response?.data?.detail ?? 'OCR 服务不可用或超时')
         : 'OCR 响应错误';
-      throw new ServiceUnavailableException(`单据解析失败：${detail}`);
+      throw new ServiceUnavailableException(`原件识别失败：${detail}`);
     }
   }
   async parse(file: Buffer, filename: string, page?: number) {

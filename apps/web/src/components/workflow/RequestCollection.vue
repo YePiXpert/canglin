@@ -35,7 +35,7 @@ const { data, loading, refreshing, error, load } = useWorkflowResource(() => wor
 onMounted(load);
 
 const STAGE_LABELS: Record<WorkflowStage, string> = {
-  PENDING_PURCHASE: '有待采购', PENDING_ARRIVAL: '有待到货', PENDING_DISTRIBUTION: '有待处理', COMPLETED: '已办结', CANCELLED: '已取消',
+  PENDING_PURCHASE: '待采购', PENDING_ARRIVAL: '待到货', PENDING_DISTRIBUTION: '到货待处理', COMPLETED: '已办结', CANCELLED: '已取消',
 };
 /** 分段筛选：全部 · 有待采购 · 有待到货 · 有待处理 · 已办结（「已取消」只能从地址进来，不单独占一段） */
 const stageTabs = computed<TabItem<string>[]>(() => [

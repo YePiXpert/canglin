@@ -152,7 +152,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await page.getByRole('button', { name: '领用与归还', exact: true }).click();
   const issue = documentCard(page, paper, '王五');
   await issue.getByRole('button', { name: '撤销登记', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '撤销业务登记', exact: true });
+  dialog = page.getByRole('dialog', { name: '撤销登记', exact: true });
   await dialog.getByLabel('撤销日期', { exact: true }).fill(businessDate);
   await dialog.getByLabel('撤销原因', { exact: true }).fill('验收：撤销重复领用');
   await dialog.getByRole('button', { name: '确认撤销登记', exact: true }).click();
@@ -174,7 +174,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('4 盒');
 
   await product(page, paper).getByRole('button', { name: '退回供应商', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '供应商退货', exact: true });
+  dialog = page.getByRole('dialog', { name: '退回供应商', exact: true });
   await dialog.getByLabel('业务日期', { exact: true }).fill(businessDate);
   const returnLines = dialog.locator('tr[data-command-line]').filter({ has: page.getByRole('checkbox', { name: paper, exact: true }) });
   const returnA = returnLines.filter({ hasText: supplierA });
@@ -182,7 +182,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await returnB.getByRole('checkbox').uncheck();
   await returnA.getByLabel(`${paper} 本次数量（盒）`, { exact: true }).fill('1');
   await dialog.getByLabel('原因', { exact: true }).fill('验收：供应商退款退货');
-  await dialog.getByRole('button', { name: '确认供应商退货', exact: true }).click();
+  await dialog.getByRole('button', { name: '确认退回供应商', exact: true }).click();
   await expect(product(page, paper).getByTestId('product-quantity')).toBeVisible();
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('3 盒');
   const request = await (await page.request.get(`/api/workflow/requests/${requestId}`)).json();

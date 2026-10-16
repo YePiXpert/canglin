@@ -31,10 +31,10 @@ const kindTone = computed(() => {
 const party = computed(() => {
   const { supplierName, kind, source, department } = props.document;
   if (supplierName) return supplierName;
-  const route = kind === 'DISTRIBUTION' && source ? (source === 'DIRECT' ? '直发' : '库存领用') : '';
+  const route = kind === 'DISTRIBUTION' && source ? (source === 'DIRECT' ? '直接发放' : '库存领用') : '';
   return [route, department].filter(Boolean).join(' · ');
 });
-const amountLabel = computed(() => ({ PURCHASE: '成交原额', RECEIPT: '到货金额', SUPPLIER_RETURN: '实物退货' } as Partial<Record<WorkflowDocumentRow['kind'], string>>)[props.document.kind] ?? '金额');
+const amountLabel = computed(() => ({ PURCHASE: '成交原额', RECEIPT: '到货金额', SUPPLIER_RETURN: '退货金额' } as Partial<Record<WorkflowDocumentRow['kind'], string>>)[props.document.kind] ?? '金额');
 const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货', RECEIPT: '待处理', DISTRIBUTION: '尚未归还' } as Partial<Record<WorkflowDocumentRow['kind'], string>>)[props.document.kind] : undefined));
 </script>
 
@@ -50,7 +50,7 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
     </header>
     <p v-if="document.note" class="mt-1.5 text-meta">{{ document.note }}</p>
     <p v-if="document.voidReason" class="mt-1.5 text-[13px] text-muted">撤销日期：{{ document.voidDate }} · 原因：{{ document.voidReason }}</p>
-    <p v-if="document.returnMode" class="mt-1.5 text-[13px] text-muted">{{ document.returnMode === 'REFUND' ? `退款退货 · 冲减成交 ${moneyLabel(refundReduction)}` : '换货补货 · 等待补发' }}</p>
+    <p v-if="document.returnMode" class="mt-1.5 text-[13px] text-muted">{{ document.returnMode === 'REFUND' ? `退款退货 · 成交额扣减 ${moneyLabel(refundReduction)}` : '换货补货 · 等待补发' }}</p>
     <ul class="mt-2.5 space-y-2.5">
       <li v-for="line in document.lines" :key="line.id" class="flex items-start justify-between gap-x-4 text-[13px]">
         <div class="min-w-0 flex-1">
@@ -58,7 +58,7 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
           <p class="mt-0.5 text-meta">明细 #{{ line.id }}<template v-if="line.sourceLineId"> · <Button variant="link" :aria-label="`查看来源明细 #${line.sourceLineId}`" @click="emit('source', line.sourceLineId)">来源明细 #{{ line.sourceLineId }}</Button></template><template v-if="line.recipient"> · {{ line.recipient }}</template><template v-if="line.unitPrice != null"> · <span class="num">{{ unitPriceLabel(line.unitPrice, line.unit) }}</span></template><template v-if="line.requestId"> · <router-link :to="`/requests/${line.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ line.serialNumber || '#' + line.requestId }}</router-link></template><template v-if="webLink(line.purchaseLink)"> · <a :href="webLink(line.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">商家链接</a></template><template v-if="document.kind === 'PURCHASE' && document.status === 'POSTED' && !readonly"> · <Button variant="link" :aria-label="`${line.purchaseLink ? '更换' : '添加'}「${line.itemName}」的采购链接`" @click="emit('link', line, document)">{{ line.purchaseLink ? '更换链接' : '添加链接' }}</Button></template></p>
           <p v-if="line.reason" class="mt-0.5 text-meta">{{ line.reason }}</p>
           <ul v-if="!line.sourceLineId && line.sourceAllocations?.length" class="mt-1 space-y-0.5 text-meta">
-            <li v-for="allocation in line.sourceAllocations" :key="allocation.originLineId"><Button variant="link" @click="emit('source', allocation.originLineId)">来源 #{{ allocation.originLineId }} · {{ quantityLabel(allocation.quantity, line.unit) }}</Button><template v-if="allocation.requestId"> · <router-link :to="`/requests/${allocation.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ allocation.serialNumber }}</router-link></template></li>
+            <li v-for="allocation in line.sourceAllocations" :key="allocation.originLineId"><Button variant="link" @click="emit('source', allocation.originLineId)">来源明细 #{{ allocation.originLineId }} · {{ quantityLabel(allocation.quantity, line.unit) }}</Button><template v-if="allocation.requestId"> · <router-link :to="`/requests/${allocation.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ allocation.serialNumber }}</router-link></template></li>
           </ul>
         </div>
         <div class="shrink-0 text-right">

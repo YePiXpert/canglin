@@ -60,7 +60,7 @@ defineExpose({ ask, cancel: () => finish(false) });
 <template>
   <Dialog
     :open="open"
-    title="会话已过期，请重新登录"
+    title="登录已过期，请重新输入密码"
     description="长时间没有操作，登录已失效。输入密码后会接着完成刚才的操作，页面上填写的内容不会丢失。"
     width="400px"
     :mobile-fullscreen="false"

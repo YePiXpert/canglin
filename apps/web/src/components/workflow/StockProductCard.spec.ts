@@ -18,7 +18,7 @@ function mountCard(props: { product?: WorkflowStockRow; receiving?: boolean; lay
 /** 主行里的动作按钮（去掉只有图标的展开按钮） */
 const actionNames = (wrapper: VueWrapper) => wrapper.findAll('header button').map((button) => button.text()).filter(Boolean);
 const button = (wrapper: VueWrapper, name: string) => wrapper.findAll('button').find((item) => item.text() === name)!;
-const expander = (wrapper: VueWrapper) => wrapper.find('button[aria-label="采购来源与数量"]');
+const expander = (wrapper: VueWrapper) => wrapper.find('button[aria-label$=" 的来源批次"]');
 /** 照 Playwright getByText(text, { exact: true }) 的规则找元素：文字完全相同，且没有哪个子元素的文字也完全相同（那样算子元素） */
 function exactText(root: DOMWrapper<Element>, text: string): Element[] {
   const same = (element: Element) => element.textContent?.replace(/\s+/g, ' ').trim() === text;
@@ -88,7 +88,7 @@ describe('StockProductCard', () => {
     expect(region.findAll('li')).toHaveLength(2);
     expect(region.find('li').text()).toContain('甲供应商 · ¥20.00 / 盒');
     expect(region.find('li').text()).toContain('库存 1 盒');
-    await region.find('button[aria-label="查看来源明细 #21"]').trigger('click');
+    await region.find('button[aria-label="查看到货明细 #21"]').trigger('click');
     expect(wrapper.emitted('source')).toEqual([[21]]);
     expect(wrapper.findAllComponents(RouterLinkStub).map((link) => link.props('to'))).toEqual(['/requests/2', '/requests/3']);
     await expander(wrapper).trigger('click');

@@ -90,8 +90,8 @@ describe('RequestCollection：表格与筛选', () => {
 
   it('分段筛选映射到 stage，写进地址并回到第 1 页；地址里的 stage 进来就是当前项', async () => {
     const w = await mountAt('/requests?page=3');
-    expect(w.findAll('[aria-label="按进度筛选"] button').map((b) => b.text())).toEqual(['全部', '有待采购', '有待到货', '有待处理', '已办结']);
-    await buttonNamed(w, '有待到货').trigger('click');
+    expect(w.findAll('[aria-label="按进度筛选"] button').map((b) => b.text())).toEqual(['全部', '待采购', '待到货', '到货待处理', '已办结']);
+    await buttonNamed(w, '待到货').trigger('click');
     await flushPromises();
     expect(lastQuery()).toMatchObject({ stage: 'PENDING_ARRIVAL', page: 1 });
     expect(router.currentRoute.value.query).toEqual({ stage: 'PENDING_ARRIVAL' });
@@ -99,14 +99,14 @@ describe('RequestCollection：表格与筛选', () => {
 
     const again = await mountAt('/requests?stage=PENDING_DISTRIBUTION');
     expect(lastQuery()).toMatchObject({ stage: 'PENDING_DISTRIBUTION' });
-    expect(buttonNamed(again, '有待处理').attributes('aria-pressed')).toBe('true');
+    expect(buttonNamed(again, '到货待处理').attributes('aria-pressed')).toBe('true');
     expect(buttonNamed(again, '全部').attributes('aria-pressed')).toBe('false');
   });
 
   it('pending（工作台）：只请求有待办的申请，没有「已办结」筛选', async () => {
     const w = await mountAt('/workbench', { pending: true });
     expect(lastQuery()).toMatchObject({ pending: '1' });
-    expect(w.findAll('[aria-label="按进度筛选"] button').map((b) => b.text())).toEqual(['全部', '有待采购', '有待到货', '有待处理']);
+    expect(w.findAll('[aria-label="按进度筛选"] button').map((b) => b.text())).toEqual(['全部', '待采购', '待到货', '到货待处理']);
   });
 });
 
@@ -129,12 +129,12 @@ describe('RequestCollection：空态与错误', () => {
     const w = await mountAt(`/requests?search=${encodeURIComponent('惠普硒鼓')}&stage=PENDING_ARRIVAL`);
     expect(lastQuery()).toMatchObject({ search: '惠普硒鼓', stage: 'PENDING_ARRIVAL' });
     expect(w.text()).toContain('没有找到「惠普硒鼓」相关的申请');
-    expect(w.text()).toContain('当前筛选：有待到货。试试放宽条件。');
+    expect(w.text()).toContain('当前筛选：待到货。试试放宽条件。');
     expect(w.text()).not.toContain('还没有申请单');
     await buttonNamed(w, '只清除关键词').trigger('click');
     await flushPromises();
     expect(lastQuery()).toMatchObject({ search: undefined, stage: 'PENDING_ARRIVAL', page: 1 });
-    expect(w.text()).toContain('没有「有待到货」的申请');
+    expect(w.text()).toContain('没有「待到货」的申请');
     await buttonNamed(w, '清除全部条件').trigger('click');
     await flushPromises();
     expect(lastQuery()).toMatchObject({ search: undefined, stage: undefined, page: 1 });

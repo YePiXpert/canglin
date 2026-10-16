@@ -182,7 +182,7 @@ async function save() {
 
       <div class="mt-6 mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <h3 class="text-[13px] font-semibold text-ink">申请明细<span class="ml-0.5 text-accent" aria-hidden="true">*</span></h3>
-        <p class="text-meta">按原件逐行填写；同名不同规格的物品分开两行</p>
+        <p class="text-meta">逐行填写；同名不同规格的物品分开两行</p>
       </div>
       <!-- 桌面是一张表（列头只写一次）；手机上表格拆成一行一张小卡 -->
       <div class="sm:overflow-clip sm:rounded-lg sm:border sm:border-line">

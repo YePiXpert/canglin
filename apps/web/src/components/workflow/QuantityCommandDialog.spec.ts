@@ -79,8 +79,8 @@ describe('QuantityCommandDialog：打开时的默认值', () => {
     // 表格式明细：一条明细一行；规格与来源是品名下方的 meta，可操作数量单独一列
     expect(rows(wrapper)).toHaveLength(2);
     expect(rows(wrapper)[0].text()).toContain('A4 / 80g · 到货明细 #101');
-    expect(rows(wrapper)[0].find('td[data-label="可操作"]').text()).toBe('2.5 盒');
-    expect(rows(wrapper)[1].find('td[data-label="可操作"]').text()).toBe('3 支');
+    expect(rows(wrapper)[0].find('td[data-label="可办理"]').text()).toBe('2.5 盒');
+    expect(rows(wrapper)[1].find('td[data-label="可办理"]').text()).toBe('3 支');
     expect(lineCheckbox(wrapper, 'A4 复印纸').element).toHaveProperty('checked', true);
     expect(lineCheckbox(wrapper, '中性笔').element).toHaveProperty('checked', true);
     expect(field(wrapper, '业务日期').element).toHaveProperty('value', TODAY);
@@ -171,7 +171,7 @@ describe('QuantityCommandDialog：数量校验', () => {
 
   it('取消类动作必须填写原因', async () => {
     const wrapper = mountDialog('REQUEST_CANCEL', [paper]);
-    await submit(wrapper, '取消未采购申请量');
+    await submit(wrapper, '取消未采购量');
     expect(wrapper.text()).toContain('请填写实际退回或取消的原因');
     expect(api.cancelRequest).not.toHaveBeenCalled();
   });
@@ -284,7 +284,7 @@ describe('QuantityCommandDialog：提交的数据', () => {
     const wrapper = mountDialog('SUPPLIER_RETURN', [{ ...paper, location: 'STOCK' }, { ...pen, id: 104 }]);
     await field(wrapper, 'A4 复印纸 本次数量（盒）').setValue('1');
     await wrapper.find('textarea').setValue('质量问题');
-    await submit(wrapper, '供应商退货');
+    await submit(wrapper, '退回供应商');
     expect(api.supplierReturn).toHaveBeenCalledWith({
       date: TODAY,
       reason: '质量问题',
@@ -303,7 +303,7 @@ describe('QuantityCommandDialog：提交的数据', () => {
     await modes.findAll('button').find((b) => b.text() === '换货补货')!.trigger('click');
     expect(wrapper.text()).toContain('保留成交金额，退回数量重新成为该采购的待到货量。');
     await wrapper.find('textarea').setValue('型号不符');
-    await submit(wrapper, '供应商退货');
+    await submit(wrapper, '退回供应商');
     expect(api.supplierReturn).toHaveBeenCalledWith({
       date: TODAY,
       reason: '型号不符',
@@ -321,7 +321,7 @@ describe('QuantityCommandDialog：提交的数据', () => {
     const cancel = mountDialog('PURCHASE_CANCEL', [pen]);
     await field(cancel, '中性笔 本次数量（支）').setValue('0.5');
     await cancel.find('textarea').setValue('供应商缺货');
-    await submit(cancel, '取消未到货采购');
+    await submit(cancel, '取消未到货量');
     expect(api.cancelPurchase).toHaveBeenCalledWith({ date: TODAY, reason: '供应商缺货', lines: [{ purchaseLineId: 102, quantity: '0.5' }] });
   });
 

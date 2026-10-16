@@ -93,7 +93,8 @@ export class AuthService {
     return row.sessionEpoch;
   }
 
-  async recover(recoveryCode: string, newPassword: string, ip?: string): Promise<void> {
+  /** 用恢复码重置密码：恢复码同时换新（用过的作废），新码返回给页面显示一次 */
+  async recover(recoveryCode: string, newPassword: string, ip?: string): Promise<{ recoveryCode: string }> {
     const row = await this.prisma.systemSecurity.findUnique({ where: { id: 1 } });
     if (!row?.recoveryCodeHash) throw new UnauthorizedException('恢复码不可用');
 
@@ -122,6 +123,7 @@ export class AuthService {
       },
     });
     await this.audit.log('AUTH_RECOVER', { entity: 'system', ip });
+    return { recoveryCode: nextCode };
   }
 
   async changePassword(currentPassword: string, newPassword: string, ip?: string): Promise<void> {

@@ -26,6 +26,8 @@ const password = ref('');
 const passwordConfirm = ref('');
 const recoveryCode = ref('');
 const recoveryCodeIssued = ref('');
+/** 恢复码是在哪一步发的：初始化（之后进入系统）或用恢复码重置密码（旧码已作废，之后回到登录） */
+const issuedBy = ref<'setup' | 'recover'>('setup');
 const loading = ref(false);
 const copied = ref(false);
 const errors = ref<Record<string, string>>({});
@@ -55,10 +57,13 @@ async function submit(): Promise<void> {
   try {
     if (mode.value === 'setup') {
       recoveryCodeIssued.value = await auth.setup(password.value);
+      issuedBy.value = 'setup';
     } else if (mode.value === 'recover') {
-      await auth.recover(recoveryCode.value.trim(), password.value);
-      toast.success('密码已重置，请用新密码登录');
+      const next = await auth.recover(recoveryCode.value.trim(), password.value);
       backToLogin();
+      // 用过的恢复码已经作废：先把新的给用户保存，再回到登录
+      recoveryCodeIssued.value = next;
+      issuedBy.value = 'recover';
     } else {
       await auth.login(password.value);
       toast.success('登录成功');
@@ -101,6 +106,10 @@ async function copyCode(): Promise<void> {
 
 function finishSetup(): void {
   recoveryCodeIssued.value = '';
+  if (issuedBy.value === 'recover') {
+    toast.success('请用新密码登录');
+    return;
+  }
   void router.push('/workbench');
 }
 
@@ -111,15 +120,15 @@ const subheading = computed(() =>
   mode.value === 'setup'
     ? '首次使用，请为系统设置一个管理员密码（至少 8 位）'
     : mode.value === 'recover'
-      ? '输入初始化时生成的恢复码与新密码'
-      : '单管理员模式，输入密码继续',
+      ? '输入恢复码和新密码'
+      : '输入管理员密码继续',
 );
 
 /** 桌面左栏的三条价值点 */
 const VALUES = [
   { icon: 'file', title: '原件先存档', text: '上传即保存 OA 原件，确认后关联到申请，随时对照查看。' },
   { icon: 'layers', title: '按量采购可追溯', text: '同一明细可分次、分供应商采购，每批数量与成交价都留痕。' },
-  { icon: 'inventory', title: '库存与领用同一本账', text: '直发、入库、领用与归还按物品和单位记账。' },
+  { icon: 'inventory', title: '库存与领用同一本账', text: '直接发放、入库、领用与归还都按物品和单位记账。' },
 ];
 /* 朱砂方印：品牌唯一的实心朱砂色块（与顶栏一致；实心底上的字用 primary-fg） */
 const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg-accent text-sm font-bold leading-none text-primary-fg select-none';
@@ -137,13 +146,13 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
         <span :class="SEAL" aria-hidden="true">仓廪</span>
         <div class="min-w-0">
           <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
-          <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
+          <p class="text-[13px] text-muted">采购与领用</p>
         </div>
       </div>
       <div class="my-auto max-w-sm py-12">
         <LineArt name="granary-scene" :size="340" class="-ml-2 max-w-full text-faint" />
         <p class="mt-8 text-[22px] leading-8 font-bold tracking-[-0.01em] text-ink">从 OA 申请到领用，记在同一本账上</p>
-        <p class="mt-2 text-[13px] leading-relaxed text-muted">导入已审批的申请，分次采购、到货、发放与库存都跟着申请走，每一笔都能追到原件。</p>
+        <p class="mt-2 text-[13px] leading-relaxed text-muted">导入或录入申请，分次采购、到货、发放与库存都跟着申请走，每一笔都能追到原件。</p>
         <ul class="mt-8 space-y-4">
           <li v-for="v in VALUES" :key="v.title" class="flex items-start gap-3">
             <Icon :name="v.icon" :size="18" class="mt-px shrink-0 text-muted" />
@@ -166,7 +175,7 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
           <span :class="SEAL" aria-hidden="true">仓廪</span>
           <div class="min-w-0">
             <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
-            <p class="text-[13px] text-muted">采购与领用 · 单管理员</p>
+            <p class="text-[13px] text-muted">采购与领用</p>
           </div>
         </div>
 
@@ -175,8 +184,8 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
           <span class="mx-auto flex items-center justify-center size-11 rounded-full bg-red-soft text-red">
             <Icon name="alert-circle" :size="20" />
           </span>
-          <p class="mt-4 text-lg font-bold text-ink">连接不上后端服务</p>
-          <p class="mt-1 text-[13px] text-muted">服务可能还在启动，或者容器没跑起来。</p>
+          <p class="mt-4 text-lg font-bold text-ink">连不上仓廪服务</p>
+          <p class="mt-1 text-[13px] text-muted">服务可能还在启动，稍后点「重试」；一直连不上请检查服务器是否开着。</p>
           <Button variant="primary" size="lg" class="w-full mt-6" :loading="loading" @click="auth.refresh()">重试</Button>
         </div>
 
@@ -184,10 +193,10 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
         <div v-else-if="recoveryCodeIssued">
           <div class="flex items-center gap-2 text-teal">
             <Icon name="check-circle" :size="18" />
-            <p class="text-lg font-bold">初始化完成</p>
+            <p class="text-lg font-bold">{{ issuedBy === 'recover' ? '密码已重置' : '初始化完成' }}</p>
           </div>
           <p class="mt-2 text-[13px] text-muted leading-relaxed">
-            请把恢复码保存在安全的地方，密码遗忘时用它重置：
+            {{ issuedBy === 'recover' ? '刚才用的恢复码已经作废，请保存新的恢复码，忘记密码时用它重置：' : '请把恢复码保存在安全的地方，忘记密码时用它重置：' }}
           </p>
           <p class="mt-4 py-3 px-4 bg-surface-2 border border-line rounded-lg text-center font-mono text-lg tracking-[0.2em] text-ink select-all break-all">
             {{ recoveryCodeIssued }}
@@ -196,7 +205,7 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
             <Icon :name="copied ? 'check' : 'copy'" :size="14" /> {{ copied ? '已复制' : '复制恢复码' }}
           </Button>
           <Notice tone="red" variant="inline" size="sm" class="mt-4">恢复码只显示这一次，离开页面后无法再次查看。</Notice>
-          <Button variant="primary" size="lg" class="w-full mt-5" @click="finishSetup">我已保存，进入系统</Button>
+          <Button variant="primary" size="lg" class="w-full mt-5" @click="finishSetup">{{ issuedBy === 'recover' ? '我已保存，去登录' : '我已保存，进入系统' }}</Button>
         </div>
 
         <template v-else>
@@ -233,10 +242,10 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
               :error="errors.confirm"
             />
 
-            <Notice v-if="auth.status.locked" tone="red" size="sm">失败次数过多已锁定，约 {{ lockMinutes }} 分钟后可重试</Notice>
+            <Notice v-if="auth.status.locked" tone="red" size="sm">密码或恢复码输错次数过多，已暂时锁定，约 {{ lockMinutes }} 分钟后可重试</Notice>
 
             <Button variant="primary" size="lg" type="submit" class="w-full mt-2" :loading="loading" :disabled="auth.status.locked">
-              {{ mode === 'setup' ? '初始化系统' : mode === 'recover' ? '重置密码' : '登 录' }}
+              {{ mode === 'setup' ? '初始化系统' : mode === 'recover' ? '重置密码' : '登录' }}
             </Button>
           </form>
 
@@ -250,7 +259,7 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
         </template>
       </div>
 
-      <p class="mt-6 text-meta">本地部署 · 数据自持 · v{{ appVersion }}</p>
+      <p class="mt-6 text-meta">本地部署 · 数据存在自己的服务器 · v{{ appVersion }}</p>
     </div>
   </div>
 </template>

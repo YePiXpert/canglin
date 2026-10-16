@@ -31,12 +31,12 @@ export interface QuantityChoice { id: number; itemName: string; specification?: 
  */
 const props = defineProps<{ open: boolean; action: QuantityCommand; choices: QuantityChoice[]; context?: string; department?: string; recipient?: string }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
-const labels: Record<QuantityCommand, string> = { STOCK_IN: '登记入库', DIRECT: '直接发放', STOCK: '库存领用', SUPPLIER_RETURN: '供应商退货', EMPLOYEE_RETURN: '员工归还', PURCHASE_CANCEL: '取消未到货采购', REQUEST_CANCEL: '取消未采购申请量' };
+const labels: Record<QuantityCommand, string> = { STOCK_IN: '登记入库', DIRECT: '直接发放', STOCK: '库存领用', SUPPLIER_RETURN: '退回供应商', EMPLOYEE_RETURN: '员工归还', PURCHASE_CANCEL: '取消未到货量', REQUEST_CANCEL: '取消未采购量' };
 const descriptions: Record<QuantityCommand, string> = {
   STOCK_IN: '只将已到货待处理的实际数量转入库存', DIRECT: '发放已到货物品；未发完的余量继续待处理，入库需另行登记',
   STOCK: '记录实际领用人和数量；同一物品可以拆给多人', SUPPLIER_RETURN: '选择实际退货数量及处理方式；已发放物品必须先由员工归还',
   EMPLOYEE_RETURN: '关联原领用明细，归还后转入库存；再次领用应新增领用记录',
-  PURCHASE_CANCEL: '只取消本次成交尚未到货的数量；已到货物品请登记供应商退货', REQUEST_CANCEL: '只取消尚未采购的申请数量，保留原申请和取消原因',
+  PURCHASE_CANCEL: '只取消本次成交尚未到货的数量；已到货的请用「退回供应商」', REQUEST_CANCEL: '只取消尚未采购的申请数量，保留原申请和取消原因',
 };
 const returnModes = [{ value: 'REFUND' as const, label: '退款退货' }, { value: 'REPLACEMENT' as const, label: '换货补货' }];
 const distribution = computed(() => props.action === 'DIRECT' || props.action === 'STOCK');
@@ -176,7 +176,7 @@ async function save() {
     </div>
     <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
       <template #head>
-        <th scope="col" class="w-28 text-right">可操作</th>
+        <th scope="col" class="w-28 text-right">可办理</th>
         <th scope="col" class="w-40">本次数量</th>
         <th v-if="distribution" scope="col" class="w-44">领用人</th>
       </template>
@@ -190,7 +190,7 @@ async function save() {
               <Button variant="ghost" size="sm" :disabled="saving || lines.length >= 200" @click="split(line.key)"><Icon name="plus" :size="14" />拆给另一位领用人</Button>
             </div>
           </td>
-          <td data-label="可操作" class="num text-right" :class="line.selected ? '' : 'text-faint'">{{ quantityLabel(line.available, line.unit) }}</td>
+          <td data-label="可办理" class="num text-right" :class="line.selected ? '' : 'text-faint'">{{ quantityLabel(line.available, line.unit) }}</td>
           <td data-label="本次数量" class="sm:py-2">
             <div v-if="line.selected" class="flex items-center gap-1.5 max-sm:w-44">
               <Input v-model="line.quantity" size="sm" hide-label :label="`${line.itemName} 本次数量（${line.unit}）`" type="number" min="0" :max="line.available" step="0.000001" required :error="errors[`quantity.${line.key}`]" :disabled="saving" class="min-w-0 flex-1 [&_input]:text-right" />

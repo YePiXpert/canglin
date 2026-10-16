@@ -16,13 +16,13 @@ export const router = createRouter({
         { path: 'requests/:id', name: 'request-detail', component: () => import('@/views/workflow/RequestDetailView.vue'), meta: { title: '申请详情', icon: 'ledger' } },
         { path: 'stock', name: 'stock', component: () => import('@/views/workflow/StockView.vue'), meta: { title: '库存与领用', icon: 'inventory' } },
         { path: 'insights', name: 'insights', component: () => import('@/views/WorkflowReportsView.vue'), meta: { title: '报表', icon: 'report' } },
-        { path: 'import', name: 'import', component: () => import('@/views/ImportView.vue'), meta: { title: '导入单据', icon: 'import' } },
+        { path: 'import', name: 'import', component: () => import('@/views/ImportView.vue'), meta: { title: '导入 OA 单', icon: 'import' } },
         {
           path: 'settings',
           component: () => import('@/components/layout/SettingsLayout.vue'),
           children: [
             { path: '', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置', icon: 'settings' } },
-            { path: 'suppliers', name: 'suppliers', component: () => import('@/views/SuppliersView.vue'), meta: { title: '供应商与比价', icon: 'supplier' } },
+            { path: 'suppliers', name: 'suppliers', component: () => import('@/views/SuppliersView.vue'), meta: { title: '供应商与成交价', icon: 'supplier' } },
             { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: '审计日志', icon: 'audit' } },
           ],
         },

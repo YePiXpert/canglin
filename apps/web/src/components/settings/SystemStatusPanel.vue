@@ -28,7 +28,7 @@ const description = computed(() =>
 const figures = computed(() => [
   { label: '申请单', value: String(props.status?.counts.requests ?? '—') },
   { label: '物品', value: String(props.status?.counts.products ?? '—') },
-  { label: '有效单据（已过账）', value: String(props.status?.counts.documents ?? '—') },
+  { label: '业务记录（未撤销）', value: String(props.status?.counts.documents ?? '—') },
   { label: '数据库', value: formatBytes(props.status?.dbSizeBytes ?? 0) },
 ]);
 </script>
@@ -64,7 +64,7 @@ const figures = computed(() => [
       </SettingRow>
     </div>
     <div v-if="ocrOk === false" class="px-5 pb-4">
-      <Notice size="sm">OCR 不可用时导入页仍能打开，但上传后会解析失败。可以先人工录入申请单。</Notice>
+      <Notice size="sm">OCR 不可用时导入页仍能打开，但上传后会识别失败。可以先人工录入申请。</Notice>
     </div>
   </Panel>
 </template>

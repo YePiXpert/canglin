@@ -56,7 +56,7 @@ const intro = computed(() => !task.value && (!taskId.value || missing.value));
     <div v-if="duplicateFile" class="card flex flex-wrap items-center gap-x-3.5 gap-y-2.5 px-4.5 py-3.5">
       <Badge tone="amber">同一原件</Badge>
       <p class="min-w-60 flex-1 text-[13px] leading-5 text-text">
-        相同内容的原件已经上传过，本次尚未开始解析。<template v-if="duplicateTaskId">可以打开已有任务继续处理。</template>
+        相同内容的原件已经上传过，这次还没有开始识别。<template v-if="duplicateTaskId">可以打开已有任务继续处理。</template>
       </p>
       <div class="flex flex-wrap gap-2">
         <Button v-if="duplicateTaskId" size="sm" variant="primary" @click="openDuplicate">打开已有任务</Button>
@@ -67,14 +67,14 @@ const intro = computed(() => !task.value && (!taskId.value || missing.value));
 
     <p class="flex items-start gap-1.5 text-meta">
       <Icon name="info" :size="14" class="mt-0.5 shrink-0" />
-      <span>启用自动智能导入后，每张单据的原件将发送给设置中的 AI 服务；未确认的原件保留 30 天。</span>
+      <span>开启「上传后自动识别单据」后，原件会发送给设置里的 AI 服务；还没确认入账的原件保留 30 天。</span>
     </p>
 
     <div v-if="intro" class="card mt-6 px-4.5 py-4">
       <h2 class="text-[15px] leading-6 font-semibold text-ink">上传之后会发生什么</h2>
       <ol class="mt-2.5 grid gap-x-4 gap-y-3 text-[13px] leading-5 text-muted sm:grid-cols-3">
-        <li><span class="mb-0.5 block font-medium text-ink">① 原件先保存</span>原件先存档，确认后关联到申请，之后随时可对照查看。</li>
-        <li><span class="mb-0.5 block font-medium text-ink">② 逐页识别</span>AI 逐页读取原件，未启用或失败的页由本地 OCR 补充；仍失败可人工补录。</li>
+        <li><span class="mb-0.5 block font-medium text-ink">① 先保存原件</span>上传后原件就存档，入账后关联到申请，随时可以对照查看。</li>
+        <li><span class="mb-0.5 block font-medium text-ink">② 逐页识别</span>AI 逐页读取原件；没开 AI 或 AI 没读出来的页由本地 OCR 识别，还不行就人工补录。</li>
         <li><span class="mb-0.5 block font-medium text-ink">③ 对照原件核对</span>核对单据头和每一行明细，确认后生成申请，可直接继续办理。</li>
       </ol>
     </div>

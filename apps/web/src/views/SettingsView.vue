@@ -124,7 +124,7 @@ async function recheckOcr(): Promise<void> {
   ocrChecking.value = true;
   ocrOk.value = await systemApi.ocrHealth();
   ocrChecking.value = false;
-  toast.info(ocrOk.value ? 'OCR 服务正常' : 'OCR 服务仍不可用，检查容器是否在运行');
+  toast.info(ocrOk.value ? 'OCR 服务正常' : 'OCR 服务仍不可用，请稍后再试或检查服务器');
 }
 </script>
 

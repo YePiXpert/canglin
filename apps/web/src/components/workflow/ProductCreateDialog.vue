@@ -28,7 +28,7 @@ async function save() {
 }
 </script>
 <template>
-  <Dialog :open="open" title="新增库存物品" description="品名、规格与计量单位共同区分物品；创建后可登记盘点增加，申请到货入库会自动建立物品" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
+  <Dialog :open="open" title="新增库存物品" description="品名、规格与单位共同区分一种物品；建好后用「盘点调整」录入现有数量。录入或导入申请时会自动建立物品，不用在这里先建" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
     <Input v-model="form.itemName" label="物品名称" required :error="errors.itemName" :disabled="saving" />
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
       <Input v-model="form.specification" label="规格" placeholder="如 A4 / 80g（可空）" :disabled="saving" />

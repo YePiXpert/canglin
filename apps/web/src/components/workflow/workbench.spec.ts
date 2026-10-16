@@ -79,7 +79,7 @@ describe('WorkbenchRequestRow', () => {
     expect(action.text()).toBe('定去向');
     expect(action.attributes('aria-label')).toBe('定去向 OA-7');
     expect(action.classes()).toContain('bg-primary');
-    expect(wrapper.text()).toContain('4 包已到，直发或入库');
+    expect(wrapper.text()).toContain('4 包已到，直接发放或入库');
     expect(wrapper.findAll('.badge').map((b) => b.text())).toEqual(['待处理', '待到货', '待采购']);
     expect(wrapper.text()).toContain('行政部 · 王晓敏');
     expect(wrapper.text()).toContain('2026-10-09 · 2 条明细');

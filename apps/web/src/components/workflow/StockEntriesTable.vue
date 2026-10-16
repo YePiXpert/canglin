@@ -31,12 +31,12 @@ const decrease = (entry: WorkflowStockEntryRow) => entry.quantity.startsWith('-'
 </script>
 
 <template>
-  <Panel title="库存流水" description="带符号数量记录入库、出库与冲销；不同单位的数量分别展示" flush>
+  <Panel title="库存流水" description="每一笔库存增减（+ 增加、− 减少）；撤销登记会反向记一笔" flush>
     <div v-if="loading" class="divide-y divide-line">
       <div v-for="n in 5" :key="n" class="flex items-center gap-4 px-4 py-3.5"><Skeleton class="h-3.5 w-20" /><Skeleton class="h-3.5 w-48" /><Skeleton class="ml-auto h-3.5 w-16" /></div>
     </div>
     <ErrorState v-else-if="error" :message="error" @retry="emit('retry')" />
-    <EmptyState v-else-if="!entries?.items.length" icon="layers" title="还没有库存流水" description="登记入库、库存领用、退货和盘点调整之后，每一笔数量变化都会记在这里" />
+    <EmptyState v-else-if="!entries?.items.length" icon="layers" title="还没有库存流水" description="登记到货、入库、发放、归还、退回供应商和盘点调整后，每一笔数量变化都会记在这里。" />
     <div v-else class="overflow-x-auto">
       <table class="table-base table-cards min-w-[760px]">
         <thead><tr><th scope="col">日期</th><th scope="col">物品</th><th scope="col">业务类型</th><th scope="col">位置</th><th scope="col" class="text-right">数量变化</th><th scope="col">来源</th></tr></thead>
@@ -44,10 +44,10 @@ const decrease = (entry: WorkflowStockEntryRow) => entry.quantity.startsWith('-'
           <tr v-for="entry in entries.items" :key="entry.id">
             <td data-label="日期" class="num text-muted">{{ entry.date }}</td>
             <td class="card-title sm:w-full sm:max-w-0"><p class="font-medium text-ink sm:truncate" :title="entry.itemName">{{ entry.itemName }}</p><p class="text-meta sm:truncate">{{ entry.specification || '未填写规格' }}</p></td>
-            <td data-label="业务类型"><span class="inline-flex items-center gap-1.5 sm:whitespace-nowrap">{{ documentKindLabels[entry.documentKind] }}<Badge v-if="entry.reversalOfId" tone="outline">冲销</Badge></span></td>
+            <td data-label="业务类型"><span class="inline-flex items-center gap-1.5 sm:whitespace-nowrap">{{ documentKindLabels[entry.documentKind] }}<Badge v-if="entry.reversalOfId" tone="outline">撤销</Badge></span></td>
             <td data-label="位置" class="text-muted sm:whitespace-nowrap">{{ entry.location === 'STOCK' ? '库存' : '到货待处理' }}</td>
             <td data-label="数量变化" class="text-right num"><span class="font-medium" :class="decrease(entry) ? 'text-red' : 'text-teal'">{{ decrease(entry) ? '' : '+' }}{{ quantityLabel(entry.quantity, entry.unit) }}</span></td>
-            <td data-label="来源" class="text-meta sm:whitespace-nowrap"><Button variant="link" @click="emit('inspectDocument', entry.documentId)">业务 #{{ entry.documentId }}</Button> · <Button variant="link" @click="emit('inspectLine', entry.originLineId)">来源明细 #{{ entry.originLineId }}</Button></td>
+            <td data-label="来源" class="text-meta sm:whitespace-nowrap"><Button variant="link" @click="emit('inspectDocument', entry.documentId)">记录 #{{ entry.documentId }}</Button> · <Button variant="link" @click="emit('inspectLine', entry.originLineId)">来源明细 #{{ entry.originLineId }}</Button></td>
           </tr>
         </tbody>
       </table>

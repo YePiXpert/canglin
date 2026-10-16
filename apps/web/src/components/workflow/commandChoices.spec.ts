@@ -62,7 +62,7 @@ describe('stockIssueChoices', () => {
     expect(stockIssueChoices(stock({ stockQuantity: '3.5' }))).toEqual([
       {
         id: 11, itemName: 'A4 复印纸', specification: 'A4 / 80g', unit: '盒', available: '3.5',
-        sourceHint: '当前可领用库存；按实际数量自动关联入库来源',
+        sourceHint: '当前库存；领用多少，系统按来源批次自动扣减',
       },
     ]);
   });

@@ -66,7 +66,7 @@ async function saveBackupConfig(): Promise<void> {
 
 <template>
   <!-- 自动备份：开关一行；间隔、保留份数与保存一行 -->
-  <Panel title="自动备份" description="定期打包数据库与附件，保留最近 N 份" flush>
+  <Panel title="自动备份" description="定期打包数据库与附件，按设定的份数保留最近的备份" flush>
     <div class="divide-y divide-line">
       <!-- 说明走 Switch 的 description（aria-describedby），这里把它调成设置行的 12.5px muted -->
       <Switch

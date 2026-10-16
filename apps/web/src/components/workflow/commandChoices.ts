@@ -7,7 +7,7 @@ export function requestCancelChoices(request: WorkflowRequestRow): QuantityChoic
 }
 
 export function stockIssueChoices(product: WorkflowStockRow): QuantityChoice[] {
-  return [{ id: product.productId, itemName: product.itemName, specification: product.specification, unit: product.unit, available: product.stockQuantity, sourceHint: '当前可领用库存；按实际数量自动关联入库来源' }];
+  return [{ id: product.productId, itemName: product.itemName, specification: product.specification, unit: product.unit, available: product.stockQuantity, sourceHint: '当前库存；领用多少，系统按来源批次自动扣减' }];
 }
 
 export function stockSourceChoices(product: WorkflowStockRow, location: WorkflowLocation): QuantityChoice[] {

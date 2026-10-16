@@ -200,7 +200,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                 <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 py-1">
                   <Button variant="link" class="mr-1 h-6 text-xs font-medium" @click="focusLine(l)">
                     <Icon name="scan" :size="13" class="shrink-0" />明细 {{ i + 1 }} ·
-                    {{ l.source ? `第 ${l.source.page} 页` : '人工录入／历史结果' }}
+                    {{ l.source ? `第 ${l.source.page} 页` : '人工添加' }}
                   </Button>
                   <Badge v-if="!l.quantity || Number(l.quantity) <= 0" tone="amber" dot
                     >数量未确认，暂不能入账。</Badge
@@ -210,7 +210,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                     tone="amber"
                     >请核对同名明细的规格。</Badge
                   >
-                  <Badge v-if="lowConfidence(l)" tone="amber">识别置信度低，请对照原件。</Badge>
+                  <Badge v-if="lowConfidence(l)" tone="amber">这一行识别得不太确定，请对照原件。</Badge>
                   <Badge v-if="isShortLink(l.purchaseLink)" tone="amber">短链接容易失效，建议换成商品页地址。</Badge>
                   <span v-if="unitHint(l)" class="inline-flex flex-wrap items-center gap-1 text-xs text-muted">
                     {{ unitHint(l)!.label }}
@@ -259,7 +259,7 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
                 summary-class="rounded-(--radius-control) px-3 py-2 text-xs font-medium text-muted hover:text-ink"
               >
                 <div class="space-y-3 px-3 pb-3 text-xs leading-5 text-muted">
-                  <p class="break-all">原始文本：{{ l.source?.rawText || '无可信文本来源' }}</p>
+                  <p class="break-all">原始文本：{{ l.source?.rawText || '没有读到原文' }}</p>
                   <p v-if="localValue(l)?.purchaseLink" class="break-all">原件链接：{{ localValue(l)!.purchaseLink }}</p>
                   <div v-if="localValue(l)" class="space-y-2 border-t border-line pt-3">
                     <p>

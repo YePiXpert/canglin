@@ -38,7 +38,7 @@ const navItems: NavItem[] = [
   { path: '/workbench', title: '工作台', icon: 'kanban' },
   { path: '/requests', title: '申请单', icon: 'ledger' },
   { path: '/stock', title: '库存与领用', icon: 'inventory' },
-  { path: '/import', title: '导入单据', icon: 'import' },
+  { path: '/import', title: '导入 OA 单', icon: 'import' },
   { path: '/insights', title: '报表', icon: 'report' },
   { path: '/settings', title: '设置', icon: 'settings' },
 ];
@@ -167,7 +167,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
         <button type="button" :class="buttonClass({ variant: 'ghost', iconOnly: true })" :aria-label="themeLabel" @click="theme.toggle()">
           <Icon :name="theme.resolved === 'dark' ? 'sun' : 'moon'" :size="18" />
         </button>
-        <Menu :items="accountItems" label="管理员 · 单管理员模式">
+        <Menu :items="accountItems" label="管理员">
           <template #trigger>
             <button type="button" :class="buttonClass({ variant: 'ghost', iconOnly: true })" aria-label="账号菜单">
               <span class="flex size-6.5 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold text-ink" aria-hidden="true">管</span>
@@ -256,7 +256,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
           <div class="mx-auto mb-2 h-1 w-9 rounded-full bg-line-strong" aria-hidden="true" />
           <div class="flex items-center justify-between mb-4">
             <DialogTitle class="text-[15px] font-semibold text-ink">更多功能</DialogTitle>
-            <DialogDescription class="sr-only">底部标签栏放不下的导航，以及深浅色切换和退出登录</DialogDescription>
+            <DialogDescription class="sr-only">设置、深浅色切换和退出登录</DialogDescription>
             <button
               type="button"
               :class="buttonClass({ variant: 'ghost', iconOnly: true })"

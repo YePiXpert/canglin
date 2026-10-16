@@ -74,7 +74,7 @@ describe('ReceiptRegisterDialog', () => {
     expect(rows.map((row) => row.attributes('data-receipt-line'))).toEqual(['201', '203']);
     expect(wrapper.text()).not.toContain('订书钉');
     expect(rows[0].text()).toContain('A4 / 80g · 本批采购 6 盒 · 已到 2 盒');
-    expect(rows[0].find('td[data-label="尚欠"]').text()).toBe('4 盒');
+    expect(rows[0].find('td[data-label="待到货"]').text()).toBe('4 盒');
     expect(lineCheckbox(wrapper, 'A4 复印纸').element).toHaveProperty('checked', true);
     expect(field(wrapper, 'A4 复印纸 本次到货数量（盒）').element).toHaveProperty('value', '4');
     expect(field(wrapper, 'A4 复印纸 本次到货数量（盒）').attributes('max')).toBe('4');

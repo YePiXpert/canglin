@@ -70,7 +70,7 @@ test('放弃草稿会删除原件并退出任务，保存失败也可以主动�
   await expect.poll(async () => (await (await page.request.get(`/api/imports/tasks/${id}`)).json()).status).toBe('DONE');
   await expect(page.getByRole('button', { name: '放弃草稿', exact: true })).toBeVisible();
   await page.route(`**/api/imports/tasks/${id}/draft`, (route) => route.fulfill({ status: 503, json: { message: '合成保存失败' } }));
-  await page.getByRole('combobox', { name: '申领部门', exact: true }).fill('未保存的修改');
+  await page.getByRole('combobox', { name: '申请部门', exact: true }).fill('未保存的修改');
   await expect(page.getByText(/草稿保存失败/)).toBeVisible();
   await page.getByRole('button', { name: '放弃草稿', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '放弃草稿？' });
@@ -105,7 +105,7 @@ test('草稿载入前草稿区只读：识别中的输入不会被载入的草�
   await page.locator('input[type=file]').setInputFiles({ name: 'hydration-race.png', mimeType: 'image/png', buffer: imageFile('hydration-race') });
   await expect(page).toHaveURL(/task=/);
   const id = new URL(page.url()).searchParams.get('task')!;
-  const department = page.getByRole('combobox', { name: '申领部门', exact: true });
+  const department = page.getByRole('combobox', { name: '申请部门', exact: true });
   await expect(department).toBeDisabled();
   // fill 等到草稿载入、输入框可编辑后才输入，这次修改会正常自动保存
   const saved = page.waitForResponse((r) => r.url().endsWith(`/api/imports/tasks/${id}/draft`) && r.request().method() === 'PUT');
@@ -186,7 +186,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     expect((await page.request.get(originalUrl!)).ok()).toBeTruthy();
     const name = await page.getByPlaceholder('品名（同名不同规格请明确区分）').inputValue();
     await page.getByRole('button', { name: '确认全部内容并导入' }).click();
-    await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+    await expect(page.getByText(/已创建申请：1 条明细/)).toBeVisible();
 
     // 在申请详情里继续办理：采购 → 到货 → 直发（AI）/ 入库（本地）
     await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
@@ -443,7 +443,7 @@ test.describe.serial('未完成的导入：找回、切换与隔离', () => {
     const revisionCount = await revisions();
     await page.goto('/import');
     await page.locator('input[type=file]').setInputFiles(files.A);
-    const banner = page.getByText('相同内容的原件已经上传过，本次尚未开始解析。', { exact: false });
+    const banner = page.getByText('相同内容的原件已经上传过，这次还没有开始识别。', { exact: false });
     await expect(banner).toBeVisible();
     await page.getByRole('button', { name: '打开已有任务', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`task=${ids.A}`));
@@ -520,7 +520,7 @@ test.describe('手机 390px', () => {
     await expect(page.getByTestId('import-save-state')).toHaveText('草稿已保存');
     await page.screenshot({ path: test.info().outputPath('mobile-import-review.png') });
     await page.getByRole('button', { name: '确认全部内容并导入' }).click();
-    await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+    await expect(page.getByText(/已创建申请：1 条明细/)).toBeVisible();
     await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
     await expect(page).toHaveURL(/\/requests\/\d+$/);
     await expect(page.getByText(name, { exact: true })).toBeVisible();
@@ -567,7 +567,7 @@ test('单位按物品库自动填；采购链接精简后随导入入账，可�
   await expect(link).toHaveValue('https://item.jd.com/100012345.html');
   await expect(page.getByRole('link', { name: '打开第 1 行采购链接' })).toHaveAttribute('href', 'https://item.jd.com/100012345.html');
   await page.getByRole('button', { name: '确认全部内容并导入' }).click();
-  await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+  await expect(page.getByText(/已创建申请：1 条明细/)).toBeVisible();
 
   // 刚入账就发现数量错了：撤回入账，任务退回待核对，草稿还是入账时的内容
   await page.getByRole('button', { name: '撤回入账', exact: true }).click();
@@ -578,7 +578,7 @@ test('单位按物品库自动填；采购链接精简后随导入入账，可�
   await expect(link).toHaveValue('https://item.jd.com/100012345.html');
   await qty.fill('6');
   await page.getByRole('button', { name: '确认全部内容并导入' }).click();
-  await expect(page.getByText(/已创建 1 条/)).toBeVisible();
+  await expect(page.getByText(/已创建申请：1 条明细/)).toBeVisible();
   await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
   await expect(page).toHaveURL(/\/requests\/\d+$/);
   const row = page.locator('tr[data-request-line]');
@@ -589,7 +589,7 @@ test('单位按物品库自动填；采购链接精简后随导入入账，可�
   await page.getByRole('button', { name: '登记采购', exact: true }).click();
   dialog = page.getByRole('dialog', { name: '登记本次采购', exact: true });
   await expect(dialog.getByLabel(`${known} 采购链接`, { exact: true })).toHaveValue('https://item.jd.com/100012345.html');
-  await expect(dialog.getByText('来自申请（OA 原件上的链接）')).toBeVisible();
+  await expect(dialog.getByText('来自申请', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
   await expect(dialog).toHaveCount(0);
 

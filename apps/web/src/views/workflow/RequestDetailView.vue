@@ -155,7 +155,7 @@ async function deleteRequest() {
         <div class="mb-2.5 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
           <div class="min-w-0 flex-[1_1_20rem]">
             <h2 id="request-lines-title" class="text-[15px] leading-6 font-semibold text-ink">申请明细与数量进度</h2>
-            <p class="mt-0.5 text-[13px] text-muted">申请量不变；同一条明细可以同时有待采购、待到货、待处理和已处理的数量</p>
+            <p class="mt-0.5 text-[13px] text-muted">申请数量不变；同一条明细可以一部分待采购、一部分待到货、一部分待处理或已处理</p>
           </div>
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted" aria-hidden="true">
             <span v-for="segment in PROGRESS_SEGMENTS" :key="segment.key" class="inline-flex items-center gap-1.5"><span class="size-2 rounded-[2px]" :class="segment.color" />{{ segment.label }}</span>

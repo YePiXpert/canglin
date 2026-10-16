@@ -441,7 +441,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('任务仍在处理中，请先取消');
     await this.original(id);
     if (stage === 'ai' && !(await this.aiConfig.canImport(await this.aiConfig.getConfig())))
-      throw new BadRequestException('请配置并检测智能导入能力');
+      throw new BadRequestException('请先在设置里连接 AI 服务并通过检测');
     const generation = row.generation + 1;
     const update = await this.prisma.importTask.updateMany({
       where: { id, generation: row.generation, confirmedAt: null },

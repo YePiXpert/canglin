@@ -70,7 +70,8 @@ export function progressChips(lines: WorkflowRequestLineRow[]): ProgressChip[] {
     chips.push({
       key: 'purchase',
       tone: 'gray',
-      label: `待采购 ${purchase.length} 项`,
+      // 只有一条时写数量（与申请详情页头的 chip 一致），多条写项数
+      label: purchase.length === 1 ? `待采购 ${quantityLabel(purchase[0].pendingPurchaseQuantity, purchase[0].unit)}` : `待采购 ${purchase.length} 项`,
       detail: purchase.length > 1 ? purchase.map((line) => `${lineTitle(line)}：${quantityLabel(line.pendingPurchaseQuantity, line.unit)}`).join('\n') : undefined,
     });
   }

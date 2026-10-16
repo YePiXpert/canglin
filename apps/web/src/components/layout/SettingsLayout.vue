@@ -16,7 +16,7 @@ const route = useRoute();
 const router = useRouter();
 
 const PAGES = [
-  { to: '/settings/suppliers', label: '供应商与比价' },
+  { to: '/settings/suppliers', label: '供应商与成交价' },
   { to: '/settings/audit', label: '审计日志' },
 ] as const;
 const FIRST = SETTINGS_SECTIONS[0].id;
@@ -171,7 +171,7 @@ const GROUP_LABEL = 'hidden px-2.5 pb-1 text-[11px] leading-4 tracking-[0.08em] 
           {{ section.label }}
         </a>
         <span class="h-5 w-px shrink-0 bg-line lg:hidden" aria-hidden="true" />
-        <p :class="GROUP_LABEL" class="lg:pt-3.5">主数据与记录</p>
+        <p :class="GROUP_LABEL" class="lg:pt-3.5">供应商与日志</p>
         <router-link v-for="page in PAGES" :key="page.to" v-slot="{ href, navigate, isActive }" :to="page.to" custom>
           <a :href="href" :class="itemClass(isActive)" :aria-current="isActive ? 'page' : undefined" @click="navigate">
             {{ page.label }}

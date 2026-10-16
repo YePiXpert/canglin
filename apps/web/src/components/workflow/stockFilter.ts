@@ -8,7 +8,7 @@ import type { WorkflowStockRow } from '@canglin/shared';
  */
 export type StockFilter = 'in' | 'empty' | 'all';
 export const STOCK_FILTERS: StockFilter[] = ['in', 'empty', 'all'];
-export const STOCK_FILTER_LABELS: Record<StockFilter, string> = { in: '有库存', empty: '已空', all: '全部' };
+export const STOCK_FILTER_LABELS: Record<StockFilter, string> = { in: '有库存', empty: '已空', all: '全部物品' };
 
 export const hasStock = (product: WorkflowStockRow) => product.stockQuantity !== '0';
 export const isEmptied = (product: WorkflowStockRow) => product.stockQuantity === '0' && product.receivingQuantity === '0' && product.sources.length > 0;

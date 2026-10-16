@@ -22,7 +22,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       const mapped =
         exception.code === 'P2002'
-          ? new ConflictException('数据违反唯一约束，请检查是否重复')
+          ? new ConflictException('有重复的记录，请检查后再试')
           : exception.code === 'P2025'
             ? new NotFoundException('记录不存在')
             : new InternalServerErrorException('数据库操作失败');

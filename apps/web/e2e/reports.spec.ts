@@ -25,7 +25,7 @@ test('报表按业务发生日期展示退款，CSV 与页面金额和区间一�
   await expect(row).toContainText('¥-0.34');
   await expect(panel).toContainText('2025-02-01 至 2025-02-28');
   const downloadPromise = page.waitForEvent('download');
-  await panel.getByRole('button', { name: '导出 CSV', exact: true }).click();
+  await panel.getByRole('button', { name: '导出采购金额 CSV', exact: true }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain('2025-02-01 至 2025-02-28');
   const stream = await download.createReadStream();

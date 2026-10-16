@@ -65,7 +65,7 @@ async function save() {
     </div>
     <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
       <template #head>
-        <th scope="col" class="w-28 text-right">尚欠</th>
+        <th scope="col" class="w-28 text-right">待到货</th>
         <th scope="col" class="w-40">本次到货</th>
       </template>
       <tbody>
@@ -75,7 +75,7 @@ async function save() {
               <span class="font-medium" :class="line.selected ? 'text-ink' : 'text-muted'">{{ line.itemName }}</span>
             </Checkbox>
           </td>
-          <td data-label="尚欠" class="num text-right" :class="line.selected ? '' : 'text-faint'">{{ quantityLabel(line.maximum, line.unit) }}</td>
+          <td data-label="待到货" class="num text-right" :class="line.selected ? '' : 'text-faint'">{{ quantityLabel(line.maximum, line.unit) }}</td>
           <td data-label="本次到货" class="sm:py-2">
             <div v-if="line.selected" class="flex items-center gap-1.5 max-sm:w-44">
               <Input v-model="line.quantity" size="sm" hide-label :label="`${line.itemName} 本次到货数量（${line.unit}）`" type="number" min="0" :max="line.maximum" step="0.000001" required :error="errors[`quantity.${line.id}`]" :disabled="saving" class="min-w-0 flex-1 [&_input]:text-right" />

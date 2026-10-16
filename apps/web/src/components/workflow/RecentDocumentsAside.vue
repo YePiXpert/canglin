@@ -43,7 +43,7 @@ function summary(document: WorkflowDocumentRow): string {
 function extras(document: WorkflowDocumentRow): string[] {
   if (document.status === 'VOIDED') return ['已撤销'];
   if (document.kind === 'PURCHASE') return [PAYMENT_STATUS_LABELS[document.paymentStatus]];
-  if (document.kind === 'DISTRIBUTION' && document.source) return [document.source === 'DIRECT' ? '直发' : '库存领用'];
+  if (document.kind === 'DISTRIBUTION' && document.source) return [document.source === 'DIRECT' ? '直接发放' : '库存领用'];
   if (document.kind === 'SUPPLIER_RETURN' && document.returnMode) return [document.returnMode === 'REFUND' ? '退款退货' : '换货补货'];
   return [];
 }

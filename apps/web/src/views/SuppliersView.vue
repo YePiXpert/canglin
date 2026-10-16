@@ -117,7 +117,7 @@ onMounted(() => { void loadSuppliers(); if (state.tab === 'prices') void loadPri
 <template>
   <!-- 一层面板：标题行 + 工具栏（视图切换 · 搜索 · 右侧计数与新增）+ 贴边表格；宽度由 SettingsLayout 限制在 760px -->
   <div>
-    <Panel title="供应商与成交价格" description="同一物品、规格、单位下，各供应商最近一次实际成交价；采购时可直接参考" flush>
+    <Panel title="供应商与成交价" description="同一物品、规格、单位下，各供应商最近一次实际成交价；采购时可直接参考" flush>
       <template #toolbar>
         <Tabs :model-value="state.tab" variant="segmented" :tabs="[{ value: 'suppliers', label: '供应商' }, { value: 'prices', label: '成交价格' }]" aria-label="供应商与成交价格" @change="switchTab" />
         <SearchInput v-if="state.tab === 'prices'" v-model="state.priceSearch" class="w-full sm:w-72" placeholder="搜索品名或规格" aria-label="搜索成交价格" @search="loadPrices" />
@@ -190,7 +190,7 @@ onMounted(() => { void loadSuppliers(); if (state.tab === 'prices') void loadPri
         <EmptyState v-else-if="!prices.length" icon="receipt" title="还没有成交价格" description="登记采购后会自动保留成交价；同名不同规格或单位分别展示。" />
         <div v-else class="overflow-x-auto"><table class="table-base table-cards min-w-[640px]">
           <thead><tr><th scope="col">品名 / 规格</th><th scope="col" class="w-36">供应商</th><th scope="col" class="w-32 text-right">成交单价</th><th scope="col" class="w-28">日期</th><th scope="col" class="w-44 text-right">来源</th></tr></thead>
-          <tbody><tr v-for="price in shownPrices" :key="price.purchaseLineId"><td><p class="font-medium text-ink">{{ price.itemName }}</p><p class="text-meta">{{ price.specification || '未注明规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">{{ unitPriceLabel(price.unitPrice, price.unit) }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源" class="sm:whitespace-nowrap sm:py-2 sm:text-right"><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="mr-3 text-xs">商家链接</a><Button size="sm" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button></td></tr></tbody>
+          <tbody><tr v-for="price in shownPrices" :key="price.purchaseLineId"><td><p class="font-medium text-ink">{{ price.itemName }}</p><p class="text-meta">{{ price.specification || '未填写规格' }}</p></td><td data-label="供应商">{{ price.supplierName }}</td><td data-label="成交单价" class="text-right num">{{ unitPriceLabel(price.unitPrice, price.unit) }}</td><td data-label="日期" class="text-muted num">{{ price.date }}</td><td data-label="来源" class="sm:whitespace-nowrap sm:py-2 sm:text-right"><a v-if="webLink(price.purchaseLink)" :href="webLink(price.purchaseLink)" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })" class="mr-3 text-xs">商家链接</a><Button size="sm" :loading="openingPrice === price.purchaseLineId" @click="openPurchase(price.purchaseLineId)">原采购申请</Button></td></tr></tbody>
         </table></div>
       </template>
       <template v-if="state.tab === 'prices' && !pricesFirstLoad && !priceError && prices.length > PRICE_BATCH" #footer>

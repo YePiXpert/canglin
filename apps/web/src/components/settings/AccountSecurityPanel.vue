@@ -74,7 +74,7 @@ async function changePassword(): Promise<void> {
   passwordOpen.value = false;
   // 服务端改密后会递增 sessionEpoch 踢掉所有会话（含当前这个），
   // 不主动跳转的话用户下一次点任何东西都会莫名其妙被弹回登录页
-  toast.success('密码已修改，所有登录会话已失效，请用新密码重新登录');
+  toast.success('密码已修改，请用新密码重新登录');
   auth.loggedIn = false;
   setTimeout(() => void router.push('/login'), 900);
 }
@@ -136,12 +136,12 @@ async function copyRecoveryCode(): Promise<void> {
 
 <template>
   <!-- 账号安全：退出登录在顶栏的账号菜单（手机在「更多」里），这里不再重复 -->
-  <Panel v-bind="$attrs" title="账号安全" description="单管理员模式，会话 30 分钟无操作自动过期" flush>
+  <Panel v-bind="$attrs" title="账号安全" description="只有一个管理员账号；30 分钟不操作会自动退出登录" flush>
     <div class="divide-y divide-line">
-      <SettingRow label="登录密码" description="修改后所有已登录会话立即失效，需要用新密码重新登录">
+      <SettingRow label="登录密码" description="修改后所有已登录的地方都会退出，需要用新密码重新登录">
         <Button size="sm" @click="openPasswordDialog">修改密码</Button>
       </SettingRow>
-      <SettingRow label="恢复码" description="忘记密码时用它重置；重新生成后旧恢复码立即失效">
+      <SettingRow label="恢复码" description="忘记密码时用它重置；重置恢复码后旧的立即失效">
         <Button size="sm" @click="recoveryDialogOpen = true"><Icon name="key" :size="14" />重置恢复码</Button>
       </SettingRow>
     </div>
@@ -151,7 +151,7 @@ async function copyRecoveryCode(): Promise<void> {
   <Dialog
     :open="passwordOpen"
     title="修改密码"
-    description="修改后所有已登录会话立即失效，需要用新密码重新登录。"
+    description="修改后所有已登录的地方都会退出，需要用新密码重新登录。"
     width="440px"
     :dirty="passwordDirty && !passwordSaving"
     :persistent="passwordSaving"
