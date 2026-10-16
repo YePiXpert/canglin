@@ -18,7 +18,7 @@ const emit = defineEmits<{ recorded: [document: WorkflowDocumentRow]; attachment
 const toast = useToastStore();
 const purchaseOpen = ref(false), purchaseTarget = ref<WorkflowRequestRow | null>(null);
 const receiptOpen = ref(false), receiptTarget = ref<WorkflowDocumentRow | null>(null);
-const commandOpen = ref(false), commandTarget = ref<{ action: QuantityCommand; choices: QuantityChoice[]; context: string; department: string } | null>(null);
+const commandOpen = ref(false), commandTarget = ref<{ action: QuantityCommand; choices: QuantityChoice[]; context: string; department: string; recipient: string } | null>(null);
 const voidOpen = ref(false), voidTarget = ref<WorkflowDocumentRow | null>(null);
 const metadataOpen = ref(false), metadataTarget = ref<WorkflowDocumentRow | null>(null);
 const adjustmentOpen = ref(false), adjustmentTarget = ref<WorkflowStockRow | null>(null);
@@ -28,7 +28,8 @@ const linkOpen = ref(false), linkTarget = ref<LinkTarget | null>(null);
 
 function purchase(request: WorkflowRequestRow) { purchaseTarget.value = request; purchaseOpen.value = true; }
 function receipt(document: WorkflowDocumentRow) { receiptTarget.value = document; receiptOpen.value = true; }
-function command(action: QuantityCommand, choices: QuantityChoice[], context = '', department = '') { commandTarget.value = { action, choices, context, department }; commandOpen.value = true; }
+/** department / recipient：从申请详情发起时带上申请部门与经办人（直接发放默认发给经办人，docs/manual-entry-2026-10.md P3） */
+function command(action: QuantityCommand, choices: QuantityChoice[], context = '', department = '', recipient = '') { commandTarget.value = { action, choices, context, department, recipient }; commandOpen.value = true; }
 function voidDocument(document: WorkflowDocumentRow) { voidTarget.value = document; voidOpen.value = true; }
 function metadata(document: WorkflowDocumentRow) { metadataTarget.value = document; metadataOpen.value = true; }
 function adjust(product: WorkflowStockRow) { adjustmentTarget.value = product; adjustmentOpen.value = true; }
@@ -53,7 +54,7 @@ defineExpose({ purchase, receipt, command, voidDocument, metadata, adjust, attac
 <template>
   <PurchaseRegisterDialog v-if="purchaseTarget" v-model:open="purchaseOpen" :request="purchaseTarget" @recorded="recorded" />
   <ReceiptRegisterDialog v-if="receiptTarget" v-model:open="receiptOpen" :purchase="receiptTarget" @recorded="recorded" />
-  <QuantityCommandDialog v-if="commandTarget" v-model:open="commandOpen" :action="commandTarget.action" :choices="commandTarget.choices" :context="commandTarget.context" :department="commandTarget.department" @recorded="recorded" />
+  <QuantityCommandDialog v-if="commandTarget" v-model:open="commandOpen" :action="commandTarget.action" :choices="commandTarget.choices" :context="commandTarget.context" :department="commandTarget.department" :recipient="commandTarget.recipient" @recorded="recorded" />
   <VoidDocumentDialog v-if="voidTarget" v-model:open="voidOpen" :document="voidTarget" @recorded="recorded" />
   <WorkflowMetadataDialog v-if="metadataTarget" v-model:open="metadataOpen" :document="metadataTarget" @recorded="recorded"><template #attachments><WorkflowAttachments :document-id="metadataTarget.id" :attachments="metadataTarget.attachments" @changed="refreshAttachments" /></template></WorkflowMetadataDialog>
   <StockAdjustmentDialog v-if="adjustmentTarget" v-model:open="adjustmentOpen" :product="adjustmentTarget" @recorded="recorded" />

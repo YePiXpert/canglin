@@ -124,7 +124,7 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
           <ErrorState title="待办申请加载失败" :message="pendingError" @retry="loadPending" />
         </div>
         <div v-else-if="!requests.length && firstUse" class="card">
-          <EmptyState art="ledger" title="还没有申请单" description="从右上角导入 OA 原件，或人工录入一张已审批申请。">
+          <EmptyState art="ledger" title="还没有申请单" description="从右上角导入 OA 原件，或人工录入一张申请。">
             <Button size="sm" @click="creating = true">人工录入申请</Button>
           </EmptyState>
         </div>

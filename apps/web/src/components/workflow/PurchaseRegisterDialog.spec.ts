@@ -49,7 +49,7 @@ const request = {
     requestLine({ id: 12, productId: 2, itemName: '验收笔', unit: '支', quantity: '5', pendingPurchaseQuantity: '5' }),
     requestLine({ id: 13, productId: 3, itemName: '已采购完的物品', quantity: '2', orderedQuantity: '2' }),
   ],
-  attachments: [], deletable: true,
+  attachments: [], deletable: true, systemSerial: null, autoSerial: false,
 } as unknown as WorkflowRequestRow;
 
 const suppliers = [{ id: 7, name: '甲供应商' }, { id: 8, name: '乙供应商' }] as SupplierRow[];

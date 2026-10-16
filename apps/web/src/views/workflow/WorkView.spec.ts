@@ -29,7 +29,7 @@ function line(over: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRo
 function request(id: number, requestDate: string, pending: Partial<WorkflowRequestLineRow>): WorkflowRequestRow {
   return {
     id, serialNumber: `OA-${id}`, department: '行政部', handler: '王晓敏', requestDate, note: null, sourceTaskId: null,
-    createdAt: '2026-10-01T00:00:00.000Z', lines: [line({ requestId: id, ...pending })], attachments: [], deletable: true,
+    createdAt: '2026-10-01T00:00:00.000Z', lines: [line({ requestId: id, ...pending })], attachments: [], deletable: true, systemSerial: null, autoSerial: false,
   };
 }
 const OVERVIEW: WorkflowOverview = {

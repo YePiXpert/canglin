@@ -68,7 +68,7 @@ export class AiToolsService {
       type: 'function', function: { name, description, parameters: { type: 'object', properties, additionalProperties: false } },
     });
     return [
-      tool('query_requests', '查询 OA 审批后申请及每条物理明细的进度、待采购/到货/处理数量。日期按申请日期过滤，同名不同规格/单位分别保留。', {
+      tool('query_requests', '查询申请（OA 审批单导入或人工录入）及每条物理明细的进度、待采购/到货/处理数量。日期按申请日期过滤，同名不同规格/单位分别保留。autoSerial 为 true 的申请没有 OA 单号，流水号是系统编号「无OA-日期-序号」；补填 OA 流水号后 systemSerial 仍是原系统编号。', {
         search: { type: 'string', description: '流水号/品名/部门/经办人关键字；只支持单个关键字，如『签字笔』或『综合管理部』，不支持多个关键字' },
         ...paging, ...dates,
         productId: { type: 'integer', description: '筛选包含该物品 ID 的申请；整份申请仍返回所有物理行，按品名/规格/单位区分' },
@@ -166,7 +166,7 @@ export class AiToolsService {
   systemPrompt(): string {
     return [
       '你是「仓廪」办公用品业务的只读查询助手。今天日期 ' + todayString() + '。',
-      '业务模型：OA 已审批申请保留物理明细，以品名+规格+单位区分物品；每条可分次、多供应商、不同成交价采购，部分收货后直发或入库，库存再领用。另有供应商退货、员工归还及撤销/取消。',
+      '业务模型：申请来自 OA 审批单，或没有 OA 单号、打过招呼先采购的人工录入（流水号以「无OA-」开头），保留物理明细，以品名+规格+单位区分物品；每条可分次、多供应商、不同成交价采购，部分收货后直发或入库，库存再领用。另有供应商退货、员工归还及撤销/取消。',
       '回答规则：',
       '1. 申请与待办查询用 query_requests，供应商/价格/付款报销/发票/领用/退回明细用 query_documents，当前待处理量和库存用 query_stock，统计优先用 query_workflow_reports。',
       '2. 所有数字、状态和来源 ID 必须来自工具结果；没有数据就明确说明。总条数用 total，页内明细不能代表全量；truncated 时说明结果截断或进一步查询。',

@@ -7,6 +7,7 @@ import {
 } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
+import Combobox from '@/components/ui/Combobox.vue';
 import Input from '@/components/ui/Input.vue';
 import Textarea from '@/components/ui/Textarea.vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
@@ -19,10 +20,16 @@ import { todayString } from '@/utils/datetime';
 import RegisterLineTable from './RegisterLineTable.vue';
 import { useRegisterLines } from './useRegisterLines';
 import { quantityError, quantityLabel } from './presentation';
+import { departmentNames, departmentOptions, lastDepartment, personNames, personOptions, similarName, useDirectory } from './directory';
 
 export type QuantityCommand = 'STOCK_IN' | 'DIRECT' | 'STOCK' | 'SUPPLIER_RETURN' | 'EMPLOYEE_RETURN' | 'PURCHASE_CANCEL' | 'REQUEST_CANCEL';
 export interface QuantityChoice { id: number; itemName: string; specification?: string; unit: string; available: string; sourceHint?: string; location?: WorkflowLocation }
-const props = defineProps<{ open: boolean; action: QuantityCommand; choices: QuantityChoice[]; context?: string; department?: string }>();
+/**
+ * department / recipient：从申请详情发起时的申请部门与经办人。发放类弹窗头部有「领用部门」「领用人」（可输入的下拉，
+ * 候选来自已有申请与发放记录，docs/manual-entry-2026-10.md P3）：领用人填一次各行跟着填，某一行单独改过就不再跟着变；
+ * 从申请直接发放时领用人默认是经办人。选了以前的领用人、领用部门空着时带出他最近一次的部门。
+ */
+const props = defineProps<{ open: boolean; action: QuantityCommand; choices: QuantityChoice[]; context?: string; department?: string; recipient?: string }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
 const labels: Record<QuantityCommand, string> = { STOCK_IN: '登记入库', DIRECT: '直接发放', STOCK: '库存领用', SUPPLIER_RETURN: '供应商退货', EMPLOYEE_RETURN: '员工归还', PURCHASE_CANCEL: '取消未到货采购', REQUEST_CANCEL: '取消未采购申请量' };
 const descriptions: Record<QuantityCommand, string> = {
@@ -34,20 +41,66 @@ const descriptions: Record<QuantityCommand, string> = {
 const returnModes = [{ value: 'REFUND' as const, label: '退款退货' }, { value: 'REPLACEMENT' as const, label: '换货补货' }];
 const distribution = computed(() => props.action === 'DIRECT' || props.action === 'STOCK');
 const requiresReason = computed(() => ['SUPPLIER_RETURN', 'EMPLOYEE_RETURN', 'PURCHASE_CANCEL', 'REQUEST_CANCEL'].includes(props.action));
-const form = reactive({ date: todayString(), department: '', note: '', reason: '', returnMode: 'REFUND' as 'REFUND' | 'REPLACEMENT' });
+const form = reactive({ date: todayString(), department: '', recipient: '', note: '', reason: '', returnMode: 'REFUND' as 'REFUND' | 'REPLACEMENT' });
 let sequence = 0;
-type Line = QuantityChoice & { key: number; selected: boolean; quantity: string; recipient: string };
+/** recipientEdited：这一行的领用人单独改过（或是拆出来的行），不再跟着头部的「领用人」变 */
+type Line = QuantityChoice & { key: number; selected: boolean; quantity: string; recipient: string; recipientEdited: boolean };
 const lines = ref<Line[]>([]);
 const snapshot = () => JSON.stringify({ form, lines: lines.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 /** 行级错误的顺序与列一致：本次数量在前、领用人在后 */
 const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.key}`, `recipient.${line.key}`]);
+const { directory, load: loadDirectory } = useDirectory();
+/** 从申请直接发放时默认的领用人（申请的经办人） */
+const defaultRecipient = computed(() => (props.action === 'DIRECT' ? props.recipient?.trim() ?? '' : ''));
+/** 领用部门是按领用人的以往记录带出来的：领用人再变时跟着变；人工改过就不再动 */
+const departmentAuto = ref(false);
 watch(() => props.open, (open) => {
   if (!open) return;
-  Object.assign(form, { date: todayString(), department: props.department || '', note: '', reason: '', returnMode: 'REFUND' });
-  lines.value = props.choices.filter((line) => line.available !== '0').map((line) => ({ ...line, key: ++sequence, selected: true, quantity: line.available, recipient: '' }));
+  Object.assign(form, { date: todayString(), department: props.department || '', recipient: defaultRecipient.value, note: '', reason: '', returnMode: 'REFUND' });
+  lines.value = props.choices.filter((line) => line.available !== '0').map((line) => ({ ...line, key: ++sequence, selected: true, quantity: line.available, recipient: defaultRecipient.value, recipientEdited: false }));
+  departmentAuto.value = false;
   reset();
+  if (distribution.value) void loadDirectory();
 }, { immediate: true });
+
+/** who：按谁的以往记录带出部门，默认是头部的「领用人」；头部空着时按行里选的领用人 */
+function fillDepartment(who = form.recipient) {
+  if (form.department.trim() && !departmentAuto.value) return;
+  const next = lastDepartment(directory.value, who);
+  if (next) {
+    form.department = next;
+    departmentAuto.value = true;
+  } else if (departmentAuto.value) {
+    form.department = '';
+    departmentAuto.value = false;
+  }
+}
+watch(directory, () => fillDepartment());
+function editDepartment(value: string) {
+  form.department = value;
+  departmentAuto.value = false;
+}
+function editRecipient(value: string) {
+  form.recipient = value;
+  for (const line of lines.value) {
+    if (line.recipientEdited) continue;
+    line.recipient = value;
+    if (value.trim()) delete errors.value[`recipient.${line.key}`];
+  }
+  fillDepartment();
+}
+function editLineRecipient(line: Line, value: string) {
+  line.recipient = value;
+  line.recipientEdited = true;
+  if (value.trim()) delete errors.value[`recipient.${line.key}`];
+  if (!form.recipient.trim()) fillDepartment(value);
+}
+const departmentChoices = computed(() => departmentOptions(directory.value));
+const recipientChoices = computed(() => personOptions(directory.value, form.department));
+const departmentLike = computed(() => similarName(form.department, departmentNames(directory.value), { prefix: true }));
+const recipientLike = computed(() => similarName(form.recipient, personNames(directory.value)));
+const recipientHint = computed(() => (defaultRecipient.value && form.recipient === defaultRecipient.value ? '默认是申请的经办人，可以改' : '填一次，下面各行都用这个人'));
 
 const sourceKey = (line: Line) => `${line.id}:${line.location ?? ''}`;
 function lineMeta(line: Line): string {
@@ -61,7 +114,7 @@ function split(key: number) {
   const line = lines.value[index];
   let end = index;
   while (end + 1 < lines.value.length && sourceKey(lines.value[end + 1]) === sourceKey(line)) end++;
-  lines.value.splice(end + 1, 0, { ...line, key: ++sequence, quantity: '', recipient: '', selected: true });
+  lines.value.splice(end + 1, 0, { ...line, key: ++sequence, quantity: '', recipient: '', recipientEdited: true, selected: true });
 }
 
 async function save() {
@@ -103,9 +156,18 @@ async function save() {
 
 <template>
   <Dialog :open="open" :title="labels[action]" :description="[context, descriptions[action]].filter(Boolean).join(' · ')" width="760px" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4" :class="distribution ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
       <Input v-model="form.date" label="业务日期" type="date" required :disabled="saving" />
-      <Input v-if="distribution" v-model="form.department" label="领用部门" :disabled="saving" />
+      <template v-if="distribution">
+        <div class="min-w-0">
+          <Combobox :model-value="form.department" :options="departmentChoices" label="领用部门" :hint="departmentAuto ? '按以往记录' : undefined" :disabled="saving" empty-text="还没有用过的部门，直接填写" @update:model-value="editDepartment" />
+          <Button v-if="departmentLike" variant="link" class="mt-1 text-left text-xs" :disabled="saving" @click="editDepartment(departmentLike)">是不是「{{ departmentLike }}」？</Button>
+        </div>
+        <div class="min-w-0">
+          <Combobox :model-value="form.recipient" :options="recipientChoices" label="领用人" :hint="recipientHint" :disabled="saving" empty-text="还没有用过的领用人，直接填写" @update:model-value="editRecipient" />
+          <Button v-if="recipientLike" variant="link" class="mt-1 text-left text-xs" :disabled="saving" @click="editRecipient(recipientLike)">是不是「{{ recipientLike }}」？</Button>
+        </div>
+      </template>
       <div v-else-if="action === 'SUPPLIER_RETURN'">
         <span class="mb-1.5 block text-[12.5px] leading-[18px] font-medium text-text" aria-hidden="true">退货处理方式</span>
         <Tabs v-model="form.returnMode" variant="segmented" aria-label="退货处理方式" :tabs="returnModes" :disabled="saving" />
@@ -137,7 +199,7 @@ async function save() {
             <span v-else class="text-faint">—</span>
           </td>
           <td v-if="distribution" data-label="领用人" class="sm:py-2">
-            <Input v-if="line.selected" v-model="line.recipient" size="sm" hide-label :label="`${line.itemName} 领用人`" placeholder="填写实际领用人" required :error="errors[`recipient.${line.key}`]" :disabled="saving" class="max-sm:w-44" />
+            <Combobox v-if="line.selected" :model-value="line.recipient" :options="recipientChoices" :open-on-click="false" size="sm" hide-label :label="`${line.itemName} 领用人`" placeholder="填写实际领用人" required :error="errors[`recipient.${line.key}`]" :disabled="saving" empty-text="还没有用过的领用人，直接填写" class="max-sm:w-44" @update:model-value="editLineRecipient(line, $event)" />
             <span v-else class="text-faint">—</span>
           </td>
         </tr>

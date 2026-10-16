@@ -57,6 +57,8 @@ function documentCard(page: Page, name: string, text: string) {
 async function direct(page: Page, name: string, quantity: string, recipient: string) {
   await product(page, name).getByRole('button', { name: '直接发放', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '直接发放', exact: true });
+  // 从申请发放：领用人默认是申请的经办人（docs/manual-entry-2026-10.md P3），这里再按行改成实际领用人
+  await expect(dialog.getByLabel('领用人', { exact: true })).toHaveValue('采购经办人');
   await dialog.getByLabel('业务日期', { exact: true }).fill(businessDate);
   await dialog.getByLabel(`${name} 本次数量（盒）`, { exact: true }).fill(quantity);
   await dialog.getByLabel(`${name} 领用人`, { exact: true }).fill(recipient);
@@ -228,4 +230,47 @@ test('手机 390px：人工申请、采购、部分到货、入库与库存领�
   await expect(product(page, paper).getByTestId('product-quantity')).toHaveText('1 盒');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('workflow-mobile.png'), fullPage: true });
+});
+
+test('没有 OA 单号：勾选后自动编号、申请详情补填；部门与经办人、品名从以往记录选', async ({ page }) => {
+  await login(page);
+  const suffix = `${Date.now()}-no-oa`;
+  const paper = `无单号复印纸-${suffix}`;
+  // 先有一张 OA 申请：留下部门、经办人与物品库里的这件物品
+  await create(page, `OA-${suffix}`, paper);
+  await page.goto('/requests');
+  await page.getByRole('button', { name: '人工录入申请', exact: true }).first().click();
+  const dialog = page.getByRole('dialog', { name: '人工录入申请', exact: true });
+  await dialog.getByRole('checkbox', { name: '没有 OA 单号', exact: true }).check();
+  await expect(dialog.getByLabel('OA 流水号', { exact: true })).toBeDisabled();
+  await dialog.getByLabel('申请日期', { exact: true }).fill(businessDate);
+  // 「最近」药丸一键填部门与经办人
+  await dialog.getByRole('button', { name: '填入最近的 行政部 · 采购经办人', exact: true }).click();
+  await expect(dialog.getByLabel('申请部门', { exact: true })).toHaveValue('行政部');
+  await expect(dialog.getByLabel('经办人', { exact: true })).toHaveValue('采购经办人');
+  // 品名从物品库的下拉里选，单位按物品库直接填上
+  await dialog.getByLabel('第 1 行品名', { exact: true }).fill('无单号复印纸');
+  await page.getByRole('option', { name: paper }).click();
+  await expect(dialog.getByLabel('第 1 行品名', { exact: true })).toHaveValue(paper);
+  await expect(dialog.getByLabel('第 1 行单位', { exact: true })).toHaveValue('盒');
+  await expect(dialog.getByText('沿用物品库', { exact: true })).toBeVisible();
+  await dialog.getByLabel('第 1 行申请数量', { exact: true }).fill('3');
+  await dialog.getByRole('button', { name: '确认创建申请', exact: true }).click();
+  await expect(page).toHaveURL(/\/requests\/\d+$/);
+  const auto = `无OA-${businessDate.replaceAll('-', '')}-01`;
+  await expect(page.locator('h1')).toHaveText(auto);
+  await expect(page.getByText('人工录入，没有 OA 单号')).toBeVisible();
+
+  // 补填 OA 流水号：换成 OA 号，原来的系统编号留着、照样搜得到
+  await page.getByRole('button', { name: '补填 OA 流水号', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: '修改申请信息', exact: true });
+  await expect(edit.getByRole('checkbox', { name: '没有 OA 单号', exact: true })).not.toBeChecked();
+  await edit.getByLabel('OA 流水号', { exact: true }).fill(`OA-补-${suffix}`);
+  await edit.getByRole('button', { name: '保存修改', exact: true }).click();
+  await expect(edit).toHaveCount(0);
+  await expect(page.locator('h1')).toHaveText(`OA-补-${suffix}`);
+  await expect(page.getByText(`系统编号 ${auto}`)).toBeVisible();
+  await page.goto(`/requests?search=${encodeURIComponent(auto)}`);
+  await expect(page.locator('tr[data-request-id]')).toHaveCount(1);
+  await expect(page.locator('tr[data-request-id]')).toContainText(`OA-补-${suffix}`);
 });

@@ -595,7 +595,7 @@
   .input-date[data-empty]:not(:focus)::-webkit-datetime-edit {
     color: var(--color-faint);
   }
-  /* 带 datalist 的输入框（历史领用人、部门建议）：Chrome 悬停时的原生 ▼ 换成与 Select 一致的 chevron */
+  /* 带 datalist 的输入框（单位候选、AI 模型名）：Chrome 悬停时的原生 ▼ 换成与 Select 一致的 chevron */
   input[list]:not(.input-date)::-webkit-calendar-picker-indicator {
     appearance: none;
     width: 1rem;

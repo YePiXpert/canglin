@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type BusinessLine } from '@prisma/client';
 import {
-  MAX_FIXED_UNITS, lineAmountUnits, priceUnits, quantityText, quantityUnits,
-  workflowRequestCreateSchema, type WorkflowRequestCreateInput, type WorkflowPurchaseInput,
+  MAX_FIXED_UNITS, autoSerialPrefix, lineAmountUnits, priceUnits, quantityText, quantityUnits,
+  workflowRequestCreateSchema, workflowRequestUpdateSchema, type WorkflowRequestCreateInput, type WorkflowRequestUpdateInput, type WorkflowPurchaseInput,
   type WorkflowReceiptInput, type WorkflowRequestRow, type WorkflowLocation, type WorkflowDocumentKind,
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
@@ -23,6 +23,8 @@ function bounded(value: bigint, label = '金额'): bigint {
   if (value > MAX_FIXED_UNITS || value < -MAX_FIXED_UNITS) throw new BadRequestException(`${label}超出允许范围`);
   return value;
 }
+/** 动作在 audit 上置这个标记时不写审计（如修改申请信息什么都没改） */
+const SKIP_AUDIT = Symbol('skipAudit');
 function nonnegative(value: bigint, message: string): bigint {
   if (value < 0n) throw new ConflictException(message);
   return value;
@@ -34,14 +36,15 @@ export class WorkflowService {
   constructor(private readonly prisma: PrismaService, private readonly query: WorkflowQueryService) {}
 
   /** audit：动作往里补充的审计字段（改链接时的旧值、删除申请时的流水号与明细数），与 operationId、input 一起记入审计详情 */
-  private async write<T>(scope: string, input: unknown, key: string, ip: string | undefined, action: (tx: Tx, audit: Record<string, unknown>) => Promise<T>): Promise<T> {
+  private async write<T>(scope: string, input: unknown, key: string, ip: string | undefined, action: (tx: Tx, audit: Record<string | symbol, unknown>) => Promise<T>): Promise<T> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key))
       throw new BadRequestException('缺少或无效的 Idempotency-Key 操作编号');
     try {
       return await this.prisma.$transaction((tx) => operation(tx, key, `workflow:${scope}`, input, async () => {
-        const audit: Record<string, unknown> = {};
+        const audit: Record<string | symbol, unknown> = {};
         const result = await action(tx, audit);
-        await tx.auditLog.create({ data: { action: `WORKFLOW_${scope.toUpperCase()}`, entity: 'workflow', detail: JSON.stringify({ operationId: key, input, ...audit }), operatorIp: ip } });
+        if (!audit[SKIP_AUDIT])
+          await tx.auditLog.create({ data: { action: `WORKFLOW_${scope.toUpperCase()}`, entity: 'workflow', detail: JSON.stringify({ operationId: key, input, ...audit }), operatorIp: ip } });
         return result;
       }), { timeout: 30_000 });
     } catch (error) {
@@ -53,7 +56,12 @@ export class WorkflowService {
 
   async createRequest(input: WorkflowRequestCreateInput, key: string, ip?: string) {
     if (input.sourceTaskId) throw new BadRequestException('原件任务请通过导入确认入口创建申请');
-    return this.write('request', input, key, ip, (tx) => this.createRequestTx(tx, input));
+    return this.write('request', input, key, ip, async (tx, audit) => {
+      const request = await this.createRequestTx(tx, input);
+      // 系统编的号不在提交内容里，审计另记一份
+      if (request.autoSerial) Object.assign(audit, { serialNumber: request.serialNumber });
+      return request;
+    });
   }
 
   /** Public transaction boundary for the trusted import bridge. It owns task validation and confirmation. */
@@ -67,8 +75,11 @@ export class WorkflowService {
     const attachments = sourceIds.length ? await tx.attachment.findMany({ where: { id: { in: sourceIds } } }) : [];
     if (attachments.length !== sourceIds.length || attachments.some((attachment) => attachment.kind !== 'OA_DOC'))
       throw new BadRequestException('来源附件必须是已存在的 OA 原件');
+    if (!input.autoSerial) await this.assertNotSystemSerial(tx, input.serialNumber);
+    // 没有 OA 单号：系统编号既是流水号，也留在 systemSerial 里（补填 OA 流水号后仍可按它查到）
+    const systemSerial = input.autoSerial ? await this.nextSystemSerial(tx, input.requestDate) : null;
     const request = await tx.procurementRequest.create({ data: {
-      serialNumber: input.serialNumber, department: input.department, handler: input.handler,
+      serialNumber: systemSerial ?? input.serialNumber, systemSerial, department: input.department, handler: input.handler,
       requestDate: input.requestDate, note: input.note, sourceTaskId: input.sourceTaskId,
     } });
     for (const [index, line] of input.lines.entries()) {
@@ -85,6 +96,73 @@ export class WorkflowService {
       storagePath: attachment.storagePath, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes,
     } });
     return this.query.requestTx(tx, request.id);
+  }
+
+  /**
+   * 系统编号「无OA-yyyymmdd-nn」（docs/manual-entry-2026-10.md N2）：这一天已用的最大序号加一，至少两位，不设位数上限。
+   * 已补填 OA 流水号的申请仍占着它的系统编号；手填成同样格式的流水号也避开，免得两张申请同一个号。
+   * exceptId：给这张申请自己编号时（勾回「没有 OA 单号」），不算它自己现在手填的号。
+   */
+  private async nextSystemSerial(tx: Tx, requestDate: string, exceptId?: number): Promise<string> {
+    const prefix = autoSerialPrefix(requestDate);
+    const used = await tx.procurementRequest.findMany({
+      where: { OR: [{ systemSerial: { startsWith: prefix } }, { serialNumber: { startsWith: prefix } }], ...(exceptId ? { id: { not: exceptId } } : {}) },
+      select: { serialNumber: true, systemSerial: true },
+    });
+    let max = 0;
+    for (const value of used.flatMap((row) => [row.serialNumber, row.systemSerial])) {
+      const suffix = value?.startsWith(prefix) ? value.slice(prefix.length) : '';
+      // 手填的超长数字（超出安全整数）编不到那里，不参与
+      if (/^\d+$/.test(suffix) && Number.isSafeInteger(Number(suffix))) max = Math.max(max, Number(suffix));
+    }
+    return `${prefix}${String(max + 1).padStart(2, '0')}`;
+  }
+
+  /** 手填的流水号不能是系统给别的申请编过的号（否则两张申请显示同一个号） */
+  private async assertNotSystemSerial(tx: Tx, serialNumber: string, requestId?: number) {
+    if (await tx.procurementRequest.count({ where: { systemSerial: serialNumber, ...(requestId ? { id: { not: requestId } } : {}) } }))
+      throw new ConflictException(`「${serialNumber}」是系统给另一张没有 OA 单号的申请编的号，不能当流水号用`);
+  }
+
+  /**
+   * 修改申请信息（docs/manual-entry-2026-10.md N5）：流水号、申请日期、部门、经办人、备注，导入的与已有业务记录的申请都能改。
+   * 补填 OA 流水号 = autoSerial false + 流水号；autoSerial true 换回这张申请的系统编号（以前没有就新编一个）。
+   * 申请日期不能改到已登记的采购或取消之后（否则采购早于申请，之后补登的分批采购也会被日期校验拦下）；系统编号里的日期不跟着改。
+   * 审计记下改了哪几项的旧值与新值；什么都没改时不写库、不留审计。明细不在这里改。
+   */
+  async updateRequest(id: number, raw: WorkflowRequestUpdateInput, key: string, ip?: string) {
+    const parsed = workflowRequestUpdateSchema.safeParse(raw);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0].message);
+    const input = parsed.data;
+    return this.write('request_update', { id, ...input }, key, ip, async (tx, audit) => {
+      const request = await tx.procurementRequest.findUnique({ where: { id } });
+      if (!request) throw new NotFoundException('申请不存在');
+      if (!input.autoSerial) await this.assertNotSystemSerial(tx, input.serialNumber, id);
+      if (input.requestDate !== request.requestDate) {
+        const earliest = await tx.businessLine.findFirst({
+          where: { requestLine: { requestId: id }, document: { kind: { in: ['PURCHASE', 'REQUEST_CANCEL'] }, status: 'POSTED' } },
+          orderBy: { document: { date: 'asc' } }, select: { document: { select: { date: true, kind: true } } },
+        });
+        if (earliest && input.requestDate > earliest.document.date)
+          throw new ConflictException(`这张申请 ${earliest.document.date} 已经登记了${earliest.document.kind === 'PURCHASE' ? '采购' : '取消'}，申请日期不能晚于这一天；补办 OA 单不用改申请日期`);
+      }
+      const systemSerial = input.autoSerial ? request.systemSerial ?? await this.nextSystemSerial(tx, input.requestDate, id) : request.systemSerial;
+      const next = {
+        serialNumber: input.autoSerial ? systemSerial! : input.serialNumber, department: input.department,
+        handler: input.handler, requestDate: input.requestDate, note: input.note || null,
+      };
+      // 审计按 { 字段: [旧值, 新值] } 记（审计页显示成「申领部门：综合部 → 综合管理部」）
+      const changed: Record<string, [string | null, string | null]> = {};
+      for (const field of Object.keys(next) as (keyof typeof next)[])
+        if ((request[field] || null) !== (next[field] || null)) changed[field] = [request[field] || null, next[field] || null];
+      if (!Object.keys(changed).length && systemSerial === request.systemSerial) {
+        audit[SKIP_AUDIT] = true;
+        return this.query.requestTx(tx, id);
+      }
+      await tx.procurementRequest.update({ where: { id }, data: { ...next, systemSerial } });
+      Object.assign(audit, { serialNumber: request.serialNumber, changed });
+      return this.query.requestTx(tx, id);
+    });
   }
 
   /**

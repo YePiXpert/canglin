@@ -259,3 +259,15 @@ docker compose --env-file .env -p canglin --project-directory "$PWD" \
 - **删除申请**：只有没有任何业务记录（采购、取消、到货…，含已撤销的单据）的申请可以删除，否则 409。明细与原件附件记录一并删除（文件按引用计数回收，导入任务还持有时保留）；只被这张申请用到、并且是随它一起建出来的物品库条目一并删除（手工新增的库存物品保留）。导入的申请删除后导入任务退回待核对：清空 `confirmedAt` 与 `confirmation`，版本加一（旧页面的确认会被拒绝），入账快照存进修改历史（`ImportRevision.kind = CONFIRMATION`），草稿保留入账时的内容。未确认原件的 30 天保留期对撤回过的任务从最近一次撤回算起（按这条修改历史的时间），不按上传时间立刻清理。
 - **AI 推测单位**：输出契约每行新增 `unitGuess`（原件没写单位时的推测单位；写了单位时为 null；带数字或超过 8 个字的由服务端置空）。`unit` 的含义不变，「AI 建议待核对」的判断与 `aiSuggestionKey` 都不含 `unitGuess`，已确认过的建议不受影响。缺这个字段的旧响应按 null 解析；发给服务商的严格 JSON Schema 去掉了 zod 生成的 `default` 关键字。识别结果与草稿里的明细带可选的 `unitGuess`，草稿另带 `unitSource`（`CATALOG` 沿用物品库 / `AI` 推测，人工改过为空）。
 - **草稿里的单位与链接**：单位为空的行由前端按「物品库 > AI 推测」自动填并标出来源（原件写明与人工填写的单位不动），入账契约照旧要求单位。草稿每行带 `purchaseLink`（`null` 表示这一行确实没有链接）；这次修复之前保存的草稿缺这个字段，载入时从识别结果按行补回并随自动保存写入。
+
+## 2026-10-16 人工录入：没有 OA 单号，部门与人员少打字
+
+方案与实施记录见 [人工录入：没有 OA 单号，部门与人员少打字](manual-entry-2026-10.md)。
+
+- **迁移 `20261016000000_request_system_serial`**：`ProcurementRequest` 加可空列 `systemSerial` 与唯一索引。存量申请都有自己的流水号，不回填（全是 NULL）。列可空，回退旧代码不需要反向迁移（旧代码不读这一列；但回退后「无OA-…」的申请就当普通流水号显示，补填只能等再升级）。
+- **没有 OA 单号**：`POST /api/workflow/requests` 多一个 `autoSerial`（默认 false）：为 true 时 `serialNumber` 必须空着，服务端在写入事务里编「无OA-申请日期去掉横线-序号」（这一天已用的最大序号加一，至少两位，不设位数上限；手填成同样格式的流水号也避开），同时写进 `serialNumber` 与 `systemSerial`；为 false 时 `serialNumber` 必须填（400）。手填的流水号不能等于别的申请的 `systemSerial`（409）。申请视图多 `systemSerial` 与 `autoSerial`（`serialNumber === systemSerial`，即还没有 OA 单号）。导入确认不变（流水号照旧必填）。
+- **修改申请信息**：`PATCH /api/workflow/requests/:id`，body 是整份单据头 `{ serialNumber, autoSerial, department, handler, requestDate, note }`（与录入同样的流水号规则），要 `Idempotency-Key`。补填 OA 流水号 = `autoSerial: false` 加流水号，`systemSerial` 保留（按旧编号仍能搜到）；`autoSerial: true` 换回这张申请的 `systemSerial`，没有就新编一个。申请日期不能晚于这张申请最早一次未撤销的采购或取消（409，消息里写出那一天）；系统编号里的日期不跟着改。什么都没改时不写库、不留审计。审计动作 `WORKFLOW_REQUEST_UPDATE`，详情的 `serialNumber` 是改之前的流水号，`changed` 是 `{ 字段: [旧值, 新值] }`。
+- **查询参数**：`GET /api/workflow/requests` 多 `serial`（流水号精确匹配）与 `autoSerial=1`（只要还没有 OA 单号的）；`search` 也匹配 `systemSerial`。
+- **部门与人员候选**：`GET /api/workflow/directory` 返回 `departments`（`name`、`uses`、`lastDate`）、`people`（`name`、`department`、`uses`、`lastDate`，同名的人在不同部门各一条）与 `recent`（最近录入的申请里的「部门 · 经办人」，去重后最多 4 组）。来源是全部申请的部门 / 经办人与未撤销发放单的领用部门 / 领用人；次数按申请张数与发放单张数，最近一次按申请日期与业务日期；排序最近一次在前、其次次数。只读，前端每次打开弹窗取一次。
+- **AI 助手**：申请查询工具的说明与系统提示里补了「`无OA-` 开头的是没有 OA 单号的申请、`systemSerial` 是原系统编号」，不涉及识别提示词，提示词版本不变。
+

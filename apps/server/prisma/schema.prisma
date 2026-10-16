@@ -147,6 +147,8 @@ model CatalogProduct {
 model ProcurementRequest {
   id Int @id @default(autoincrement())
   serialNumber String
+  // System number given when there is no OA serial (无OA-yyyymmdd-nn); kept after the OA serial is filled in.
+  systemSerial String? @unique
   department String
   handler String
   requestDate String

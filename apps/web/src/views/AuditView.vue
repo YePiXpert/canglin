@@ -52,6 +52,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   REQUEST_IMPORT_CONFIRM: { label: '导入生成申请', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_CANCEL: { label: '申请余量取消', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_DELETE: { label: '删除申请', tone: 'red', group: '申请' },
+  WORKFLOW_REQUEST_UPDATE: { label: '修改申请信息', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_LINE_LINK: { label: '修改申请链接', tone: 'gray', group: '申请' },
   WORKFLOW_PURCHASE_LINE_LINK: { label: '修改采购链接', tone: 'gray', group: '采购' },
   WORKFLOW_PURCHASE: { label: '登记采购', tone: 'gray', group: '采购' },
@@ -121,6 +122,8 @@ function applyFilters(): void {
 interface DetailEntry {
   key: string;
   value: string;
+  /** 来自 changed 的「旧值 → 新值」：摘要里不和同名的普通字段去重（补填流水号时要看得到「无OA-… → OA-…」） */
+  change?: boolean;
 }
 
 function detailEntries(log: AuditRow): DetailEntry[] {
@@ -141,6 +144,7 @@ function detailEntries(log: AuditRow): DetailEntry[] {
         out.push({
           key: ITEM_FIELD_LABELS[field] ?? field,
           value: `${before ?? '空'} → ${after ?? '空'}`,
+          change: true,
         });
       }
       continue;
@@ -212,7 +216,10 @@ function summaryRank(key: string): number {
 function detailSummary(log: AuditRow): string {
   const seen = new Set<string>();
   const entries = [...liftedEntries(log), ...detailEntries(log)]
-    .filter((e) => (seen.has(e.key) ? false : (seen.add(e.key), true)))
+    .filter((e) => {
+      const id = e.change ? `${e.key}→` : e.key;
+      return seen.has(id) ? false : (seen.add(id), true);
+    })
     .map((e, index) => ({ ...e, index }))
     .sort((a, b) => summaryRank(a.key) - summaryRank(b.key) || a.index - b.index);
   if (entries.length === 0) return '—';

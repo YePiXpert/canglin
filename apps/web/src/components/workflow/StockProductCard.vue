@@ -146,7 +146,7 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
             <span class="num sm:text-right"><span class="sm:sr-only">库存 </span>{{ quantityLabel(source.stockQuantity, product.unit) }}</span>
             <span class="num sm:text-right" :class="source.receivingQuantity !== '0' ? 'text-blue' : ''"><span class="sm:sr-only">待处理 </span>{{ quantityLabel(source.receivingQuantity, product.unit) }}</span>
           </span>
-          <span class="text-meta"><Button variant="link" :aria-label="`查看来源明细 #${source.originLineId}`" @click="emit('source', source.originLineId)">来源明细 #{{ source.originLineId }}</Button><template v-if="source.receiptLineId"> · 到货明细 #{{ source.receiptLineId }}</template> · <router-link v-if="source.requestId" :to="`/requests/${source.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ source.serialNumber || '#' + source.requestId }}</router-link><span v-else>无 OA 申请来源</span></span>
+          <span class="text-meta"><Button variant="link" :aria-label="`查看来源明细 #${source.originLineId}`" @click="emit('source', source.originLineId)">来源明细 #{{ source.originLineId }}</Button><template v-if="source.receiptLineId"> · 到货明细 #{{ source.receiptLineId }}</template> · <router-link v-if="source.requestId" :to="`/requests/${source.requestId}`" :class="buttonClass({ variant: 'link' })">申请 {{ source.serialNumber || '#' + source.requestId }}</router-link><span v-else>没有来源申请</span></span>
         </li>
         <li v-if="!product.sources.length" class="py-2 text-[12.5px] text-muted">还没有来源批次：新增的物品要先用盘点调整录入数量。</li>
       </ul>

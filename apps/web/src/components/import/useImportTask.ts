@@ -6,11 +6,12 @@ import { apiError } from '@/api/client';
 import { workflowApi, type WorkflowProductRow } from '@/api/workflow';
 import { useToastStore } from '@/stores/toast';
 import {
-  COMMON_UNITS, aiSuggestionKey, canonicalLink, isWebLink, linkIssue, packagingUnits, workflowImportConfirmSchema,
+  aiSuggestionKey, canonicalLink, isWebLink, linkIssue, packagingUnits, workflowImportConfirmSchema,
   type ImportDraft, type ParseResult,
 } from '@canglin/shared';
 import type ImportTaskList from './ImportTaskList.vue';
 import { isRunning, isTaskActive } from './status';
+import { catalogUnits as catalogUnitsOf, unitSuggestions as unitSuggestionsOf } from '@/components/workflow/catalogUnits';
 
 /**
  * 导入核对原件上的品名、规格、数量、单位与采购链接；成交单价在登记采购时填写。
@@ -507,17 +508,9 @@ export function useImportTask() {
       // 物品库取不到时不按物品库填，AI 推测、包装与常用单位的候选照常
     }
   }
-  /**
-   * 物品库里与这一行同名的单位：同名同规格只有一个单位、或同名的都只有一个单位时可以直接填（auto）；
-   * units 是同名物品用过的全部单位（作候选，也用来提示「物品库里是别的单位」）。
-   */
+  /** 物品库里与这一行同名的单位（规则见 components/workflow/catalogUnits.ts，人工录入共用） */
   function catalogUnits(l: Line): { auto: string | null; units: string[] } {
-    const name = l.itemName.trim();
-    if (!name) return { auto: null, units: [] };
-    const same = catalog.value.filter((p) => p.name === name);
-    const units = [...new Set(same.map((p) => p.unit))];
-    const exact = [...new Set(same.filter((p) => p.specification === l.spec.trim()).map((p) => p.unit))];
-    return { auto: exact.length === 1 ? exact[0] : !exact.length && units.length === 1 ? units[0] : null, units };
+    return catalogUnitsOf(catalog.value, l.itemName, l.spec);
   }
   /** AI 推测：重试的建议里读到的单位或推测，其次首次识别的推测 */
   function aiUnit(l: Line): string | undefined {
@@ -579,7 +572,7 @@ export function useImportTask() {
   }
   /** 单位输入框的下拉：候选在前，常用单位在后 */
   function unitSuggestions(l: Line): string[] {
-    return [...new Set([...catalogUnits(l).units, ...packagingUnits(l.spec), ...COMMON_UNITS])];
+    return unitSuggestionsOf(catalog.value, l.itemName, l.spec);
   }
   /** 自动填的单位条数（入账前提示核对，不拦入账） */
   const autoUnitCount = computed(() => lines.value.filter((l) => l.unit.trim() && l.unitSource).length);

@@ -70,7 +70,7 @@ test('放弃草稿会删除原件并退出任务，保存失败也可以主动�
   await expect.poll(async () => (await (await page.request.get(`/api/imports/tasks/${id}`)).json()).status).toBe('DONE');
   await expect(page.getByRole('button', { name: '放弃草稿', exact: true })).toBeVisible();
   await page.route(`**/api/imports/tasks/${id}/draft`, (route) => route.fulfill({ status: 503, json: { message: '合成保存失败' } }));
-  await page.getByRole('textbox', { name: '申领部门', exact: true }).fill('未保存的修改');
+  await page.getByRole('combobox', { name: '申领部门', exact: true }).fill('未保存的修改');
   await expect(page.getByText(/草稿保存失败/)).toBeVisible();
   await page.getByRole('button', { name: '放弃草稿', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '放弃草稿？' });
@@ -105,7 +105,7 @@ test('草稿载入前草稿区只读：识别中的输入不会被载入的草�
   await page.locator('input[type=file]').setInputFiles({ name: 'hydration-race.png', mimeType: 'image/png', buffer: imageFile('hydration-race') });
   await expect(page).toHaveURL(/task=/);
   const id = new URL(page.url()).searchParams.get('task')!;
-  const department = page.getByRole('textbox', { name: '申领部门', exact: true });
+  const department = page.getByRole('combobox', { name: '申领部门', exact: true });
   await expect(department).toBeDisabled();
   // fill 等到草稿载入、输入框可编辑后才输入，这次修改会正常自动保存
   const saved = page.waitForResponse((r) => r.url().endsWith(`/api/imports/tasks/${id}/draft`) && r.request().method() === 'PUT');

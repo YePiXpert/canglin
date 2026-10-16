@@ -18,7 +18,7 @@ function requestLine(partial: Partial<WorkflowRequestLineRow>): WorkflowRequestL
 function request(lines: WorkflowRequestLineRow[]): WorkflowRequestRow {
   return {
     id: 7, serialNumber: 'OA-2026-007', department: '行政部', handler: '陈静', requestDate: '2026-09-27',
-    note: null, sourceTaskId: null, createdAt: '2026-09-27T00:00:00.000Z', lines, attachments: [], deletable: true,
+    note: null, sourceTaskId: null, createdAt: '2026-09-27T00:00:00.000Z', lines, attachments: [], deletable: true, systemSerial: null, autoSerial: false,
   };
 }
 

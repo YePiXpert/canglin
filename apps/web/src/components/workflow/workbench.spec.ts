@@ -17,7 +17,7 @@ function line(over: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestLineRo
 function request(id: number, requestDate: string, lines: WorkflowRequestLineRow[]): WorkflowRequestRow {
   return {
     id, serialNumber: `OA-${id}`, department: '行政部', handler: '王晓敏', requestDate, note: null, sourceTaskId: null,
-    createdAt: '2026-10-01T00:00:00.000Z', lines: lines.map((l) => ({ ...l, requestId: id })), attachments: [], deletable: true,
+    createdAt: '2026-10-01T00:00:00.000Z', lines: lines.map((l) => ({ ...l, requestId: id })), attachments: [], deletable: true, systemSerial: null, autoSerial: false,
   };
 }
 const purchase = (over: Partial<WorkflowRequestLineRow> = {}) => line({ pendingPurchaseQuantity: '5', stages: ['PENDING_PURCHASE'], ...over });

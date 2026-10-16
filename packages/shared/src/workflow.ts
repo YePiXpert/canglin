@@ -43,25 +43,62 @@ export const WORKFLOW_STAGES = ['PENDING_PURCHASE', 'PENDING_ARRIVAL', 'PENDING_
 export type WorkflowStage = typeof WORKFLOW_STAGES[number];
 export type WorkflowLocation = 'RECEIVING' | 'STOCK';
 
-export const workflowRequestCreateSchema = z.object({
-  serialNumber: z.string().trim().min(1).max(64),
+/**
+ * 没有 OA 单号的申请（打过招呼先采购）由系统编号：「无OA-申请日期-当天序号」，如 无OA-20261016-01
+ * （docs/manual-entry-2026-10.md N2）。前缀之后的部分只由服务端生成。
+ */
+export const AUTO_SERIAL_PREFIX = '无OA-';
+/** 某个申请日期的系统编号前缀：无OA-20261016- */
+export function autoSerialPrefix(requestDate: string): string {
+  return `${AUTO_SERIAL_PREFIX}${requestDate.replaceAll('-', '')}-`;
+}
+
+const requestLineSchema = z.object({
+  itemName: z.string().trim().min(1).max(200),
+  specification: z.string().trim().max(200).default(''),
+  unit: z.string().trim().min(1, '请确认原件单位').max(16),
+  quantity: workflowQuantitySchema,
+  note: noteSchema,
+  /** 申请里附的采购链接（OA 原件备注里的商城链接）；登记采购时预填 */
+  purchaseLink: linkSchema.nullish(),
+});
+
+/**
+ * 单据头的流水号：autoSerial = 没有 OA 单号，流水号由系统编、必须空着；否则必须填 OA 流水号。
+ * 人工录入与「修改申请信息」共用（docs/manual-entry-2026-10.md N1、N5）。
+ */
+const serialFields = {
+  serialNumber: z.string().trim().max(64).default(''),
+  autoSerial: z.boolean().default(false),
+};
+function checkSerial(value: { serialNumber: string; autoSerial: boolean }, ctx: z.RefinementCtx) {
+  if (value.autoSerial && value.serialNumber)
+    ctx.addIssue({ code: 'custom', path: ['serialNumber'], message: '勾了「没有 OA 单号」时流水号由系统编，不用填' });
+  if (!value.autoSerial && !value.serialNumber)
+    ctx.addIssue({ code: 'custom', path: ['serialNumber'], message: '请填写 OA 流水号；没有 OA 单号请勾选「没有 OA 单号」' });
+}
+const headerFields = {
+  ...serialFields,
   department: z.string().trim().min(1).max(64),
   handler: z.string().trim().min(1).max(64),
   requestDate: workflowDateSchema,
   note: noteSchema,
+};
+
+export const workflowRequestCreateSchema = z.object({
+  ...headerFields,
   sourceTaskId: z.string().trim().min(1).max(64).optional(),
   sourceAttachmentIds: z.array(idSchema).max(100).default([]),
-  lines: z.array(z.object({
-    itemName: z.string().trim().min(1).max(200),
-    specification: z.string().trim().max(200).default(''),
-    unit: z.string().trim().min(1, '请确认原件单位').max(16),
-    quantity: workflowQuantitySchema,
-    note: noteSchema,
-    /** 申请里附的采购链接（OA 原件备注里的商城链接）；登记采购时预填 */
-    purchaseLink: linkSchema.nullish(),
-  })).min(1).max(500),
-});
-export type WorkflowRequestCreateInput = z.infer<typeof workflowRequestCreateSchema>;
+  lines: z.array(requestLineSchema).min(1).max(500),
+}).superRefine(checkSerial);
+export type WorkflowRequestCreateInput = z.input<typeof workflowRequestCreateSchema>;
+
+/**
+ * 修改申请信息（N5）：单据头整份提交。补填 OA 流水号 = autoSerial false + 流水号；
+ * autoSerial true = 换回这张申请的系统编号（以前没有就新编一个）。明细不在这里改。
+ */
+export const workflowRequestUpdateSchema = z.object(headerFields).superRefine(checkSerial);
+export type WorkflowRequestUpdateInput = z.input<typeof workflowRequestUpdateSchema>;
 
 export const workflowPurchaseSchema = z.object({
   date: workflowDateSchema,
@@ -98,6 +135,10 @@ export const workflowQuerySchema = z.object({
   kind: z.enum(WORKFLOW_DOCUMENT_KINDS).optional(),
   stage: z.enum(WORKFLOW_STAGES).optional(),
   pending: z.literal('1').optional(),
+  /** 流水号精确匹配（录入时提醒流水号重复，N6） */
+  serial: z.string().trim().min(1).max(64).optional(),
+  /** 只要还没有 OA 单号的申请（流水号是系统编号，N7） */
+  autoSerial: z.literal('1').optional(),
   dateFrom: workflowDateSchema.optional(),
   dateTo: workflowDateSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -105,7 +146,7 @@ export const workflowQuerySchema = z.object({
 }).refine((value) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo, '起始日期不能晚于结束日期');
 export type WorkflowQuery = z.infer<typeof workflowQuerySchema>;
 
-export const workflowProductCreateSchema = workflowRequestCreateSchema.shape.lines.element.pick({ itemName: true, specification: true, unit: true });
+export const workflowProductCreateSchema = requestLineSchema.pick({ itemName: true, specification: true, unit: true });
 export type WorkflowProductCreateInput = z.infer<typeof workflowProductCreateSchema>;
 export const workflowStockInSchema = z.object({
   date: workflowDateSchema, note: noteSchema,
@@ -181,6 +222,10 @@ export interface WorkflowRequestLineRow {
 }
 export interface WorkflowRequestRow {
   id: number; serialNumber: string; department: string; handler: string; requestDate: string;
+  /** 系统编号（没有 OA 单号时编的「无OA-…」）：补填 OA 流水号后也保留，按它照样搜得到；从没编过为 null */
+  systemSerial: string | null;
+  /** 还没有 OA 单号：流水号就是系统编号 */
+  autoSerial: boolean;
   note: string | null; sourceTaskId: string | null; createdAt: string;
   lines: WorkflowRequestLineRow[]; attachments: WorkflowAttachment[];
   /** 没有任何业务记录（采购、取消、到货…，含已撤销的单据）时可以删除 */
@@ -188,6 +233,16 @@ export interface WorkflowRequestRow {
 }
 /** 物品库的一条（导入时沿用单位、给候选） */
 export interface WorkflowProductRow { id: number; name: string; specification: string; unit: string }
+/**
+ * 部门与人员的候选（docs/manual-entry-2026-10.md P1）：从已有申请的部门 / 经办人与未撤销发放单的领用部门 / 领用人汇总，
+ * 最近一次使用的在前、其次按次数。people 按「人 + 部门」分开（同名的人在两个部门各一条）；department 可能为空串（发放时没填部门）。
+ * recent 是最近录入的申请里的「部门 · 经办人」，去重后最多 4 组。
+ */
+export interface WorkflowDirectory {
+  departments: { name: string; uses: number; lastDate: string }[];
+  people: { name: string; department: string; uses: number; lastDate: string }[];
+  recent: { department: string; handler: string }[];
+}
 export interface WorkflowDocumentLineRow {
   id: number; documentId: number; requestLineId: number | null; sourceLineId: number | null;
   requestId: number | null; serialNumber: string | null;

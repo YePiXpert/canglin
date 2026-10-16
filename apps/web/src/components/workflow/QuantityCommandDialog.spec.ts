@@ -12,6 +12,7 @@ vi.mock('@/api/workflow', () => ({
     employeeReturn: vi.fn(),
     cancelPurchase: vi.fn(),
     cancelRequest: vi.fn(),
+    directory: vi.fn(),
   },
 }));
 vi.mock('@/api/client', () => ({
@@ -334,5 +335,62 @@ describe('QuantityCommandDialog：提交的数据', () => {
     await submit(wrapper, '登记入库');
     expect(api.stockIn).toHaveBeenCalledTimes(2);
     expect(wrapper.emitted('recorded')).toEqual([[RESULT]]);
+  });
+});
+
+describe('QuantityCommandDialog：领用人与领用部门（docs/manual-entry-2026-10.md P3）', () => {
+  beforeEach(() => {
+    api.distribute.mockResolvedValue({ id: 7, kind: 'DISTRIBUTION' } as WorkflowDocumentRow);
+    api.directory.mockResolvedValue({
+      departments: [{ name: '财务部', uses: 2, lastDate: '2026-09-20' }],
+      people: [{ name: '李雷', department: '财务部', uses: 2, lastDate: '2026-09-20' }],
+      recent: [],
+    });
+  });
+
+  it('从申请直接发放：领用人默认是申请的经办人，各行跟着填；某行单独改过就不再跟着变，拆出的行要另填', async () => {
+    const wrapper = mountDialog('DIRECT', [paper, pen], { department: '行政部', recipient: '王晓敏' });
+    await flushPromises();
+    expect((field(wrapper, '领用人').element as HTMLInputElement).value).toBe('王晓敏');
+    expect(wrapper.text()).toContain('默认是申请的经办人');
+    const lineValue = (name: string, index = 0) => (wrapper.findAll(`input[aria-label="${name} 领用人"]`)[index].element as HTMLInputElement).value;
+    expect([lineValue('A4 复印纸'), lineValue('中性笔')]).toEqual(['王晓敏', '王晓敏']);
+    await field(wrapper, '中性笔 领用人').setValue('张三');
+    await field(wrapper, '领用人').setValue('李四');
+    expect([lineValue('A4 复印纸'), lineValue('中性笔')]).toEqual(['李四', '张三']);
+    expect(wrapper.text()).not.toContain('默认是申请的经办人');
+    await wrapper.findAll('button').find((b) => b.text().includes('拆给另一位领用人'))!.trigger('click');
+    expect(lineValue('A4 复印纸', 1)).toBe('');
+    const quantities = wrapper.findAll('input[aria-label="A4 复印纸 本次数量（盒）"]');
+    await quantities[0].setValue('2');
+    await quantities[1].setValue('0.5');
+    await submit(wrapper, '直接发放');
+    expect(api.distribute).not.toHaveBeenCalled();
+    expect(wrapper.find('[role=alert]').text()).toContain('请填写实际领用人');
+    await wrapper.findAll('input[aria-label="A4 复印纸 领用人"]')[1].setValue('赵六');
+    await submit(wrapper, '直接发放');
+    expect(api.distribute.mock.calls[0][0].lines).toEqual([
+      { receiptLineId: 101, recipient: '李四', quantity: '2' },
+      { receiptLineId: 101, recipient: '赵六', quantity: '0.5' },
+      { receiptLineId: 102, recipient: '张三', quantity: '3' },
+    ]);
+  });
+
+  it('库存领用不预填领用人；选了以前的领用人、部门空着时带出他最近一次的部门（按以往记录）', async () => {
+    const wrapper = mountDialog('STOCK', [pen], { recipient: '王晓敏' });
+    await flushPromises();
+    expect((field(wrapper, '领用人').element as HTMLInputElement).value).toBe('');
+    await field(wrapper, '领用人').setValue('李雷');
+    expect((field(wrapper, '领用部门').element as HTMLInputElement).value).toBe('财务部');
+    expect(wrapper.text()).toContain('按以往记录');
+    await submit(wrapper, '库存领用');
+    expect(api.distribute.mock.calls[0][0]).toMatchObject({ source: 'STOCK', department: '财务部', lines: [{ productId: 102, recipient: '李雷', quantity: '3' }] });
+  });
+
+  it('头部「领用人」空着时，行里选了以前的领用人也带出部门', async () => {
+    const wrapper = mountDialog('STOCK', [pen]);
+    await flushPromises();
+    await field(wrapper, '中性笔 领用人').setValue('李雷');
+    expect((field(wrapper, '领用部门').element as HTMLInputElement).value).toBe('财务部');
   });
 });

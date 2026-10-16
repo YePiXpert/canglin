@@ -24,10 +24,11 @@ import DocumentCollection from '@/components/workflow/DocumentCollection.vue';
 import StockProductCard from '@/components/workflow/StockProductCard.vue';
 import WorkflowActions from '@/components/workflow/WorkflowActions.vue';
 import WorkflowAttachments from '@/components/workflow/WorkflowAttachments.vue';
+import RequestEditDialog from '@/components/workflow/RequestEditDialog.vue';
 import { requestCancelChoices } from '@/components/workflow/commandChoices';
 import { PROGRESS_SEGMENTS, requestStatusChips } from '@/components/workflow/lineProgress';
 import { setPageTitle } from '@/utils/title';
-import type { WorkflowDocumentLineRow, WorkflowDocumentRow, WorkflowRequestLineRow } from '@/api/workflow';
+import type { WorkflowDocumentLineRow, WorkflowDocumentRow, WorkflowRequestLineRow, WorkflowRequestRow } from '@/api/workflow';
 
 /*
  * 申请详情（DESIGN.md §8）：页头 → 申请明细与数量进度 → 已到货，待决定去向 → 两栏（业务记录 | OA 原件与附件、付款与开票）。
@@ -83,7 +84,22 @@ function editPurchaseLink(line: WorkflowDocumentLineRow, document: WorkflowDocum
  * 有记录时确认框说明原因并禁用确认（与删除供应商同一做法）。导入的申请删除后导入任务退回待核对，直接去导入页改。
  */
 const deleteOpen = ref(false), deleting = ref(false), deleteError = ref('');
-const moreItems = computed<MenuItem[]>(() => [{ label: '删除申请', icon: 'trash', danger: true, onSelect: () => { deleteError.value = ''; deleteOpen.value = true; } }]);
+const moreItems = computed<MenuItem[]>(() => [
+  { label: '修改申请信息', icon: 'edit', onSelect: () => openEdit(false) },
+  { label: '删除申请', icon: 'trash', danger: true, onSelect: () => { deleteError.value = ''; deleteOpen.value = true; } },
+]);
+
+/* 修改申请信息与补填 OA 流水号（docs/manual-entry-2026-10.md N4、N5）：补填 = 打开时取消「没有 OA 单号」并聚焦流水号 */
+const editOpen = ref(false), editFill = ref(false);
+function openEdit(fill: boolean) { editFill.value = fill; editOpen.value = true; }
+function edited(saved: WorkflowRequestRow) {
+  const filled = request.value?.autoSerial && !saved.autoSerial;
+  request.value = saved;
+  // 单据卡片里的「申请 {流水号}」与付款区跟着换成新号
+  void documents.value?.refresh();
+  void payments.value?.refresh();
+  toast.success(filled ? `已补填 OA 流水号 ${saved.serialNumber}` : '申请信息已保存');
+}
 const deleteMessage = computed(() => {
   const r = request.value;
   if (!r) return '';
@@ -120,7 +136,7 @@ async function deleteRequest() {
         </nav>
       </template>
       <template v-if="statusChips.length" #status><Badge v-for="chip in statusChips" :key="chip.key" :tone="chip.tone" :class="chip.struck ? 'line-through' : ''">{{ chip.label }}</Badge></template>
-      <template v-if="request" #description>{{ request.department }} · 经办人 {{ request.handler }} · 申请日期 <span class="num">{{ request.requestDate }}</span> · {{ request.sourceTaskId ? '由 OA 原件导入' : '人工录入' }} · {{ request.lines.length }} 条明细</template>
+      <template v-if="request" #description>{{ request.department }} · 经办人 {{ request.handler }} · 申请日期 <span class="num">{{ request.requestDate }}</span> · <template v-if="request.sourceTaskId">由 OA 原件导入</template><template v-else-if="request.autoSerial">人工录入，没有 OA 单号（<Button variant="link" aria-label="补填 OA 流水号" @click="openEdit(true)">补填</Button>）</template><template v-else-if="request.systemSerial">人工录入 · 系统编号 <span class="font-mono">{{ request.systemSerial }}</span></template><template v-else>人工录入</template> · {{ request.lines.length }} 条明细</template>
       <Button v-if="request && canPurchase" variant="ghost" @click="actions?.command('REQUEST_CANCEL', requestCancelChoices(request), request.serialNumber)">取消未采购量</Button>
       <Menu v-if="request" :items="moreItems" trigger-label="更多申请操作">
         <template #trigger><button type="button" :class="buttonClass({ variant: 'secondary', iconOnly: true })" aria-label="更多申请操作"><Icon name="more-horizontal" :size="16" /></button></template>
@@ -157,11 +173,11 @@ async function deleteRequest() {
           <p class="mt-0.5 text-[13px] text-muted">直接发放给领用人，或明确转入库存；没处理的余量继续保留在这里</p>
         </div>
         <div v-if="stockError" class="card"><ErrorState :message="stockError" @retry="loadStock" /></div>
-        <div v-else class="grid gap-3"><StockProductCard v-for="product in receiving" :key="product.productId" :product="product" receiving @command="(action, choices, context) => actions?.command(action, choices, context, request?.department)" @source="actions?.inspectLine($event)" /></div>
+        <div v-else class="grid gap-3"><StockProductCard v-for="product in receiving" :key="product.productId" :product="product" receiving @command="(action, choices, context) => actions?.command(action, choices, context, request?.department, request?.handler)" @source="actions?.inspectLine($event)" /></div>
       </section>
 
       <div class="mt-7 grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <DocumentCollection ref="documents" :request-id="request.id" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context, request?.department)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="editPurchaseLink" />
+        <DocumentCollection ref="documents" :request-id="request.id" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context, request?.department, request?.handler)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="editPurchaseLink" />
         <aside class="space-y-7" aria-label="原件与付款">
           <section aria-labelledby="request-originals-title">
             <h2 id="request-originals-title" class="mb-2.5 text-[15px] leading-6 font-semibold text-ink">OA 原件与附件</h2>
@@ -175,6 +191,7 @@ async function deleteRequest() {
       </div>
     </template>
     <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" @link-changed="refresh" />
+    <RequestEditDialog v-if="request" v-model:open="editOpen" :request="request" :fill="editFill" @saved="edited" />
     <ConfirmDialog v-if="request" v-model:open="deleteOpen" title="删除申请？" :message="deleteMessage" confirm-text="删除申请" danger :loading="deleting" :confirm-disabled="!request.deletable" @confirm="deleteRequest">
       <Notice v-if="deleteError" tone="red" role="alert">{{ deleteError }}</Notice>
     </ConfirmDialog>

@@ -4,6 +4,12 @@ export interface SelectOption {
   value: string;
 }
 
+/** 可输入下拉（Combobox.vue）的一项：value 就是填进框里的文字，note 是右边的小字（人员的部门、品名的单位） */
+export interface ComboboxOption {
+  value: string;
+  note?: string;
+}
+
 /** 下拉菜单项：Menu.vue 用 */
 export interface MenuItem {
   label: string;

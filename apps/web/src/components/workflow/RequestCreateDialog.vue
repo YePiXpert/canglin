@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { workflowRequestCreateSchema } from '@canglin/shared';
-import { workflowApi, type WorkflowRequestRow } from '@/api/workflow';
+import { workflowApi, type WorkflowProductRow, type WorkflowRequestRow } from '@/api/workflow';
 import Dialog from '@/components/ui/Dialog.vue';
+import Combobox from '@/components/ui/Combobox.vue';
 import Input from '@/components/ui/Input.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
@@ -10,10 +11,15 @@ import Notice from '@/components/ui/Notice.vue';
 import { useDialogForm } from '@/composables/useDialogForm';
 import { todayString } from '@/utils/datetime';
 import { quantityError } from './presentation';
+import RequestHeaderFields from './RequestHeaderFields.vue';
+import { useDirectory } from './directory';
+import { catalogUnits, itemOptions, specOptions, unitSuggestions } from './catalogUnits';
 
 /**
- * 人工录入申请（880px）：头部四个字段一行；明细是表格式输入——列头只写一次，单元格 Input variant="cell"，
+ * 人工录入申请（880px）：单据头是 RequestHeaderFields（OA 流水号与「没有 OA 单号」、申请日期、部门与经办人下拉、「最近」药丸，
+ * docs/manual-entry-2026-10.md N1、P2）；明细是表格式输入——列头只写一次，单元格 variant="cell"，
  * 可访问名称带行号（「第 N 行品名 / 规格 / 申请数量 / 单位」，按钮「删除第 N 行」），读屏分得清是哪一行。
+ * 品名、规格是物品库的下拉（P5）；品名（与规格）在物品库里只对应一个单位时直接填上，小字「沿用物品库」，人工改过单位就不再动。
  * 单位格按回车跳到下一行的品名，最后一行按回车加一行（输入法确认候选词的回车不算）。
  * 明细的错误按行的 key 记（删掉一行，其余行的错误不会错位）：字段只标 aria-invalid，原因在表下汇总成「第 N 行：原因」。
  * 手机（< 640px）上每条明细是一张小卡：输入框恢复描边、44px 高；弹窗全屏、页脚钉底。
@@ -21,8 +27,9 @@ import { quantityError } from './presentation';
 const MAX_LINES = 500;
 const LINE_FIELDS = ['itemName', 'specification', 'quantity', 'unit'] as const;
 type LineField = (typeof LINE_FIELDS)[number];
-type Line = { key: number } & Record<LineField, string>;
-const HEADER_FIELDS = [['serialNumber', '流水号'], ['requestDate', '申请日期'], ['department', '申请部门'], ['handler', '经办人']] as const;
+/** unitSource：单位是按物品库自动填的（人工改过就去掉） */
+type Line = { key: number; unitSource?: 'CATALOG' } & Record<LineField, string>;
+const HEADER_FIELDS = [['requestDate', '申请日期'], ['department', '申请部门'], ['handler', '经办人']] as const;
 /** 有自己的输入框、错误显示在字段下方的键；其余不属于明细的错误放进表下的汇总 */
 const FIELD_KEYS = new Set<string>(['serialNumber', 'requestDate', 'department', 'handler', 'note']);
 /* 表头：与 .table-base 的表头同样式（surface-2 底、12px / 500 muted），对齐方式各列自己给 */
@@ -32,17 +39,59 @@ const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; created: [request: WorkflowRequestRow] }>();
 let sequence = 0;
 function emptyLine(): Line { return { key: ++sequence, itemName: '', specification: '', unit: '', quantity: '' }; }
-const form = reactive({ serialNumber: '', department: '', handler: '', requestDate: todayString(), note: '' });
+const blankForm = () => ({ serialNumber: '', autoSerial: false, department: '', handler: '', requestDate: todayString(), note: '' });
+const form = reactive(blankForm());
 const lines = ref<Line[]>([emptyLine()]);
 function snapshot() { return JSON.stringify({ form, lines: lines.value.map((line) => ({ itemName: line.itemName, specification: line.specification, unit: line.unit, quantity: line.quantity })) }); }
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 const content = ref<HTMLElement>();
+const { directory, load: loadDirectory } = useDirectory();
+/** 物品库：每次打开取一次，只认最后一次请求；取不到就没有品名下拉与自动单位 */
+const catalog = ref<WorkflowProductRow[]>([]);
+let catalogRequest = 0;
+async function loadCatalog() {
+  const current = ++catalogRequest;
+  try {
+    const rows = await workflowApi.products();
+    if (current !== catalogRequest) return;
+    catalog.value = rows;
+    for (const line of lines.value) fillUnit(line);
+  } catch {
+    // 照常手填
+  }
+}
 watch(() => props.open, (open) => {
   if (!open) return;
-  Object.assign(form, { serialNumber: '', department: '', handler: '', requestDate: todayString(), note: '' });
+  Object.assign(form, blankForm());
   lines.value = [emptyLine()];
   reset();
+  void loadDirectory();
+  void loadCatalog();
 });
+
+const items = computed(() => itemOptions(catalog.value));
+/** 单位为空、或是按物品库自动填的：按物品库重新算；依据没了（改了品名）就清空 */
+function fillUnit(line: Line) {
+  if (line.unit.trim() && !line.unitSource) return;
+  const auto = catalogUnits(catalog.value, line.itemName, line.specification).auto;
+  if (auto) {
+    line.unit = auto;
+    line.unitSource = 'CATALOG';
+    clearError(errorKey(line, 'unit'));
+  } else if (line.unitSource) {
+    line.unit = '';
+    line.unitSource = undefined;
+  }
+}
+function editItem(line: Line, field: 'itemName' | 'specification', value: string) {
+  line[field] = value;
+  clearError(errorKey(line, field));
+  fillUnit(line);
+}
+function editUnit(line: Line) {
+  line.unitSource = undefined;
+  clearError(errorKey(line, 'unit'));
+}
 
 function errorKey(line: Line, field: LineField) { return `line.${line.key}.${field}`; }
 function lineError(line: Line, field: LineField) { return errors.value[errorKey(line, field)]; }
@@ -86,6 +135,7 @@ function unitEnter(event: KeyboardEvent, index: number) {
 async function save() {
   failure.value = '';
   const invalid: Record<string, string> = {};
+  if (!form.autoSerial && !form.serialNumber.trim()) invalid.serialNumber = '请填写 OA 流水号；没有就勾选「没有 OA 单号」';
   for (const [key, label] of HEADER_FIELDS) {
     if (!form[key].trim()) invalid[key] = `请填写${label}`;
   }
@@ -116,14 +166,19 @@ async function save() {
 </script>
 
 <template>
-  <Dialog :open="open" title="人工录入申请" description="填写已经通过 OA 审批的申请；采购和到货数量之后分别登记" width="880px" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
+  <Dialog :open="open" title="人工录入申请" description="OA 审批单，或打过招呼、还没有 OA 单号的采购，都在这里录；采购和到货之后分别登记" width="880px" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
     <div ref="content">
-      <div class="grid grid-cols-2 gap-x-2.5 gap-y-3.5 sm:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,1fr))] sm:gap-x-3.5">
-        <Input v-model="form.serialNumber" label="OA 流水号" required :error="errors.serialNumber" :disabled="saving" class="col-span-2 sm:col-span-1 [&_input]:font-mono" @update:model-value="clearError('serialNumber')" />
-        <Input v-model="form.requestDate" label="申请日期" type="date" required :error="errors.requestDate" :disabled="saving" @update:model-value="clearError('requestDate')" />
-        <Input v-model="form.department" label="申请部门" required :error="errors.department" :disabled="saving" @update:model-value="clearError('department')" />
-        <Input v-model="form.handler" label="经办人" required :error="errors.handler" :disabled="saving" class="col-span-2 sm:col-span-1" @update:model-value="clearError('handler')" />
-      </div>
+      <RequestHeaderFields
+        v-model:serial-number="form.serialNumber"
+        v-model:auto-serial="form.autoSerial"
+        v-model:request-date="form.requestDate"
+        v-model:department="form.department"
+        v-model:handler="form.handler"
+        :errors="errors"
+        :disabled="saving"
+        :directory="directory"
+        @clear-error="clearError"
+      />
 
       <div class="mt-6 mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <h3 class="text-[13px] font-semibold text-ink">申请明细<span class="ml-0.5 text-accent" aria-hidden="true">*</span></h3>
@@ -151,16 +206,18 @@ async function save() {
             <tr v-for="(line, i) in lines" :key="line.key" :data-line="line.key" class="max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:rounded-(--radius-card) max-sm:border max-sm:border-line max-sm:bg-canvas max-sm:p-3 sm:border-b sm:border-line sm:last:border-b-0">
               <td class="num text-meta max-sm:-order-2 max-sm:self-center sm:pl-3"><span class="sm:hidden">第 </span>{{ i + 1 }}<span class="sm:hidden"> 行</span></td>
               <td class="max-sm:col-span-2 sm:px-1 sm:py-1.5">
-                <Input v-model="line.itemName" :label="`第 ${i + 1} 行品名`" hide-label size="sm" variant="cell" placeholder="品名" required :error="lineError(line, 'itemName')" :disabled="saving" @update:model-value="clearError(errorKey(line, 'itemName'))" />
+                <Combobox :model-value="line.itemName" :options="items" :open-on-click="false" :label="`第 ${i + 1} 行品名`" hide-label size="sm" variant="cell" placeholder="品名" required :error="lineError(line, 'itemName')" :disabled="saving" empty-text="物品库里还没有物品，直接填写" @update:model-value="editItem(line, 'itemName', $event)" />
               </td>
               <td class="max-sm:col-span-2 sm:px-1 sm:py-1.5">
-                <Input v-model="line.specification" :label="`第 ${i + 1} 行规格`" hide-label size="sm" variant="cell" placeholder="规格（可空）" :error="lineError(line, 'specification')" :disabled="saving" @update:model-value="clearError(errorKey(line, 'specification'))" />
+                <Combobox :model-value="line.specification" :options="specOptions(catalog, line.itemName)" :open-on-click="false" :label="`第 ${i + 1} 行规格`" hide-label size="sm" variant="cell" placeholder="规格（可空）" :error="lineError(line, 'specification')" :disabled="saving" empty-text="这个品名还没有用过的规格" @update:model-value="editItem(line, 'specification', $event)" />
               </td>
               <td class="sm:px-1 sm:py-1.5">
                 <Input v-model="line.quantity" :label="`第 ${i + 1} 行申请数量`" hide-label size="sm" variant="cell" type="number" min="0" step="0.000001" placeholder="申请数量" required :error="lineError(line, 'quantity')" :disabled="saving" class="[&_input]:text-right" @update:model-value="clearError(errorKey(line, 'quantity'))" />
               </td>
               <td class="sm:px-1 sm:py-1.5" @keydown.enter="unitEnter($event, i)">
-                <Input v-model="line.unit" :label="`第 ${i + 1} 行单位`" hide-label size="sm" variant="cell" placeholder="盒 / 支 / 包" required :error="lineError(line, 'unit')" :disabled="saving" @update:model-value="clearError(errorKey(line, 'unit'))" />
+                <!-- 单位框带 datalist（物品库单位、包装层级、常用单位）；窄列里隐藏 datalist 的箭头，免得占位字被截 -->
+                <Input v-model="line.unit" :label="`第 ${i + 1} 行单位`" hide-label size="sm" variant="cell" placeholder="盒 / 支 / 包" required :suggestions="unitSuggestions(catalog, line.itemName, line.specification)" :error="lineError(line, 'unit')" :disabled="saving" class="[&_input::-webkit-calendar-picker-indicator]:hidden" @update:model-value="editUnit(line)" />
+                <span v-if="line.unit && line.unitSource" class="mt-0.5 block px-2.5 text-[11.5px] leading-4 text-muted max-sm:mt-1" data-unit-source="CATALOG">沿用物品库</span>
               </td>
               <td class="max-sm:-order-1 max-sm:justify-self-end sm:pr-2 sm:text-right">
                 <button type="button" class="row-action row-action-danger" data-remove :aria-label="`删除第 ${i + 1} 行`" :title="`删除第 ${i + 1} 行`" :disabled="saving || lines.length <= 1" @click="removeLine(i)">

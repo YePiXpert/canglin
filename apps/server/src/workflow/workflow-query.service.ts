@@ -5,7 +5,7 @@ import {
   type WorkflowQuery, type WorkflowRequestRow, type WorkflowRequestLineRow, type WorkflowProductRow,
   type WorkflowDocumentRow, type WorkflowDocumentLineRow, type WorkflowStockRow, type WorkflowStockEntryRow,
   type WorkflowOverview, type WorkflowStage, type WorkflowLocation, type WorkflowDocumentKind,
-  type WorkflowReport, type WorkflowPriceRow,
+  type WorkflowReport, type WorkflowPriceRow, type WorkflowDirectory,
 } from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiSearchService } from '../ai/ai-search.service';
@@ -46,6 +46,7 @@ export class WorkflowQueryService {
     ]);
     return requests.map((request) => ({
       id: request.id, serialNumber: request.serialNumber, department: request.department, handler: request.handler,
+      systemSerial: request.systemSerial, autoSerial: request.systemSerial !== null && request.serialNumber === request.systemSerial,
       requestDate: request.requestDate, note: request.note, sourceTaskId: request.sourceTaskId,
       createdAt: request.createdAt.toISOString(), attachments: request.attachments,
       deletable: !request.lines.some((line) => used.some((entry) => entry.requestLineId === line.id)),
@@ -144,7 +145,12 @@ export class WorkflowQueryService {
         ...(ids ? { id: { in: ids } } : {}), ...(query.requestId ? { id: ids ? { in: ids.filter((id) => id === query.requestId) } : query.requestId } : {}),
         ...(query.dateFrom || query.dateTo ? { requestDate: { gte: query.dateFrom, lte: query.dateTo } } : {}),
         ...(query.productId ? { lines: { some: { productId: query.productId } } } : {}),
-        ...(query.search ? { OR: [{ serialNumber: { contains: query.search } }, { handler: { contains: query.search } }, { department: { contains: query.search } }, { lines: { some: { OR: names.map((name) => ({ itemName: { contains: name } })) } } }] } : {}),
+        ...(query.search ? { OR: [{ serialNumber: { contains: query.search } }, { systemSerial: { contains: query.search } }, { handler: { contains: query.search } }, { department: { contains: query.search } }, { lines: { some: { OR: names.map((name) => ({ itemName: { contains: name } })) } } }] } : {}),
+        // 流水号精确匹配（录入时提醒重复）与「还没有 OA 单号」（流水号就是系统编号）：两项可以同时给，放进 AND
+        AND: [
+          ...(query.serial ? [{ serialNumber: query.serial }] : []),
+          ...(query.autoSerial ? [{ systemSerial: { not: null } }, { serialNumber: { equals: this.prisma.procurementRequest.fields.systemSerial } }] : []),
+        ],
       };
       const [records, total] = await Promise.all([
         tx.procurementRequest.findMany({ where, include: requestInclude, orderBy: { id: 'desc' }, skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
@@ -168,6 +174,62 @@ export class WorkflowQueryService {
         tx.businessDocument.count({ where }),
       ]);
       return { items: await this.projectDocuments(tx, records), total, page: query.page, pageSize: query.pageSize };
+    });
+  }
+
+  /**
+   * 部门与人员的候选（docs/manual-entry-2026-10.md P1）：已有申请的 部门 / 经办人 与未撤销发放单的 领用部门 / 领用人。
+   * 次数按申请张数、发放单张数算（一张发放单给同一个人几行只算一次）；最近一次用申请日期与业务日期；
+   * 排序：最近一次在前，其次次数多的在前，再按名称。recent 是最近录入的几张申请里的「部门 · 经办人」，去重后最多 4 组。
+   */
+  async directory(): Promise<WorkflowDirectory> {
+    return this.prisma.$transaction(async (tx) => {
+      const [requests, lines] = await Promise.all([
+        tx.procurementRequest.findMany({ select: { id: true, department: true, handler: true, requestDate: true }, orderBy: { id: 'desc' } }),
+        tx.businessLine.findMany({
+          where: { recipient: { not: null }, document: { kind: 'DISTRIBUTION', status: 'POSTED' } },
+          select: { recipient: true, documentId: true, document: { select: { department: true, date: true } } },
+        }),
+      ]);
+      type Tally = { uses: Set<string>; lastDate: string };
+      const departments = new Map<string, Tally>(), people = new Map<string, Tally & { name: string; department: string }>();
+      const count = (tally: Tally, source: string, date: string) => {
+        tally.uses.add(source);
+        if (date > tally.lastDate) tally.lastDate = date;
+      };
+      const department = (name: string, source: string, date: string) => {
+        if (!name) return;
+        if (!departments.has(name)) departments.set(name, { uses: new Set(), lastDate: '' });
+        count(departments.get(name)!, source, date);
+      };
+      const person = (name: string, dept: string, source: string, date: string) => {
+        if (!name) return;
+        const key = JSON.stringify([name, dept]);
+        if (!people.has(key)) people.set(key, { name, department: dept, uses: new Set(), lastDate: '' });
+        count(people.get(key)!, source, date);
+      };
+      for (const request of requests) {
+        department(request.department, `r${request.id}`, request.requestDate);
+        person(request.handler, request.department, `r${request.id}`, request.requestDate);
+      }
+      for (const line of lines) {
+        const dept = line.document.department?.trim() ?? '';
+        department(dept, `d${line.documentId}`, line.document.date);
+        person(line.recipient!.trim(), dept, `d${line.documentId}`, line.document.date);
+      }
+      const order = (a: { lastDate: string; uses: number; name: string }, b: { lastDate: string; uses: number; name: string }) =>
+        b.lastDate.localeCompare(a.lastDate) || b.uses - a.uses || a.name.localeCompare(b.name, 'zh-Hans-CN');
+      const recent: WorkflowDirectory['recent'] = [];
+      for (const request of requests) {
+        if (recent.length >= 4) break;
+        if (!recent.some((pair) => pair.department === request.department && pair.handler === request.handler))
+          recent.push({ department: request.department, handler: request.handler });
+      }
+      return {
+        departments: [...departments].map(([name, tally]) => ({ name, uses: tally.uses.size, lastDate: tally.lastDate })).sort(order),
+        people: [...people.values()].map(({ name, department: dept, uses, lastDate }) => ({ name, department: dept, uses: uses.size, lastDate })).sort(order),
+        recent,
+      };
     });
   }
 

@@ -33,7 +33,7 @@ function line(overrides: Partial<WorkflowRequestLineRow> = {}): WorkflowRequestL
 function request(overrides: Partial<WorkflowRequestRow> = {}): WorkflowRequestRow {
   return {
     id: 17, serialNumber: 'OA-2026-1009-017', department: '行政部', handler: '王晓敏', requestDate: '2026-10-09',
-    note: null, sourceTaskId: null, createdAt: '2026-10-09T08:00:00.000Z', lines: [line()], attachments: [], deletable: true, ...overrides,
+    note: null, sourceTaskId: null, createdAt: '2026-10-09T08:00:00.000Z', lines: [line()], attachments: [], deletable: true, systemSerial: null, autoSerial: false, ...overrides,
   };
 }
 const pending = request({

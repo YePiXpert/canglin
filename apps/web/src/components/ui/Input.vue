@@ -17,7 +17,7 @@ const props = withDefaults(
     max?: string | number;
     step?: string | number;
     autocomplete?: string;
-    /** 输入建议来源（datalist），如历史领用人、部门 */
+    /** 输入建议来源（datalist），如单位候选；部门、人员这类要从已有的里选的用 Combobox */
     suggestions?: string[];
     /**
      * sm = h-8（32px，表格行内、明细行）；md = 桌面 h-9（36px）、手机 h-11（44px，默认）。

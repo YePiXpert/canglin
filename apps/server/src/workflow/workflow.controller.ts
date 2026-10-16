@@ -6,7 +6,7 @@ import {
   workflowStockInSchema, workflowDistributionSchema, workflowSupplierReturnSchema,
   workflowEmployeeReturnSchema, workflowPurchaseCancelSchema, workflowRequestCancelSchema,
   workflowAdjustmentSchema, workflowVoidSchema, workflowMetadataSchema, workflowProductCreateSchema,
-  workflowLinkUpdateSchema, type WorkflowLinkUpdateInput,
+  workflowLinkUpdateSchema, workflowRequestUpdateSchema, type WorkflowLinkUpdateInput, type WorkflowRequestUpdateInput,
   type WorkflowRequestCreateInput, type WorkflowPurchaseInput, type WorkflowReceiptInput, type WorkflowQuery,
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
@@ -29,6 +29,7 @@ export class WorkflowController {
   @Get('documents/:id') document(@Param('id', ParseIntPipe) id: number) { return this.queries.document(id); }
   @Get('lines/:id/document') lineDocument(@Param('id', ParseIntPipe) id: number) { return this.queries.lineDocument(id); }
   @Get('products') products() { return this.queries.products(); }
+  @Get('directory') directory() { return this.queries.directory(); }
   @Get('stock') stock(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.stock(query); }
   @Get('entries') entries(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.entries(query); }
   @Get('overview') overview() { return this.queries.overview(); }
@@ -47,6 +48,7 @@ export class WorkflowController {
   @Post('request-cancellations') cancelRequest(@Body(new ZodValidationPipe(workflowRequestCancelSchema)) body: WorkflowRequestCancelInput, @Req() req: FastifyRequest) { return this.workflow.cancelRequest(body, operationId(req), clientIp(req)); }
   @Post('adjustments') adjust(@Body(new ZodValidationPipe(workflowAdjustmentSchema)) body: WorkflowAdjustmentInput, @Req() req: FastifyRequest) { return this.workflow.adjust(body, operationId(req), clientIp(req)); }
   @Post('documents/:id/void') void(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowVoidSchema)) body: WorkflowVoidInput, @Req() req: FastifyRequest) { return this.workflow.voidDocument(id, body, operationId(req), clientIp(req)); }
+  @Patch('requests/:id') updateRequest(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowRequestUpdateSchema)) body: WorkflowRequestUpdateInput, @Req() req: FastifyRequest) { return this.workflow.updateRequest(id, body, operationId(req), clientIp(req)); }
   @Post('requests/:id/delete') deleteRequest(@Param('id', ParseIntPipe) id: number, @Req() req: FastifyRequest) { return this.workflow.deleteRequest(id, operationId(req), clientIp(req)); }
   @Patch('request-lines/:id/link') requestLineLink(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowLinkUpdateSchema)) body: WorkflowLinkUpdateInput, @Req() req: FastifyRequest) { return this.workflow.updateRequestLineLink(id, body, operationId(req), clientIp(req)); }
   @Patch('purchase-lines/:id/link') purchaseLineLink(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowLinkUpdateSchema)) body: WorkflowLinkUpdateInput, @Req() req: FastifyRequest) { return this.workflow.updatePurchaseLineLink(id, body, operationId(req), clientIp(req)); }

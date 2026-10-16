@@ -4,6 +4,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Disclosure from '@/components/ui/Disclosure.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Combobox from '@/components/ui/Combobox.vue';
 import Input from '@/components/ui/Input.vue';
 import Notice from '@/components/ui/Notice.vue';
 import Skeleton from '@/components/ui/Skeleton.vue';
@@ -12,6 +13,7 @@ import { aiSuggestionKey, isShortLink } from '@canglin/shared';
 import { buttonClass } from '@/components/ui/button';
 import { webLink } from '@/components/workflow/presentation';
 import { importTaskKey } from './useImportTask';
+import { useDraftHeaderHints } from './useDraftHeaderHints';
 
 /**
  * 草稿（双栏右侧）：单据头与明细表、识别依据与 AI 建议、未采用的候选行。
@@ -31,6 +33,9 @@ const UNIT_CHIP =
   'inline-flex h-6 min-w-7 items-center justify-center rounded-full border border-line bg-surface px-2 text-xs text-text transition-colors duration-150 hover:border-blue hover:text-blue pointer-coarse:h-10 pointer-coarse:px-3.5';
 /** 只在 ImportView 的 v-else-if="task" 里渲染：task 变回 null 时父组件先更新、卸载本组件，所以收窄为非空 */
 const task = ctx.task as Ref<ImportTaskView>;
+/* 单据头的候选与提醒（docs/manual-entry-2026-10.md P6、N6、N7），见 useDraftHeaderHints */
+const { headerChoices, headerLike, duplicate, noOaMatches, requestSummary } = useDraftHeaderHints(form, task);
+
 /** 本地 OCR 行最低置信度低于 0.6（与 OCR 服务的告警阈值一致）；文本层与 AI 行没有置信度 */
 const lowConfidence = (l: { source?: { confidence?: number | null } | null }) => (l.source?.confidence ?? 1) < 0.6;
 </script>
@@ -45,14 +50,32 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
     :class="[mobileTab === 'draft' ? 'block' : 'hidden', 'min-w-0 space-y-4 lg:block']"
   >
     <section class="card p-5">
+      <Notice v-if="noOaMatches.length" size="sm" class="mb-4" data-no-oa-hint>
+        {{ form.handler.trim() }}还有 {{ noOaMatches.length }} 张没有 OA 单号的申请：<template v-for="(row, i) in noOaMatches" :key="row.id"><template v-if="i">、</template><a :href="`/requests/${row.id}`" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">{{ row.serialNumber }}</a>（{{ requestSummary(row) }}）</template>。如果这份 OA 单是给它补办的，打开那张申请补填流水号、上传这份原件，再「放弃草稿」，免得重复入账。
+      </Notice>
       <div class="grid gap-4 sm:grid-cols-2">
         <div v-for="f in fields" :key="f" class="min-w-0">
+          <Combobox
+            v-if="f === 'department' || f === 'handler'"
+            :label="labels[f]"
+            :model-value="form[f]"
+            :options="headerChoices[f]"
+            :disabled="task.confirmed || !loaded"
+            :empty-text="f === 'department' ? '还没有用过的部门，直接填写' : '还没有用过的经办人，直接填写'"
+            @update:model-value="form[f] = $event"
+          />
           <Input
+            v-else
             :label="labels[f]"
             v-model="form[f]"
             :type="f === 'requestDate' ? 'date' : 'text'"
             :disabled="task.confirmed || !loaded"
-          /><template v-for="p in task.aiResult" :key="p.page"
+          /><Button
+            v-if="headerLike(f)"
+            variant="link"
+            class="mt-1.5 mr-3 text-left text-xs"
+            @click="form[f] = headerLike(f)!"
+          >是不是「{{ headerLike(f) }}」？</Button><template v-for="p in task.aiResult" :key="p.page"
             ><Button
               v-if="p[f] && p[f] !== form[f]"
               variant="link"
@@ -66,6 +89,10 @@ const lowConfidence = (l: { source?: { confidence?: number | null } | null }) =>
           >
         </div>
       </div>
+      <Notice v-if="duplicate" variant="inline" class="mt-3" data-duplicate-serial>
+        已有申请用了这个流水号：{{ duplicate.department }} · {{ duplicate.handler }} · <span class="num">{{ duplicate.requestDate }}</span> · {{ duplicate.lines.length }} 条明细
+        <template #actions><a :href="`/requests/${duplicate.id}`" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })">查看</a></template>
+      </Notice>
     </section>
 
     <!--

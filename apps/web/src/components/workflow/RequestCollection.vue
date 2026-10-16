@@ -50,7 +50,7 @@ const noResult = computed(() => {
   if (!filters.search) return { title: `没有「${stage}」的申请`, description: '换个进度看看，或查看全部申请。' };
   return {
     title: `没有找到「${filters.search}」相关的申请`,
-    description: filters.stage ? `当前筛选：${stage}。试试放宽条件。` : '可以搜流水号、品名、部门或经办人。',
+    description: filters.stage ? `当前筛选：${stage}。试试放宽条件。` : '可以搜流水号、品名、部门或经办人；没有 OA 单号的申请搜「无OA」。',
   };
 });
 
@@ -95,11 +95,11 @@ defineExpose({ refresh: load });
       <EmptyState v-else-if="data && data.total > 0" :icon="false" title="这一页没有申请" :description="`共 ${data.total} 张，回到第 1 页查看。`">
         <Button variant="secondary" size="sm" @click="goPage(1)">回到第 1 页</Button>
       </EmptyState>
-      <EmptyState v-else-if="pending" icon="check-circle" title="当前没有待办申请" description="从 OA 原件导入，或人工录入一张已审批申请。">
+      <EmptyState v-else-if="pending" icon="check-circle" title="当前没有待办申请" description="从 OA 原件导入，或人工录入一张申请。">
         <Button variant="secondary" size="sm" @click="emit('create')">人工录入申请</Button>
       </EmptyState>
       <!-- 首次使用：两个入口 -->
-      <EmptyState v-else art="ledger" title="还没有申请单" description="从 OA 原件导入，或人工录入一张已审批申请。">
+      <EmptyState v-else art="ledger" title="还没有申请单" description="从 OA 原件导入，或人工录入一张申请。">
         <router-link to="/import" :class="buttonClass({ variant: 'primary', size: 'sm' })">导入 OA 单</router-link>
         <Button variant="secondary" size="sm" @click="emit('create')">人工录入申请</Button>
       </EmptyState>
