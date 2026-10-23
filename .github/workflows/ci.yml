@@ -61,7 +61,17 @@ jobs:
       options: --ipc=host
     steps:
       # 中文字体与 scripts/visual.sh 一致：镜像自带的文泉驿正黑没有粗体
-      - run: apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk
+      - name: 安装固定视觉环境的中文字体
+        timeout-minutes: 5
+        run: |
+          # Azure's mirror stalled repeatedly while streaming this 61 MB package.
+          # Keep Ubuntu signature verification and the same package; bound network retries.
+          for visual_sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            [ -f "$visual_sources" ] || continue
+            sed -i 's|http[s]*://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$visual_sources"
+          done
+          apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends fonts-noto-cjk
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4   # 版本取自根 package.json 的 packageManager
       - uses: actions/setup-node@v4
