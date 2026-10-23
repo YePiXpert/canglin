@@ -2,9 +2,25 @@
 # Isolated candidate trial. Never invokes deploy.sh, upgrade.sh or production Compose.
 set -euo pipefail
 REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-PROJECT=canglin-trial-42b9ae6
-REVISION=42b9ae68367e7b9ea27c34b8d6627049728b990b
-TRIAL_DIR=$(realpath -m "${CANGLIN_TRIAL_DIR:-$REPO_DIR/state/trial-42b9ae6}")
+# Parse data, never execute a candidate file as shell code or inherit image selectors.
+unset TRIAL_REVISION TRIAL_WEB_IMAGE TRIAL_SERVER_IMAGE TRIAL_OCR_IMAGE
+candidate_file=${CANGLIN_TRIAL_CANDIDATE:-$REPO_DIR/deploy/trial-candidate.env}
+while IFS='=' read -r key value || [ -n "$key" ]; do
+  case "$key" in
+    ''|\#*) continue ;;
+    TRIAL_REVISION)
+      [[ "$value" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid candidate revision' >&2; exit 1; } ;;
+    TRIAL_WEB_IMAGE|TRIAL_SERVER_IMAGE|TRIAL_OCR_IMAGE)
+      [[ "$value" =~ ^[a-z0-9./_-]+@sha256:[a-f0-9]{64}$ ]] || { echo 'Candidate images must use immutable digests' >&2; exit 1; } ;;
+    *) echo 'Unknown candidate setting' >&2; exit 1 ;;
+  esac
+  [ -z "${!key+x}" ] || { echo 'Duplicate candidate setting' >&2; exit 1; }
+  export "$key=$value"
+done < "$candidate_file"
+: "${TRIAL_REVISION:?Missing revision}" "${TRIAL_WEB_IMAGE:?Missing web image}" "${TRIAL_SERVER_IMAGE:?Missing server image}" "${TRIAL_OCR_IMAGE:?Missing OCR image}"
+REVISION=$TRIAL_REVISION
+PROJECT=canglin-trial-${REVISION:0:12}
+TRIAL_DIR=$(realpath -m "${CANGLIN_TRIAL_DIR:-$REPO_DIR/state/trial-${REVISION:0:12}}")
 ACTION=${1:-status}
 case "$ACTION" in up|check|status|logs|stop|smoke) ;; *) echo 'Usage: bash deploy/trial.sh up|check|status|logs|stop|smoke' >&2; exit 2 ;; esac
 [ $# -le 1 ] || { echo 'Unexpected arguments' >&2; exit 2; }
@@ -65,7 +81,7 @@ case "$ACTION" in
   smoke)
     verify_images
     # A separate disposable server with an anonymous volume and no network. Never use trial data.
-    server_image=$(awk '$1 == "server:" {server=1; next} server && $1 == "image:" {print $2; exit}' "$REPO_DIR/deploy/compose.trial.yml")
+    server_image=$TRIAL_SERVER_IMAGE
     container=''
     cleanup() { [ -z "$container" ] || docker rm -f -v "$container" >/dev/null; }
     trap cleanup EXIT

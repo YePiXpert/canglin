@@ -127,7 +127,7 @@ async def test_parse_pdf_page_by_page_matches_whole_document(monkeypatch):
     use_pages(monkeypatch, office_form(rows, rows_per_page=5))
     whole = await pipeline.parse_pdf(b"pdf")
     pages = [await pipeline.parse_pdf(b"pdf", n) for n in (1, 2)]
-    assert whole["parserVersion"] == "4" and whole["mode"] == "PDF_TEXT" and whole["templateType"] == "OFFICE_SUPPLY"
+    assert whole["parserVersion"] == "5" and whole["mode"] == "PDF_TEXT" and whole["templateType"] == "OFFICE_SUPPLY"
     names = [(i["itemName"], i["quantity"], i["unit"]) for i in whole["items"]]
     assert names == [(f"文件袋{n}", n, "个") for n in range(1, 9)]
     assert [(i["itemName"], i["quantity"], i["unit"]) for p in pages for i in p["items"]] == names

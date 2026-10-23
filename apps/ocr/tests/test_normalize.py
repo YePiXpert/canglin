@@ -130,3 +130,13 @@ class TestUnitNotes:
         assert unit_in_name("牛皮纸袋 大号(单位：包)") == "包"
         assert unit_in_name("档案盒（单位:个）") == "个"
         assert unit_in_name("曲别针（10盒）") is None
+
+    def test_explicit_unit_inside_name_or_without_brackets(self):
+        assert unit_in_name("铅笔 2B 12支/盒 （单位：盒） 墨绿") == "盒"
+        assert unit_in_name("荧光笔 6支/盒 彩色 单位:盒") == "盒"
+        assert unit_in_name("荧光笔6支/盒彩色单位:盒") == "盒"
+        assert unit_in_name("笔（单位：支）备注（单位：支）") == "支"
+        assert unit_in_name("笔（单位：支）单位:盒") is None
+        assert unit_in_name("笔（单位：支） 单位:盒") is None
+        for name in ("纸 5包/箱 (箱)", "文件夹 5个", "单位:123", "单位:盒装产品名称", "单位名称:行政部"):
+            assert unit_in_name(name) is None

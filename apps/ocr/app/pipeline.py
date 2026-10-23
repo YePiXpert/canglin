@@ -10,7 +10,7 @@ from .ocr import is_photo, ocr_pdf_page, run_ocr
 from .reconstruct import rebuild_from_entries, rebuild_from_lines, rows_from_table, finalize_items, extract_fields
 
 MAX_PAGES = int(os.environ.get("OCR_MAX_PAGES", "30"))
-PARSER_VERSION = "4"
+PARSER_VERSION = "5"
 # OCR_GRID_REBUILD=0 跳过文本层网格重建，回到 find_tables 与逐行解析
 GRID_REBUILD = os.environ.get("OCR_GRID_REBUILD", "1") != "0"
 # 表体文字少于这个字数的页面才算没有文本层

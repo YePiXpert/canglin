@@ -1,9 +1,9 @@
-# Fixed candidate 42b9ae68367e7b9ea27c34b8d6627049728b990b.
+# Images and revision are pinned together in trial-candidate.env.
 # Standalone file: never merge with the production Compose configuration.
-name: canglin-trial-42b9ae6
+name: canglin-trial
 services:
   web:
-    image: ghcr.io/yepixpert/canglin-web@sha256:7111f99de24b9cb76f10ddf2dc6ed6099e74f98ad3e7b5afce440637b57ad20f
+    image: ${TRIAL_WEB_IMAGE:?Run deploy/trial.sh}
     ports:
       - "127.0.0.1:18080:80"
     depends_on:
@@ -14,11 +14,13 @@ services:
       com.centurylinklabs.watchtower.enable: "false"
     restart: "no"
   server:
-    image: ghcr.io/yepixpert/canglin-server@sha256:cb912964c4e23823cc79ce4855ebb63eea031d0a78b5483e02954bdb23ed1fb6
+    image: ${TRIAL_SERVER_IMAGE:?Run deploy/trial.sh}
     environment:
       TZ: Asia/Shanghai
       DATA_DIR: /app/state
       DATABASE_URL: file:/app/state/canglin.db
+      TRUST_PROXY_HOPS: "1"
+      TRUST_PROXY_CIDRS: "172.16.0.0/12"
       OCR_BASE_URL: http://ocr:8000
       OCR_API_KEY: ${TRIAL_OCR_API_KEY:?Run deploy/trial.sh up first}
       LLM_BASE_URL: ""
@@ -35,7 +37,7 @@ services:
       com.centurylinklabs.watchtower.enable: "false"
     restart: "no"
   ocr:
-    image: ghcr.io/yepixpert/canglin-ocr@sha256:22ef72757b91e5540bff3c20b2fef6418f0eb709fd6f84cf0dc1daf6c53b9069
+    image: ${TRIAL_OCR_IMAGE:?Run deploy/trial.sh}
     environment:
       TZ: Asia/Shanghai
       OCR_API_KEY: ${TRIAL_OCR_API_KEY:?Run deploy/trial.sh up first}

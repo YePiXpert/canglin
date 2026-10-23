@@ -151,4 +151,8 @@ bash deploy/upgrade.sh --no-pull   # 不拉取代码，按当前源码 SHA 拉�
 
 ## 隔离试用
 
-当前候选见 `deploy/compose.trial.yml` 顶部注释；三个镜像使用 CI 发布的不可变摘要，项目、配置目录及数据卷独立于正式环境。启动、检查与清理用 `bash deploy/trial.sh up|check|status|logs|stop|smoke`，入口为服务器本机 `http://127.0.0.1:18080`，`stop` 只停容器、保留试用数据。
+当前已发布候选见 `deploy/trial-candidate.env`（源码提交与三个不可变镜像摘要一起固定）；尚未发布的工作区改动不在这些镜像里。可用 `CANGLIN_TRIAL_CANDIDATE=/绝对路径/candidate.env` 选择另一组已发布候选，脚本不会执行该文件中的 shell 内容，启动前逐个校验镜像的源码提交。项目、配置目录及数据卷按提交编号独立于正式环境。启动、检查与清理用 `bash deploy/trial.sh up|check|status|logs|stop|smoke`，入口为服务器本机 `http://127.0.0.1:18080`，`stop` 只停容器、保留试用数据。同一端口一次只启动一个候选。
+
+代理后的审计 IP 通过 `TRUST_PROXY_HOPS` 和 `TRUST_PROXY_CIDRS` 同时限定：直接访问应用 nginx 为一层；外层 OpenResty → 应用 nginx → API 为两层，且 web 必须绑定本机端口以阻止绕过外层。CIDR 宜取 `docker network inspect` 查到的本项目网段。API 直连时设零层。应用默认仅信任 loopback；Compose 默认信任 Docker 的 `172.16.0.0/12` 且最多一层。不要信任所有地址或任意长度的转发链。
+
+本轮新增付款与开票工作台及对应验收记录见 [2026-10-23 扩展开发与验收](docs/next-iteration-acceptance-2026-10.md)。

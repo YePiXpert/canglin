@@ -14,7 +14,7 @@ import { auditApi, type AuditRow } from '@/api';
 import { formatDateTime } from '@/utils/datetime';
 import { useUrlState } from '@/composables/useUrlState';
 import { useResource } from '@/composables/useResource';
-import { ITEM_FIELD_LABELS } from '@canglin/shared';
+import { ITEM_FIELD_LABELS, PAYMENT_STATUS_LABELS, type PaymentStatus } from '@canglin/shared';
 
 const DEFAULTS = { search: '', action: '', page: 1 };
 const filters = reactive({ ...DEFAULTS });
@@ -66,6 +66,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   WORKFLOW_DISTRIBUTION: { label: '领用发放', tone: 'gray', group: '领用' },
   WORKFLOW_EMPLOYEE_RETURN: { label: '员工归还', tone: 'gray', group: '领用' },
   WORKFLOW_METADATA: { label: '修改付款与发票', tone: 'gray', group: '采购' },
+  WORKFLOW_METADATA_BATCH: { label: '批量修改付款与开票', tone: 'gray', group: '采购' },
   WORKFLOW_VOID: { label: '撤销登记', tone: 'amber', group: '业务记录' },
   // 旧版台账已删除，保留这些动作名只为显示历史审计记录
   ITEM_CREATE: { label: '新增台账', tone: 'gray', group: '旧台账', legacy: true },
@@ -145,6 +146,14 @@ function detailEntries(log: AuditRow): DetailEntry[] {
 
   const out: DetailEntry[] = [];
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (key === 'changes' && Array.isArray(value)) {
+      for (const entry of value) {
+        if (!entry || typeof entry !== 'object' || !entry.before || !entry.after) continue;
+        const label = (state: { paymentStatus: PaymentStatus; invoiceIssued: boolean }) => `${PAYMENT_STATUS_LABELS[state.paymentStatus] ?? state.paymentStatus} / ${state.invoiceIssued ? '已开票' : '未开票'}`;
+        out.push({ key: `采购 #${entry.id}`, value: `${label(entry.before)} → ${label(entry.after)}`, change: true });
+      }
+      continue;
+    }
     if (key === 'changed' && value && typeof value === 'object') {
       for (const [field, pair] of Object.entries(value as Record<string, [unknown, unknown]>)) {
         const [before, after] = Array.isArray(pair) ? pair : [undefined, pair];

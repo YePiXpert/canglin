@@ -17,6 +17,7 @@ import WorkbenchRequestRow from '@/components/workflow/WorkbenchRequestRow.vue';
 import RecentDocumentsAside from '@/components/workflow/RecentDocumentsAside.vue';
 import RequestCreateDialog from '@/components/workflow/RequestCreateDialog.vue';
 import ImportPendingAside from '@/components/import/ImportPendingAside.vue';
+import PaymentPendingAside from '@/components/workflow/PaymentPendingAside.vue';
 
 /** 待办申请只取后端 pending 的前 10 张（后端按录入倒序），在这里按下一步重新排序 */
 const TODO_LIMIT = 10;
@@ -32,6 +33,7 @@ const { data: pending, loading: pendingLoading, refreshing: pendingRefreshing, e
 const importTotal = ref<number | null>(null);
 const imports = ref<InstanceType<typeof ImportPendingAside>>();
 const recent = ref<InstanceType<typeof RecentDocumentsAside>>();
+const payments = ref<InstanceType<typeof PaymentPendingAside>>();
 onMounted(() => { void loadOverview(); void loadPending(); });
 
 const requests = computed(() => sortByNextStep(pending.value?.items ?? []));
@@ -55,6 +57,7 @@ function refresh() {
   void loadPending();
   void imports.value?.refresh();
   void recent.value?.refresh();
+  void payments.value?.refresh();
 }
 function created(request: WorkflowRequestRow) { void router.push(`/requests/${request.id}`); }
 </script>
@@ -149,6 +152,7 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
 
       <div class="grid min-w-0 grid-cols-1 items-start gap-6 md:grid-cols-2 xl:grid-cols-1">
         <ImportPendingAside ref="imports" @total="importTotal = $event" />
+        <PaymentPendingAside ref="payments" />
         <RecentDocumentsAside ref="recent" />
       </div>
     </div>

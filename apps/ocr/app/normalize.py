@@ -105,9 +105,14 @@ def parse_unit_note(note: str, quantity: float | None) -> str | None:
 
 
 def unit_in_name(name: str) -> str | None:
-    """名称末尾的「(单位：包)」「（单位:个）」。"""
-    m = re.search(r"[(（]\s*单位\s*[:：]\s*([^()（）\s]{1,4})\s*[)）]\s*$", name)
-    return m.group(1) if m else None
+    """只取明确的「单位：」标注；括号标注可在名称中间，裸标注须有结束边界。"""
+    token = r"([^()（）\s:：,，;；\d]{1,4})"
+    bracketed = re.findall(r"[(（]\s*单位\s*[:：]\s*" + token + r"\s*[)）]", name)
+    # OCR 常把「彩色 单位:盒」连成「彩色单位:盒」，标签本身已能确定起点。
+    bare = re.findall(r"单位\s*[:：]\s*" + token + r"(?=$|[\s,，;；])", name)
+    units = set(bracketed + bare)
+    # 冲突标注留空，交给人工确认；包装规格「12支/盒」「(10盒)」不代表申请单位。
+    return next(iter(units)) if len(units) == 1 else None
 
 
 def extract_url(text: str) -> str | None:

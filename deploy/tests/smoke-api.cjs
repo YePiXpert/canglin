@@ -5,7 +5,7 @@ let cookie = '';
 async function call(method, route, data, expected = 200) {
   const response = await fetch('http://127.0.0.1:3000/api' + route, {
     method,
-    headers: { cookie, 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+    headers: { cookie, ...(data === undefined ? {} : { 'Content-Type': 'application/json' }), 'Idempotency-Key': crypto.randomUUID() },
     body: data === undefined ? undefined : JSON.stringify(data),
   });
   assert.equal(response.status, expected, `${method} ${route}: ${await response.clone().text()}`);
@@ -70,7 +70,33 @@ async function call(method, route, data, expected = 200) {
   assert.equal(confirmed.attached, 1);
   const id = confirmed.requestId;
   const [line] = (await call('GET', `/workflow/requests/${id}`)).value.lines;
+  const supplier = (await call('POST', '/suppliers', { name: '隔离验收供应商' }, 201)).value;
+  const purchase = (await call('POST', '/workflow/purchases', {
+    date: draft.requestDate, supplierId: supplier.id,
+    lines: [{ requestLineId: line.id, quantity: '2', unitPrice: '12.50' }],
+  }, 201)).value;
+  await call('PATCH', '/workflow/payments/batch', {
+    documents: [{ id: purchase.id, paymentStatus: 'UNPAID', invoiceIssued: false }],
+    change: { paymentStatus: 'PAID' },
+  });
+  await call('PATCH', `/workflow/documents/${purchase.id}/metadata`, { invoiceIssued: true, note: '备份保留' });
+  const invoiceForm = new FormData();
+  invoiceForm.append('file', new Blob([original], { type: 'image/png' }), 'invoice.png');
+  const invoiceResponse = await fetch(`http://127.0.0.1:3000/api/attachments/documents/${purchase.id}?kind=INVOICE`, {
+    method: 'POST', headers: { cookie }, body: invoiceForm,
+  });
+  assert.equal(invoiceResponse.status, 201);
+  const invoice = await invoiceResponse.json();
+  const beforePayments = (await call('GET', '/workflow/payments')).value;
+  assert.equal(beforePayments.items[0].invoiceCount, 1);
+  assert.equal(beforePayments.items[0].totalAmount, '25.00');
   const backup = (await call('POST', '/system/backups', {}, 201)).value;
+  await call('PATCH', '/workflow/payments/batch', {
+    documents: [{ id: purchase.id, paymentStatus: 'PAID', invoiceIssued: true }],
+    change: { invoiceIssued: false },
+  });
+  await call('DELETE', `/attachments/${invoice.id}`);
+
   // A change made after the backup must be rolled back by the restore.
   await call(
     'POST',
@@ -98,12 +124,22 @@ async function call(method, route, data, expected = 200) {
   });
   assert.equal(recovered.status, 200);
   assert.deepEqual(Buffer.from(await recovered.arrayBuffer()), original);
+  assert.deepEqual((await call('GET', '/workflow/payments')).value, beforePayments);
+  const invoiceRestored = await fetch(`http://127.0.0.1:3000/api/attachments/${invoice.id}/download`, { headers: { cookie } });
+  assert.equal(invoiceRestored.status, 200);
+  assert.deepEqual(Buffer.from(await invoiceRestored.arrayBuffer()), original);
+  const purchaseRestored = (await call('GET', `/workflow/documents/${purchase.id}`)).value;
+  assert.equal(purchaseRestored.note, '备份保留');
+  assert.equal(purchaseRestored.paymentStatus, 'PAID');
+  assert.equal(purchaseRestored.invoiceIssued, true);
   console.log(
     JSON.stringify({
       api: true,
       database: true,
       offlineManualImport: true,
       originalRestored: true,
+      paymentStateRestored: true,
+      invoiceAttachmentRestored: true,
       sessionInvalidated: true,
     }),
   );

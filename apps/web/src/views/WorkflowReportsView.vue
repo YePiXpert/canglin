@@ -18,6 +18,7 @@ import { downloadCsv } from '@/utils/csv';
 import { createRequestGuard } from '@/utils/request';
 import { useUrlState } from '@/composables/useUrlState';
 import { moneyLabel } from '@/components/workflow/presentation';
+import ReportsNav from '@/components/workflow/ReportsNav.vue';
 
 const defaults = { dateFrom: '', dateTo: '', groupBy: 'month' };
 const filters = reactive({ ...defaults });
@@ -171,6 +172,7 @@ const allTime = computed(() => !applied.value.dateFrom && !applied.value.dateTo)
 <template>
   <div>
     <PageHeader title="报表" description="采购、到货、退货和领用都按登记的业务日期统计；已撤销的登记不计入" />
+    <ReportsNav />
 
     <!-- 筛选一行：期间（快捷分段）· 起始 / 结束日期 · 金额分组 · 查询报表 -->
     <form class="mb-6 flex flex-wrap items-end gap-3" @submit.prevent="load">

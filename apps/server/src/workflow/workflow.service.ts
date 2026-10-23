@@ -8,6 +8,7 @@ import {
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput,
   type WorkflowProductCreateInput, type WorkflowLinkUpdateInput,
+  type PaymentBatchInput, type PaymentBatchResult,
 } from '@canglin/shared';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -504,6 +505,33 @@ export class WorkflowService {
       if (quantity > 0n) await this.stockChange(tx, { productId: product.id, originLineId: line.id, businessLineId: line.id, location: 'STOCK', quantity, date: input.date });
       else await this.takeStock(tx, product.id, -quantity, line.id, input.date);
       return this.query.documentTx(tx, document.id);
+    });
+  }
+
+  async paymentBatch(input: PaymentBatchInput, key: string, ip?: string): Promise<PaymentBatchResult> {
+    return this.write('metadata_batch', input, key, ip, async (tx, audit) => {
+      const documents = await tx.businessDocument.findMany({ where: { id: { in: input.documents.map((r) => r.id) } } });
+      const byId = new Map(documents.map((d) => [d.id, d]));
+      const conflicts = input.documents.filter((expected) => {
+        const row = byId.get(expected.id);
+        return !row || row.kind !== 'PURCHASE' || row.status !== 'POSTED' || row.paymentStatus !== expected.paymentStatus || row.invoiceIssued !== expected.invoiceIssued;
+      }).map((r) => r.id);
+      if (conflicts.length) throw new ConflictException({ message: `采购 #${conflicts.join('、#')} 已撤销、不存在或状态已变化，本次全部未修改。请刷新后重新核对。`, conflictIds: conflicts });
+      const updatedIds: number[] = [], unchangedIds: number[] = [];
+      const changes: { id: number; before: { paymentStatus: string; invoiceIssued: boolean }; after: { paymentStatus: string; invoiceIssued: boolean } }[] = [];
+      for (const expected of input.documents) {
+        const row = byId.get(expected.id)!;
+        const before = { paymentStatus: row.paymentStatus, invoiceIssued: row.invoiceIssued };
+        const after = { ...before, ...input.change };
+        if (before.paymentStatus === after.paymentStatus && before.invoiceIssued === after.invoiceIssued) { unchangedIds.push(row.id); continue; }
+        // 与审计、幂等回执同一事务；只改选定状态，不触碰备注、附件或账目。
+        const updated = await tx.businessDocument.updateMany({ where: { id: row.id, kind: 'PURCHASE', status: 'POSTED', ...before }, data: input.change });
+        if (updated.count !== 1) throw new ConflictException('采购状态已变化，本次全部未修改。请刷新后重新核对。');
+        updatedIds.push(row.id); changes.push({ id: row.id, before, after });
+      }
+      if (changes.length) Object.assign(audit, { changes, updated: changes.length });
+      else audit[SKIP_AUDIT] = true;
+      return { updatedIds, unchangedIds };
     });
   }
 

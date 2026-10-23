@@ -164,6 +164,11 @@ for (const variant of VARIANTS) {
       await shot(page, `${v}-import-task`);
       await page.goto('/insights');
       await shot(page, `${v}-insights`);
+      await page.goto('/insights/payments');
+      await shot(page, `${v}-payments`);
+      await page.getByLabel('选择本页', { exact: true }).check();
+      await page.getByRole('button', { name: '批量付款状态', exact: true }).click();
+      await shot(page, `${v}-payments-batch`);
       await page.goto('/settings');
       await shot(page, `${v}-settings`);
       await page.goto('/settings/suppliers');

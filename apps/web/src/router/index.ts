@@ -16,6 +16,7 @@ export const router = createRouter({
         { path: 'requests/:id', name: 'request-detail', component: () => import('@/views/workflow/RequestDetailView.vue'), meta: { title: '申请详情', icon: 'ledger' } },
         { path: 'stock', name: 'stock', component: () => import('@/views/workflow/StockView.vue'), meta: { title: '库存与领用', icon: 'inventory' } },
         { path: 'insights', name: 'insights', component: () => import('@/views/WorkflowReportsView.vue'), meta: { title: '报表', icon: 'report' } },
+        { path: 'insights/payments', name: 'payments', component: () => import('@/views/WorkflowPaymentsView.vue'), meta: { title: '付款与开票', icon: 'report' } },
         { path: 'import', name: 'import', component: () => import('@/views/ImportView.vue'), meta: { title: '导入 OA 单', icon: 'import' } },
         {
           path: 'settings',

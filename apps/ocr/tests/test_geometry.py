@@ -39,6 +39,23 @@ def test_wrapped_name_and_spec_share_a_physical_row_with_tall_numeric_cells():
     assert (item['quantity'], item['unit'], item['unitPrice']) == (5, '包', 18.5)
 
 
+def test_wrapped_url_digits_join_only_inside_the_same_physical_row_and_column():
+    entries = [cell(text, x, .10) for text, x in
+               [('序号', .02), ('物品名称', .20), ('数量', .50), ('备注', .75)]]
+    entries += [cell('1', .02, .20), cell('纸', .20, .20), cell('2', .50, .20),
+                cell('https://shop.example/goods/1', .75, .20), cell('234567890', .75, .226),
+                cell('2', .02, .30), cell('笔', .20, .30), cell('3', .50, .30),
+                cell('https://shop.example/goods/2', .75, .30), cell('买两包', .75, .326)]
+    result = rebuild_from_entries(entries)
+    assert len(result['items']) == 2
+    first, second = result['items']
+    assert first['purchaseLink'] == 'https://shop.example/goods/1234567890'
+    assert not first.get('spec')
+    assert second['purchaseLink'] == 'https://shop.example/goods/2'
+    assert second['spec'] == '买两包'
+    assert any('长数字跨行拼接' in w for w in result['warnings'])
+
+
 def test_missing_quantity_does_not_use_price_as_quantity_or_merge_with_previous_row():
     entries = header() + [cell('荧光笔', .10, .20), cell('黄色', .35, .20),
                           cell('支', .68, .20), cell('2.50', .80, .20)]

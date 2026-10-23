@@ -7,6 +7,7 @@ import type {
   WorkflowEmployeeReturnInput, WorkflowPurchaseCancelInput, WorkflowRequestCancelInput,
   WorkflowAdjustmentInput, WorkflowVoidInput, WorkflowMetadataInput, WorkflowProductCreateInput,
   WorkflowPriceRow, WorkflowProductRow, WorkflowLinkUpdateInput, WorkflowRequestUpdateInput, WorkflowDirectory,
+  PaymentQuery, PaymentRow, PaymentSummary, PaymentBatchInput, PaymentBatchResult,
 } from '@canglin/shared';
 
 export type {
@@ -21,6 +22,10 @@ function write<T>(method: 'post' | 'patch', path: string, body: unknown): Promis
 const post = <T>(path: string, body: unknown) => write<T>('post', path, body);
 
 export const workflowApi = {
+  payments: (params: Partial<PaymentQuery> = {}) => http.get<WorkflowPage<PaymentRow>>('/workflow/payments', { params }).then((r) => r.data),
+  paymentSummary: () => http.get<PaymentSummary>('/workflow/payments/summary').then((r) => r.data),
+  paymentExport: (params: Partial<PaymentQuery>) => http.get<Blob>('/workflow/payments/export', { params, responseType: 'blob' }).then((r) => r.data),
+  paymentBatch: (body: PaymentBatchInput) => write<PaymentBatchResult>('patch', '/payments/batch', body),
   requests: (params: Partial<WorkflowQuery> = {}) =>
     http.get<WorkflowPage<WorkflowRequestRow>>('/workflow/requests', { params }).then((r) => r.data),
   request: (id: number) => http.get<WorkflowRequestRow>(`/workflow/requests/${id}`).then((r) => r.data),

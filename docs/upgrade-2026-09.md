@@ -130,7 +130,9 @@ services:
 
 **版本与标签**：旧的 v1.2.x 标签属于重写前的旧代码库，已从仓库删除，版本从 v2.0.0 重新开始，变更见 [CHANGELOG](../CHANGELOG.md)。早先拉取到本机的旧标签不会被 `git fetch --tags` 自动删除，不影响升级。
 
-**试用环境**：`deploy/trial.sh` 与 `deploy/compose.trial.yml` 钉在候选提交 `42b9ae6`（v2.1.0 的代码，镜像标签 `sha-42b9ae6`）：项目名 `canglin-trial-42b9ae6`，数据卷 `canglin-trial-42b9ae6_trial-state`，三个 image 行按 CI 推送的 `canglin-*` 镜像索引摘要固定（镜像的 `org.opencontainers.image.revision` 标签即该提交，`trial.sh` 启动前会核对）。
+**试用环境**：`deploy/trial-candidate.env` 集中保存一个 40 位源码提交和三项不可变镜像摘要，当前已发布候选为 `0813b985ff930a782dea0c6b7c76807dfdf3489f`。`deploy/trial.sh` 逐个核对镜像的 `org.opencontainers.image.revision`，项目和卷名使用该提交的前 12 位（`canglin-trial-0813b985ff93`、`canglin-trial-0813b985ff93_trial-state`），只监听 `127.0.0.1:18080`，不读取正式环境密钥。`CANGLIN_TRIAL_CANDIDATE` 可指定另一组候选文件；切换前先用原文件执行 `stop`，不会删卷。工作区的新功能需在 CI 发布对应三个镜像后更新候选文件，不能把已有镜像摘要标成新提交。`smoke` 使用候选提交自己的验收脚本，在断网、空临时卷中测试备份恢复。
+
+**反代 IP 配置**：当前 Fastify 对纯数字 `trustProxy` 采取拒绝信任策略；API 改为同时检查 `TRUST_PROXY_CIDRS` 中的代理地址和 `TRUST_PROXY_HOPS` 上限。默认直接访问应用 nginx 为一层。外层 OpenResty → 应用 nginx → API 的部署应设 `TRUST_PROXY_HOPS=2`、`WEB_PORT=127.0.0.1:8080`，并用 `docker network inspect` 确认、限定本项目网段。API 不应公开端口。单层、两层、IPv4 映射地址、无转发头、伪造直连及最左侧地址均有回归测试；部署配置本身需在升级时应用，历史审计 IP 不回填。
 
 ## 2026-10-12 OCR 与 AI 识别优化
 

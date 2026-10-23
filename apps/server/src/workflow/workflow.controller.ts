@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import type { FastifyRequest } from 'fastify';
 import {
@@ -11,17 +11,27 @@ import {
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput, type WorkflowProductCreateInput,
+  paymentQuerySchema, paymentBatchSchema, type PaymentQuery, type PaymentBatchInput,
 } from '@canglin/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp, operationId } from '../common/request.util';
 import { WorkflowService } from './workflow.service';
 import { WorkflowQueryService } from './workflow-query.service';
+import { PaymentsQueryService } from './payments-query.service';
 
 const reportSchema = workflowQuerySchema.and(z.object({ groupBy: z.enum(['month', 'department', 'supplier']).default('month') }));
 
 @Controller('workflow')
 export class WorkflowController {
-  constructor(private readonly workflow: WorkflowService, private readonly queries: WorkflowQueryService) {}
+  constructor(private readonly workflow: WorkflowService, private readonly queries: WorkflowQueryService, private readonly payments: PaymentsQueryService) {}
+
+  @Get('payments') paymentList(@Query(new ZodValidationPipe(paymentQuerySchema)) query: PaymentQuery) { return this.payments.list(query); }
+  @Get('payments/summary') paymentSummary() { return this.payments.summary(); }
+  @Get('payments/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="payments.csv"')
+  paymentExport(@Query(new ZodValidationPipe(paymentQuerySchema)) query: PaymentQuery) { return this.payments.export(query); }
+  @Patch('payments/batch') paymentBatch(@Body(new ZodValidationPipe(paymentBatchSchema)) body: PaymentBatchInput, @Req() req: FastifyRequest) { return this.workflow.paymentBatch(body, operationId(req), clientIp(req)); }
 
   @Get('requests') requests(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.requests(query); }
   @Get('requests/:id') request(@Param('id', ParseIntPipe) id: number) { return this.queries.request(id); }

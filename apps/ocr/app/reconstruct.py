@@ -536,7 +536,15 @@ def rebuild_from_entries(entries: list[dict]) -> dict:
         if not anchored and records and wrapped:
             record = records[-1]
             for key, value in values.items():
-                record["values"][key] = " ".join(filter(None, [record["values"].get(key), value]))
+                preceding = record["values"].get(key, "")
+                # 只在已确认的同一物理行、同一链接/备注列内拼接 URL 的长数字尾段。
+                # 数字 ID 常被窄列折行；普通备注、第二个 URL、短数字不并入链接。
+                url = URL_RE.search(preceding)
+                if key in {"url", "note"} and url and url.end() == len(preceding) and re.fullmatch(r"\d{6,}", value):
+                    record["values"][key] = preceding + value
+                    record["joined_url"] = True
+                else:
+                    record["values"][key] = " ".join(filter(None, [preceding, value]))
             record["cells"].extend(cells)
             record["rawText"] += " " + text
             previous["bottom"] = row["bottom"]
@@ -556,6 +564,8 @@ def rebuild_from_entries(entries: list[dict]) -> dict:
         idx = values.get("idx", "")
         label = f"第 {idx if idx.isdigit() else number} 行"
         item = item_from_cells(values, label)
+        if record.get("joined_url"):
+            item["_warnings"].append(f"{label}链接的长数字跨行拼接，请对照原件核对")
         scores = [c["confidence"] for c in record["cells"] if c.get("confidence") is not None]
         if scores and min(scores) < LOW_ROW_CONFIDENCE:
             item["_warnings"].append(f"{label}识别置信度低，请对照原件")

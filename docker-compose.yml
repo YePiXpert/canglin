@@ -26,6 +26,9 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       DATA_DIR: /app/state
       DATABASE_URL: file:/app/state/canglin.db
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      # Docker 默认网桥范围；部署时宜缩小为本项目网络的实际 CIDR。
+      TRUST_PROXY_CIDRS: ${TRUST_PROXY_CIDRS:-172.16.0.0/12}
       OCR_BASE_URL: http://ocr:8000
       OCR_API_KEY: ${OCR_API_KEY:-please-change-ocr-key}
       # AI 首次默认值（可选）；运行时配置存数据库，可在设置页修改

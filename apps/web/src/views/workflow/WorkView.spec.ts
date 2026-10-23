@@ -5,13 +5,14 @@ import { workflowApi, type WorkflowOverview, type WorkflowRequestLineRow, type W
 import { importsApi } from '@/api';
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock('@/api/workflow', () => ({ workflowApi: { overview: vi.fn(), requests: vi.fn(), documents: vi.fn() } }));
+vi.mock('@/api/workflow', () => ({ workflowApi: { overview: vi.fn(), requests: vi.fn(), documents: vi.fn(), paymentSummary: vi.fn() } }));
 vi.mock('@/api', () => ({ importsApi: { tasks: vi.fn() } }));
 vi.mock('@/api/client', () => ({ apiError: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }));
 
 const api = {
   overview: vi.mocked(workflowApi.overview),
+  paymentSummary: vi.mocked(workflowApi.paymentSummary),
   requests: vi.mocked(workflowApi.requests),
   documents: vi.mocked(workflowApi.documents),
   tasks: vi.mocked(importsApi.tasks),
@@ -55,6 +56,7 @@ const button = (wrapper: VueWrapper, name: string) =>
 beforeEach(() => {
   vi.clearAllMocks();
   api.overview.mockResolvedValue(OVERVIEW);
+  api.paymentSummary.mockResolvedValue({ unpaid: 3, uninvoiced: 2, missingInvoice: 1 });
   api.requests.mockResolvedValue(page([
     request(1, '2026-10-06', { pendingPurchaseQuantity: '24', stages: ['PENDING_PURCHASE'] }),
     request(2, '2026-10-08', { pendingReceiptQuantity: '2', stages: ['PENDING_ARRIVAL'] }),
@@ -131,7 +133,7 @@ describe('WorkView：工作台', () => {
     expect(push).toHaveBeenCalledWith('/requests/42');
   });
 
-  it('刷新会重新加载概览、待办、未完成导入与最近登记', async () => {
+  it('刷新会重新加载概览、待办、付款待办、未完成导入与最近登记', async () => {
     const wrapper = await mountView();
     await button(wrapper, '刷新工作台').trigger('click');
     await flushPromises();
@@ -139,6 +141,7 @@ describe('WorkView：工作台', () => {
     expect(api.requests).toHaveBeenCalledTimes(2);
     expect(api.tasks).toHaveBeenCalledTimes(2);
     expect(api.documents).toHaveBeenCalledTimes(2);
+    expect(api.paymentSummary).toHaveBeenCalledTimes(2);
   });
 
   it('刷新失败时保留上次的内容（包括「待办已清空」），在列表上方说明原因', async () => {

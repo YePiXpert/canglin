@@ -108,6 +108,47 @@ test('审计日志：按操作类型筛选，按详情内容搜索', async ({ pa
   await expect(rows.first().locator('dl')).toContainText('操作编号');
 });
 
+test('恢复密码后保存换新的恢复码，再用新密码登录', async ({ page }) => {
+  const nextPassword = 'browser-recovery-password';
+  await login(page);
+  const issued = await page.request.post('/api/auth/recovery-code', { data: { password } });
+  expect(issued.ok()).toBeTruthy();
+  const oldCode = (await issued.json()).recoveryCode;
+  await page.request.post('/api/auth/logout');
+  try {
+    await page.goto('/login');
+    await page.getByRole('button', { name: '忘记密码？使用恢复码' }).click();
+    await page.getByLabel('恢复码', { exact: true }).fill(oldCode);
+    await page.getByLabel('新密码', { exact: true }).fill(nextPassword);
+    await page.getByLabel('确认密码', { exact: true }).fill(nextPassword);
+    const response = page.waitForResponse((r) => r.url().endsWith('/api/auth/recover') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: '重置密码', exact: true }).click();
+    const reset = await response;
+    expect(reset.ok()).toBeTruthy();
+    const code = (await reset.json()).recoveryCode;
+    expect(code).toMatch(/^[A-Z2-9]{16}$/);
+    expect(code).not.toBe(oldCode);
+    await expect(page.getByText(code, { exact: true })).toBeVisible();
+    await expect(page.getByText(/刚才用的恢复码已经作废/)).toBeVisible();
+    expect((await page.request.get('/api/workflow/overview')).status()).toBe(401);
+    await page.getByRole('button', { name: '我已保存，去登录', exact: true }).click();
+    await expect(page.getByText(code, { exact: true })).toHaveCount(0);
+    await page.getByLabel('密码', { exact: true }).fill(nextPassword);
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page).toHaveURL(/\/workbench$/);
+    expect((await page.request.get('/api/workflow/overview')).ok()).toBeTruthy();
+  } finally {
+    // 即使断言或点击超时，密码也可能已经换新；不依赖测试执行到哪一行。
+    const probe = await page.request.post('/api/auth/login', { data: { password: nextPassword } });
+    if (probe.ok()) {
+      const restore = await page.request.post('/api/auth/change-password', { data: { currentPassword: nextPassword, newPassword: password } });
+      expect(restore.ok(), await restore.text()).toBeTruthy();
+    }
+    const restored = await page.request.post('/api/auth/login', { data: { password } });
+    expect(restored.ok(), await restored.text()).toBeTruthy();
+  }
+});
+
 // 放在本文件最后：改密会让所有会话失效；无论成败都改回原密码，后面的 spec 仍用原密码登录
 test('修改密码后旧会话失效，需要用新密码重新登录', async ({ page }) => {
   const next = 'browser-test-password-next';

@@ -82,7 +82,7 @@ def test_parse_text_layer_pdf_returns_template_and_amount(client, auth_headers):
     res = client.post("/parse", files={"file": ("asset.pdf", asset_request_pdf(), "application/pdf")}, headers=auth_headers)
     assert res.status_code == 200
     body = res.json()
-    assert (body["mode"], body["parserVersion"], body["templateType"]) == ("PDF_TEXT", "4", "FIXED_ASSET")
+    assert (body["mode"], body["parserVersion"], body["templateType"]) == ("PDF_TEXT", "5", "FIXED_ASSET")
     assert {k: body[k] for k in ("serialNumber", "department", "handler", "requestDate")} == {
         "serialNumber": "202600101", "department": "行政部（党委办公室）", "handler": "张某", "requestDate": "2026-09-01"}
     item = body["items"][0]
