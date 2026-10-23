@@ -221,6 +221,7 @@ export interface WorkflowRequestLineRow {
   stages: WorkflowStage[];
 }
 export interface WorkflowRequestRow {
+  purpose?: 'STOCK_REPLENISHMENT';
   id: number; serialNumber: string; department: string; handler: string; requestDate: string;
   /** 系统编号（没有 OA 单号时编的「无OA-…」）：补填 OA 流水号后也保留，按它照样搜得到；从没编过为 null */
   systemSerial: string | null;
@@ -254,6 +255,7 @@ export interface WorkflowDocumentLineRow {
   sourceAllocations?: { originLineId: number; quantity: string; requestId: number | null; serialNumber: string | null }[];
 }
 export interface WorkflowDocumentRow {
+  stocktakeId?: number;
   id: number; kind: WorkflowDocumentKind; date: string; status: 'POSTED' | 'VOIDED';
   supplierId: number | null; supplierName: string | null; department: string | null;
   source: 'DIRECT' | 'STOCK' | null; returnMode: 'REFUND' | 'REPLACEMENT' | null;

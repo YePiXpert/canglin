@@ -68,6 +68,20 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   WORKFLOW_METADATA: { label: '修改付款与发票', tone: 'gray', group: '采购' },
   WORKFLOW_METADATA_BATCH: { label: '批量修改付款与开票', tone: 'gray', group: '采购' },
   WORKFLOW_VOID: { label: '撤销登记', tone: 'amber', group: '业务记录' },
+  WORKFLOW_STOCKTAKE_CREATE: { label: '新建盘点', tone: 'gray', group: '库存' },
+  WORKFLOW_STOCKTAKE_SAVE: { label: '保存盘点', tone: 'gray', group: '库存' },
+  WORKFLOW_STOCKTAKE_RECOUNT: { label: '更新重盘快照', tone: 'amber', group: '库存' },
+  WORKFLOW_STOCKTAKE_POST: { label: '盘点记账', tone: 'gray', group: '库存' },
+  WORKFLOW_STOCKTAKE_CANCEL: { label: '取消盘点', tone: 'amber', group: '库存' },
+  WORKFLOW_STOCKTAKE_VOID: { label: '撤销盘点', tone: 'amber', group: '库存' },
+  WORKFLOW_STOCK_POLICY: { label: '设置补货规则', tone: 'gray', group: '补货' },
+  WORKFLOW_REPLENISHMENT_CREATE: { label: '新建补货草稿', tone: 'gray', group: '补货' },
+  WORKFLOW_REPLENISHMENT_SAVE: { label: '保存补货草稿', tone: 'gray', group: '补货' },
+  WORKFLOW_REPLENISHMENT_CONFIRM: { label: '补货生成申请', tone: 'gray', group: '补货' },
+  WORKFLOW_REPLENISHMENT_DISCARD: { label: '放弃补货草稿', tone: 'amber', group: '补货' },
+  WORKFLOW_FOLLOWUP_PLAN: { label: '记录采购跟进', tone: 'gray', group: '跟进' },
+  WORKFLOW_FOLLOWUP_DISMISS: { label: '停止采购跟进', tone: 'amber', group: '跟进' },
+  WORKFLOW_FOLLOWUP_RESUME: { label: '恢复采购跟进', tone: 'gray', group: '跟进' },
   // 旧版台账已删除，保留这些动作名只为显示历史审计记录
   ITEM_CREATE: { label: '新增台账', tone: 'gray', group: '旧台账', legacy: true },
   ITEM_UPDATE: { label: '修改台账', tone: 'gray', group: '旧台账', legacy: true },
@@ -148,7 +162,8 @@ function detailEntries(log: AuditRow): DetailEntry[] {
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (key === 'changes' && Array.isArray(value)) {
       for (const entry of value) {
-        if (!entry || typeof entry !== 'object' || !entry.before || !entry.after) continue;
+        if (!entry || typeof entry !== 'object' || entry.before == null || entry.after == null) continue;
+        if (typeof entry.before === 'string' && typeof entry.after === 'string') { out.push({ key: `物品 #${entry.productId}`, value: `${entry.before} → ${entry.after}`, change: true }); continue; }
         const label = (state: { paymentStatus: PaymentStatus; invoiceIssued: boolean }) => `${PAYMENT_STATUS_LABELS[state.paymentStatus] ?? state.paymentStatus} / ${state.invoiceIssued ? '已开票' : '未开票'}`;
         out.push({ key: `采购 #${entry.id}`, value: `${label(entry.before)} → ${label(entry.after)}`, change: true });
       }

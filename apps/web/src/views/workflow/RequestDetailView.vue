@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { quantityText, quantityUnits } from '@canglin/shared';
 import { workflowApi, type WorkflowStockRow } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
+import RequestFollowupSummary from '@/components/planning/RequestFollowupSummary.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Badge from '@/components/ui/Badge.vue';
@@ -143,7 +144,10 @@ async function deleteRequest() {
       </Menu>
       <Button variant="secondary" icon-only aria-label="刷新申请" :loading="refreshing" @click="refresh"><Icon v-if="!refreshing" name="refresh" :size="16" /></Button>
       <Button v-if="request && canPurchase" variant="primary" @click="actions?.purchase(request)"><Icon name="plus" :size="16" />登记采购</Button>
+      <router-link v-if="request" :to="`/workbench/followups?requestId=${request.id}`" :class="buttonClass({ variant: 'secondary', size: 'sm' })">采购跟进</router-link>
     </PageHeader>
+    <RequestFollowupSummary v-if="request" :request-id="request.id" />
+    <Notice v-if="request?.purpose === 'STOCK_REPLENISHMENT'" class="mb-4">库存补货申请 · 未采购、在途和待入库数量会计入补货供应；直接发放的数量会退出补货供应。</Notice>
 
     <div v-if="loading" class="space-y-7" aria-hidden="true">
       <div><Skeleton class="mb-2.5 h-5 w-48" /><Skeleton class="h-44" /></div>

@@ -16,7 +16,7 @@ from .pipeline import parse_dispatch, document_info, render_page, render_strips
 _parse_lock = asyncio.Semaphore(1)
 _render_lock = asyncio.Semaphore(1)
 
-app = FastAPI(title="仓廪 OCR", version="2.1.0")
+app = FastAPI(title="仓廪 OCR", version="1.0.0-beta.1")
 
 API_KEY = os.environ.get("OCR_API_KEY", "dev-ocr-key")
 MAX_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "30")) * 1024 * 1024

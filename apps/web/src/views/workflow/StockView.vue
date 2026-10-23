@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { workflowApi } from '@/api/workflow';
 import { useWorkflowResource } from '@/components/workflow/useWorkflowResource';
 import { useUrlState } from '@/composables/useUrlState';
+import PlanningLinks from '@/components/planning/PlanningLinks.vue';
 import PageHeader from '@/components/ui/PageHeader.vue';
 import Panel from '@/components/ui/Panel.vue';
 import Tabs from '@/components/ui/Tabs.vue';
@@ -92,6 +93,7 @@ async function productCreated(product: { itemName: string }) {
       <Button icon-only aria-label="刷新库存" @click="refresh"><Icon name="refresh" :size="16" :class="refreshCount ? 'animate-spin' : ''" /></Button>
       <Button @click="creatingProduct = true"><Icon name="plus" :size="16" />新增库存物品</Button>
     </PageHeader>
+    <PlanningLinks />
     <Tabs :model-value="state.tab" :tabs="tabs" class="mb-4" @change="switchTab" />
 
     <Panel v-if="state.tab === 'products' || state.tab === 'receiving'" flush>

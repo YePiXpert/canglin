@@ -37,7 +37,7 @@ export class WorkflowService {
   constructor(private readonly prisma: PrismaService, private readonly query: WorkflowQueryService) {}
 
   /** audit：动作往里补充的审计字段（改链接时的旧值、删除申请时的流水号与明细数），与 operationId、input 一起记入审计详情 */
-  private async write<T>(scope: string, input: unknown, key: string, ip: string | undefined, action: (tx: Tx, audit: Record<string | symbol, unknown>) => Promise<T>): Promise<T> {
+  async write<T>(scope: string, input: unknown, key: string, ip: string | undefined, action: (tx: Tx, audit: Record<string | symbol, unknown>) => Promise<T>): Promise<T> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key))
       throw new BadRequestException('缺少或无效的 Idempotency-Key 操作编号');
     try {
@@ -296,6 +296,7 @@ export class WorkflowService {
       const updated = await tx.stockBalance.updateMany({ where: { id: prior.id, quantityUnits: prior.quantityUnits }, data: { quantityUnits: after } });
       if (!updated.count) throw new ConflictException('来源余额已发生变化，请重新载入');
     }
+    if (data.location === 'STOCK') await tx.catalogProduct.update({ where: { id: data.productId }, data: { stockVersion: { increment: 1 } } });
     return tx.stockEntry.create({ data: {
       productId: data.productId, originLineId: data.originLineId, businessLineId: data.businessLineId,
       location: data.location, quantityUnits: data.quantity, date: data.date, reversalOfId: data.reversalOfId,
@@ -497,15 +498,21 @@ export class WorkflowService {
 
   async adjust(input: WorkflowAdjustmentInput, key: string, ip?: string) {
     return this.write('adjustment', input, key, ip, async (tx) => {
-      const product = await tx.catalogProduct.findUnique({ where: { id: input.productId } });
-      if (!product) throw new NotFoundException('库存物品不存在');
-      const quantity = quantityUnits(input.quantity);
       const document = await tx.businessDocument.create({ data: { kind: 'ADJUSTMENT', date: input.date, note: input.reason } });
-      const line = await tx.businessLine.create({ data: { documentId: document.id, productId: product.id, itemName: product.name, specification: product.specification, unit: product.unit, quantityUnits: quantity < 0n ? -quantity : quantity, location: 'STOCK', reason: input.reason } });
-      if (quantity > 0n) await this.stockChange(tx, { productId: product.id, originLineId: line.id, businessLineId: line.id, location: 'STOCK', quantity, date: input.date });
-      else await this.takeStock(tx, product.id, -quantity, line.id, input.date);
+      await this.adjustLineTx(tx, document.id, input);
       return this.query.documentTx(tx, document.id);
     });
+  }
+
+  /** Caller owns the transaction, receipt and audit; also used by stocktake posting. */
+  async adjustLineTx(tx: Tx, documentId: number, input: WorkflowAdjustmentInput) {
+    const product = await tx.catalogProduct.findUnique({ where: { id: input.productId } });
+    if (!product) throw new NotFoundException('库存物品不存在');
+    const quantity = quantityUnits(input.quantity);
+    if (!quantity) throw new BadRequestException('调整数量不能为零');
+    const line = await tx.businessLine.create({ data: { documentId, productId: product.id, itemName: product.name, specification: product.specification, unit: product.unit, quantityUnits: quantity < 0n ? -quantity : quantity, location: 'STOCK', reason: input.reason } });
+    if (quantity > 0n) await this.stockChange(tx, { productId: product.id, originLineId: line.id, businessLineId: line.id, location: 'STOCK', quantity, date: input.date });
+    else await this.takeStock(tx, product.id, -quantity, line.id, input.date);
   }
 
   async paymentBatch(input: PaymentBatchInput, key: string, ip?: string): Promise<PaymentBatchResult> {
@@ -547,7 +554,10 @@ export class WorkflowService {
   }
 
   async voidDocument(id: number, input: WorkflowVoidInput, key: string, ip?: string) {
-    return this.write('void', { id, ...input }, key, ip, async (tx) => {
+    return this.write('void', { id, ...input }, key, ip, (tx) => this.voidDocumentTx(tx, id, input));
+  }
+
+  async voidDocumentTx(tx: Tx, id: number, input: WorkflowVoidInput) {
       const document = await tx.businessDocument.findUnique({ where: { id }, include: { lines: true } });
       if (!document) throw new NotFoundException('业务单据不存在');
       if (document.status !== 'POSTED') throw new ConflictException('这条记录已经撤销');
@@ -590,7 +600,7 @@ export class WorkflowService {
         for (const entry of entries) await this.stockChange(tx, { productId: entry.productId, originLineId: entry.originLineId, businessLineId: line.id, location: entry.location as WorkflowLocation, quantity: -entry.quantityUnits, date: input.date, reversalOfId: entry.id });
       }
       await tx.businessDocument.update({ where: { id }, data: { status: 'VOIDED', voidReason: input.reason, voidDate: input.date, voidedAt: new Date() } });
+      await tx.stocktake.updateMany({ where: { adjustmentDocumentId: id, status: 'POSTED' }, data: { status: 'VOIDED', voidedAt: new Date(), voidReason: input.reason, version: { increment: 1 } } });
       return this.query.documentTx(tx, id);
-    });
   }
 }

@@ -136,6 +136,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
+          # Beta tags must never implicitly become latest; main opts in explicitly below.
+          flavor: latest=false
           images: ghcr.io/${{ github.repository_owner }}/canglin-${{ matrix.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}

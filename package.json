@@ -1,6 +1,6 @@
 {
   "name": "canglin",
-  "version": "2.1.0",
+  "version": "1.0.0-beta.1",
   "private": true,
   "description": "办公用品采购台账：OA 单据导入、采购执行、库存与领用发放管理",
   "packageManager": "pnpm@11.24.0",

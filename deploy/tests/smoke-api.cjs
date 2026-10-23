@@ -90,7 +90,27 @@ async function call(method, route, data, expected = 200) {
   const beforePayments = (await call('GET', '/workflow/payments')).value;
   assert.equal(beforePayments.items[0].invoiceCount, 1);
   assert.equal(beforePayments.items[0].totalAmount, '25.00');
+  // New planning tables, versions, source links and append-only logs survive a full restore.
+  let count = (await call('POST', '/planning/counts', { title: '恢复验收盘点', productIds: [line.productId] }, 201)).value;
+  count = (await call('PATCH', `/planning/counts/${count.id}`, { version: count.version, title: count.title, lines: [{ productId: line.productId, actualQuantity: '1', reason: '期初实盘' }] })).value;
+  const postedCount = (await call('POST', `/planning/counts/${count.id}/post`, { version: count.version }, 201)).value;
+  const countDraft = (await call('POST', '/planning/counts', { title: '未完成盘点', productIds: [line.productId] }, 201)).value;
+  await call('PATCH', '/planning/replenishment/policies', { items: [{ productId: line.productId, policy: { version: 0, enabled: true, minimum: '5', target: '8', multiple: null } }] });
+  const suggestion = (await call('GET', '/planning/replenishment/suggestions')).value.find(s => s.productId === line.productId);
+  const supplyDraft = (await call('POST', '/planning/replenishment/drafts', { title: '恢复验收补货', requestDate: draft.requestDate, department: '仓库', handler: '测试', lines: [{ productId: line.productId, quantity: '3', token: suggestion.token }] }, 201)).value;
+  const ownSuggestion = (await call('GET', `/planning/replenishment/suggestions?excludeDraftId=${supplyDraft.id}`)).value.find(s => s.productId === line.productId);
+  const converted = (await call('POST', `/planning/replenishment/drafts/${supplyDraft.id}/confirm`, { version: supplyDraft.version, tokens: [{ productId: line.productId, token: ownSuggestion.token }] }, 201)).value;
+  const remainingSuggestion = (await call('GET', '/planning/replenishment/suggestions')).value.find(s => s.productId === line.productId);
+  const openDraft = (await call('POST', '/planning/replenishment/drafts', { title: '保留草稿', requestDate: draft.requestDate, lines: [{ productId: line.productId, quantity: '4', token: remainingSuggestion.token }] }, 201)).value;
+  await call('PATCH', '/planning/followups/plans', { targets: [{ kind: 'ARRIVAL', targetId: purchase.lines[0].id, version: 0 }], expectedDate: '2026-10-01', nextDate: '2026-10-02', note: '备份前供应商答复' });
+  const historyPath = `/planning/followups/history?kind=ARRIVAL&targetId=${purchase.lines[0].id}`;
+  const history = (await call('GET', historyPath)).value;
+  const beforeSuggestions = (await call('GET', '/planning/replenishment/suggestions')).value;
   const backup = (await call('POST', '/system/backups', {}, 201)).value;
+  await call('POST', `/planning/counts/${countDraft.id}/cancel`, { version: countDraft.version, reason: '备份后取消' }, 201);
+  await call('POST', `/planning/replenishment/drafts/${openDraft.id}/discard`, { version: openDraft.version, reason: '备份后放弃' }, 201);
+  await call('PATCH', '/planning/followups/dismiss', { kind: 'ARRIVAL', targetId: purchase.lines[0].id, version: 1, dismissed: true, reason: '备份后停止' });
+
   await call('PATCH', '/workflow/payments/batch', {
     documents: [{ id: purchase.id, paymentStatus: 'PAID', invoiceIssued: true }],
     change: { invoiceIssued: false },
@@ -132,6 +152,13 @@ async function call(method, route, data, expected = 200) {
   assert.equal(purchaseRestored.note, '备份保留');
   assert.equal(purchaseRestored.paymentStatus, 'PAID');
   assert.equal(purchaseRestored.invoiceIssued, true);
+  assert.deepEqual((await call('GET', `/planning/counts/${postedCount.id}`)).value, postedCount);
+  assert.deepEqual((await call('GET', `/planning/counts/${countDraft.id}`)).value, countDraft);
+  assert.deepEqual((await call('GET', `/planning/replenishment/drafts/${converted.id}`)).value, converted);
+  assert.deepEqual((await call('GET', `/planning/replenishment/drafts/${openDraft.id}`)).value, openDraft);
+  assert.deepEqual((await call('GET', historyPath)).value, history);
+  assert.deepEqual((await call('GET', '/planning/replenishment/suggestions')).value, beforeSuggestions);
+  assert.equal((await call('GET', `/workflow/requests/${converted.requestId}`)).value.purpose, 'STOCK_REPLENISHMENT');
   console.log(
     JSON.stringify({
       api: true,
@@ -141,6 +168,9 @@ async function call(method, route, data, expected = 200) {
       paymentStateRestored: true,
       invoiceAttachmentRestored: true,
       sessionInvalidated: true,
+      stocktakesAndVersionsRestored: true,
+      replenishmentDraftsAndLinksRestored: true,
+      followupHistoryRestored: true,
     }),
   );
 })().catch((error) => {

@@ -46,6 +46,7 @@ export class WorkflowQueryService {
     ]);
     return requests.map((request) => ({
       id: request.id, serialNumber: request.serialNumber, department: request.department, handler: request.handler,
+      ...(request.purpose === 'STOCK_REPLENISHMENT' ? { purpose: 'STOCK_REPLENISHMENT' as const } : {}),
       systemSerial: request.systemSerial, autoSerial: request.systemSerial !== null && request.serialNumber === request.systemSerial,
       requestDate: request.requestDate, note: request.note, sourceTaskId: request.sourceTaskId,
       createdAt: request.createdAt.toISOString(), attachments: request.attachments,
@@ -96,6 +97,7 @@ export class WorkflowQueryService {
       tx.stockEntry.findMany({ where: { businessLineId: { in: allocatedIds }, reversalOfId: null }, include: { originLine: { include: { requestLine: { include: { request: true } } } } }, orderBy: { id: 'asc' } }),
     ]);
     return documents.map((document) => ({
+      ...(document.stocktake ? { stocktakeId: document.stocktake.id } : {}),
       id: document.id, kind: document.kind as WorkflowDocumentKind, date: document.date,
       status: document.status as 'POSTED' | 'VOIDED', supplierId: document.supplierId, supplierName: document.supplierName,
       department: document.department, source: document.source as 'DIRECT' | 'STOCK' | null,

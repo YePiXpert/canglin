@@ -16,7 +16,7 @@ const BASE = 'http://127.0.0.1:5174';
 const password = 'browser-test-password';
 const NOW = new Date('2026-10-14T10:00:00+08:00');
 
-interface Seed { r1: number; r2: number; r3: number; r4: number; taskId: string }
+interface Seed { r1: number; r2: number; r3: number; r4: number; taskId: string; countId: number; draftId: number }
 let seed: Seed | null = null;
 
 async function post(request: APIRequestContext, url: string, data: object) {
@@ -92,13 +92,23 @@ test.beforeAll(async ({ playwright }) => {
   const uploaded = await request.post(`${BASE}/api/imports/upload`, { multipart: { file: { name: 'OA-领用单-20261013.png', mimeType: 'image/png', buffer: png } } });
   const { taskId } = await uploaded.json();
   await expect.poll(async () => (await (await request.get(`${BASE}/api/imports/tasks/${taskId}`)).json()).status).toBe('DONE');
-  seed = { r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId };
+  let count = await post(request, '/api/planning/counts', { title: '十月库房盘点', productIds: [r1.lines[0].productId, r1.lines[1].productId] });
+  const savedCount = await request.patch(`${BASE}/api/planning/counts/${count.id}`, { headers: { 'Idempotency-Key': randomUUID() }, data: { version: count.version, title: count.title, lines: count.lines.map((l: { productId: number }, i: number) => ({ productId: l.productId, actualQuantity: i ? null : '2', reason: i ? '' : '清点少一箱，待复核' })) } });
+  expect(savedCount.ok(), await savedCount.text()).toBeTruthy(); count = await savedCount.json();
+  const rules = await request.patch(`${BASE}/api/planning/replenishment/policies`, { headers: { 'Idempotency-Key': randomUUID() }, data: { items: [r1.lines[0], r1.lines[1]].map((l: { productId: number }) => ({ productId: l.productId, policy: { version: 0, enabled: true, minimum: '5', target: '10', multiple: null } })) } });
+  expect(rules.ok(), await rules.text()).toBeTruthy();
+  const suggestions = await (await request.get(`${BASE}/api/planning/replenishment/suggestions`)).json();
+  const pen = suggestions.find((s: { productId: number }) => s.productId === r1.lines[1].productId);
+  const supply = await post(request, '/api/planning/replenishment/drafts', { title: '常用文具补货', department: '仓库', handler: '李雯', requestDate: '2026-10-14', lines: [{ productId: pen.productId, quantity: '5', token: pen.token }] });
+  const plan = await request.patch(`${BASE}/api/planning/followups/plans`, { headers: { 'Idempotency-Key': randomUUID() }, data: { targets: [{ kind: 'ARRIVAL', targetId: p1.lines[0].id, version: 0 }], expectedDate: '2020-01-01', nextDate: '2020-01-02', note: '供应商答复周五送达剩余复印纸' } });
+  expect(plan.ok(), await plan.text()).toBeTruthy();
+  seed = { countId: count.id, draftId: supply.id, r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId };
   await request.dispose();
 });
 
 /** 服务端时间与会变的数字：录入时间（time 元素、工作台「最近登记」）、数据库大小、审计详情（含操作编号） */
 function masks(page: Page): Locator[] {
-  return [page.locator('time'), page.locator('[title^="录入于"]'), page.locator('#status dl'), page.locator('td[data-label="详情"]')];
+  return [page.locator('time'), page.locator('[data-waiting-days]'), page.locator('[title^="录入于"]'), page.locator('#status dl'), page.locator('td[data-label="详情"]')];
 }
 
 async function settle(page: Page) {
@@ -155,6 +165,13 @@ for (const variant of VARIANTS) {
         await page.goto(tab === 'products' ? '/stock' : `/stock?tab=${tab}`);
         await shot(page, `${v}-stock-${tab}`);
       }
+      for (const [name, url] of [
+        ['stocktakes', '/stock/counts'], ['stocktake-detail', `/stock/counts/${s.countId}`],
+        ['replenishment', '/stock/replenishment'], ['stock-policies', '/stock/replenishment?tab=rules'],
+        ['replenishment-draft', `/stock/replenishment/drafts/${s.draftId}`], ['followups', '/workbench/followups'],
+      ]) { await page.goto(url); await shot(page, `${v}-${name}`); }
+      await page.getByRole('button', { name: '记录跟进', exact: true }).first().click();
+      await shot(page, `${v}-followup-plan`);
       await page.goto('/import');
       await shot(page, `${v}-import-empty`);
       await page.goto(`/import?task=${s.taskId}`);

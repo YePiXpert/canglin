@@ -41,6 +41,7 @@ function back() {
       <div v-for="row in 2" :key="row" class="space-y-2 px-4 py-3" :class="row > 1 ? 'border-t border-line' : ''"><Skeleton class="h-3.5 w-2/5" /><Skeleton class="h-3 w-1/4" /></div>
     </div>
     <div v-else-if="error" class="card"><ErrorState :message="error" @retry="load" /></div>
-    <DocumentCard v-else-if="data" :document="data" readonly @source="source" />
+    <router-link v-if="data?.stocktakeId" :to="`/stock/counts/${data.stocktakeId}`" class="mb-3 block text-sm underline" @click="emit('update:open', false)">查看来源盘点 #{{ data.stocktakeId }} →</router-link>
+    <DocumentCard v-if="data" :document="data" readonly @source="source" />
   </Dialog>
 </template>

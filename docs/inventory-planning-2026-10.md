@@ -1,6 +1,6 @@
 # 库存盘点、补货建议与采购跟进：详细实施方案
 
-日期：2026-10-23。状态：方案，尚未实施。本轮先交付库存盘点、低库存预警与补货草稿、采购跟进台三项；历史采购价对比和常用采购模板作为后续扩展。
+日期：2026-10-23。状态：已在 `1.0.0-beta.1` 实现；实际接口与验收见 [Beta 交付记录](release-1.0.0-beta.1.md)。本轮先交付库存盘点、低库存预警与补货草稿、采购跟进台三项；历史采购价对比和常用采购模板作为后续扩展。
 
 设计依据为当前代码、`rebuild-requirements.md` 和上一轮付款与开票工作台。沿用单管理员、Vue / NestJS / Prisma / SQLite、整数定点数量与现有业务单据。上一轮工作区改动作为实施基础，不覆盖或丢弃。
 
@@ -157,28 +157,26 @@ P、T、R 是同一补货流程的互斥阶段：采购把 P 转为 T，到货�
 
 跟进目标二选一：`ARRIVAL` 关联采购行，`INVOICE` 关联采购单；数据库校验互斥及唯一性，服务端继续校验目标确为有效采购。
 
-### 5.2 接口分组（统一 `/api/workflow` 前缀）
+### 5.2 实际接口分组（统一 `/api/planning` 前缀）
 
 | 接口 | 用途 |
 | --- | --- |
-| `GET/POST /stocktakes` | 查询与创建盘点 |
-| `GET/PATCH /stocktakes/:id` | 读取和保存带版本的盘点草稿 |
-| `POST /stocktakes/:id/recount` | 明确重盘指定行：取得新基准、清空该行旧实盘值，其他行保留 |
-| `POST /stocktakes/:id/post` | 原子提交全部盘点结果 |
-| `POST /stocktakes/:id/cancel`、`/void` | 放弃草稿或撤销已完成盘点 |
-| `GET /stocktakes/:id/export` | 盘点结果 CSV；空表打印由页面打印样式完成 |
-| `GET /stock-policies`、`PATCH /stock-policies/:productId` | 补货规则查询、修改 |
-| `PATCH /stock-policies/batch` | 带旧版本校验的批量启停或阈值设置 |
-| `GET /replenishment/suggestions` | 分页建议及 S/P/T/R/D 解释、建议依据摘要 |
-| `GET/POST /replenishment/drafts`、`GET/PATCH /replenishment/drafts/:id` | 草稿列表、创建和版本保护保存 |
-| `POST /replenishment/drafts/:id/confirm`、`/discard` | 转申请或放弃草稿 |
-| `GET /followups`、`/followups/summary` | 跟进列表、计数，按业务事实派生 |
-| `PUT /followups/plan` | 首次设置或版本保护修改对象的跟进计划 |
-| `POST /followups/:id/entries` | 追加跟进记录并可同时改期 |
-| `POST /followups/:id/dismiss`、`/resume` | 忽略或恢复跟进 |
-| `PATCH /followups/plans/batch` | 批量日期设置，任一对象或版本冲突则整批不改 |
+| `GET /summary` | 盘点草稿、需要新增补货、到期或逾期跟进计数 |
+| `GET/POST /counts`、`GET/PATCH /counts/:id` | 盘点列表、创建和带版本保存 |
+| `POST /counts/:id/recount`、`/post`、`/cancel`、`/void` | 重盘、整单记账、取消或撤销 |
+| `GET /counts/:id/export` | 盘点结果 CSV |
+| `GET /replenishment/suggestions` | 物品规则与 S/P/T/R/D、来源、摘要；`excludeDraftId` 排除当前草稿，页面每页展示20项 |
+| `PATCH /replenishment/policies` | 单项或批量规则设置；携带每项旧版本 |
+| `GET/POST /replenishment/drafts`、`GET/PATCH /replenishment/drafts/:id` | 草稿列表、创建、版本保护保存 |
+| `POST /replenishment/drafts/:id/confirm`、`/discard` | 转申请或放弃 |
+| `GET /followups` | 分页跟进与汇总计数；类型、状态、供应商、预计日期、申请、搜索筛选 |
+| `PATCH /followups/plans` | 单项或批量日期及追加记录；任一对象冲突整批回滚 |
+| `PATCH /followups/dismiss` | 用 `dismissed` 明确停止或恢复，必须填原因 |
+| `GET /followups/history?kind=…&targetId=…` | 追加记录的历史 |
 
-写接口沿用认证、`Idempotency-Key`、审计与事务约定；保存接口携带预期版本。新共享契约分别放入 `stocktake.ts`、`replenishment.ts`、`followup.ts`，分页、日期、精度规则复用已有 schema。冲突响应包含具体对象和最新摘要，前端不自动覆盖人工输入。
+写接口沿用认证、`Idempotency-Key`、审计与事务约定；保存携带预期版本。共享契约集中在 `packages/shared/src/planning.ts`。读取与写入逻辑分别集中在三个领域服务中，不拆出仅作转发的 query service。补货先按物品和申请聚合，避免逐物品扫描全部采购；列表服务端分页，补货规则和建议一次读取后在页面分页。
+
+盘点冲突返回物品和最近200条期间流水；补货冲突返回具体物品及最新建议。页面保留输入，通过明确重盘或刷新依据重新核对。日期与跟进日志在一个批量接口中提交，替代原方案的多条单项 API，保持相同事务语义。
 
 ## 6. 实现位置与复用方式
 

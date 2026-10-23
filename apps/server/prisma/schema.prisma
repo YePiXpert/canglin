@@ -132,6 +132,10 @@ model AiCall {
 // V3 workflow. CHECK constraints on enum-like columns live in the migrations (Prisma cannot model them).
 // Scaled integers: quantities 6 decimals, unit prices 4, line amounts CNY fen.
 model CatalogProduct {
+  stockVersion Int @default(0)
+  stocktakeLines StocktakeLine[]
+  stockPolicy StockPolicy?
+  replenishmentLines ReplenishmentDraftLine[]
   id Int @id @default(autoincrement())
   name String
   specification String @default("")
@@ -145,6 +149,8 @@ model CatalogProduct {
 }
 
 model ProcurementRequest {
+  purpose String @default("GENERAL")
+  replenishmentDraft ReplenishmentDraft?
   id Int @id @default(autoincrement())
   serialNumber String
   // System number given when there is no OA serial (无OA-yyyymmdd-nn); kept after the OA serial is filled in.
@@ -184,6 +190,8 @@ model ProcurementLine {
 }
 
 model BusinessDocument {
+  stocktake Stocktake?
+  invoiceFollowup PurchaseFollowup?
   id Int @id @default(autoincrement())
   kind String // WORKFLOW_DOCUMENT_KINDS
   date String
@@ -209,6 +217,7 @@ model BusinessDocument {
 }
 
 model BusinessLine {
+  arrivalFollowup PurchaseFollowup?
   id Int @id @default(autoincrement())
   documentId Int
   document BusinessDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
@@ -270,4 +279,101 @@ model StockEntry {
   @@index([productId, date])
   @@index([originLineId, location])
   @@index([businessLineId])
+}
+
+model Stocktake {
+  id Int @id @default(autoincrement())
+  title String
+  note String @default("")
+  status String @default("DRAFT")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  postedAt DateTime?
+  voidedAt DateTime?
+  voidReason String?
+  adjustmentDocumentId Int? @unique
+  adjustmentDocument BusinessDocument? @relation(fields: [adjustmentDocumentId], references: [id], onDelete: Restrict)
+  lines StocktakeLine[]
+  @@index([status, createdAt])
+}
+model StocktakeLine {
+  id Int @id @default(autoincrement())
+  stocktakeId Int
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  productId Int
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName String
+  specification String
+  unit String
+  baselineUnits BigInt
+  stockVersion Int
+  baselineAt DateTime @default(now())
+  actualUnits BigInt?
+  countedAt DateTime?
+  reason String @default("")
+  @@unique([stocktakeId, productId])
+}
+model StockPolicy {
+  productId Int @id
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  enabled Boolean @default(false)
+  minimumUnits BigInt @default(0)
+  targetUnits BigInt
+  multipleUnits BigInt?
+  note String @default("")
+  version Int @default(1)
+}
+model ReplenishmentDraft {
+  id Int @id @default(autoincrement())
+  title String
+  department String @default("")
+  handler String @default("")
+  requestDate String
+  note String @default("")
+  status String @default("DRAFT")
+  version Int @default(1)
+  requestId Int? @unique
+  request ProcurementRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  requestSerial String?
+  createdAt DateTime @default(now())
+  confirmedAt DateTime?
+  lines ReplenishmentDraftLine[]
+  @@index([status, createdAt])
+}
+model ReplenishmentDraftLine {
+  id Int @id @default(autoincrement())
+  draftId Int
+  draft ReplenishmentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  productId Int
+  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName String
+  specification String
+  unit String
+  quantityUnits BigInt
+  suggestion String
+  reason String @default("")
+  @@unique([draftId, productId])
+}
+model PurchaseFollowup {
+  id Int @id @default(autoincrement())
+  kind String
+  purchaseLineId Int? @unique
+  purchaseLine BusinessLine? @relation(fields: [purchaseLineId], references: [id], onDelete: Restrict)
+  purchaseDocumentId Int? @unique
+  purchaseDocument BusinessDocument? @relation(fields: [purchaseDocumentId], references: [id], onDelete: Restrict)
+  expectedDate String?
+  nextDate String?
+  dismissedAt DateTime?
+  dismissReason String?
+  version Int @default(1)
+  entries PurchaseFollowupEntry[]
+}
+model PurchaseFollowupEntry {
+  id Int @id @default(autoincrement())
+  followupId Int
+  followup PurchaseFollowup @relation(fields: [followupId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  note String
+  changed String
+  @@index([followupId, id])
 }
