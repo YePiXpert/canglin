@@ -56,7 +56,16 @@ const tabItems: NavItem[] = [
 ];
 
 /** 「更多」抽屉里的导航：底部标签放不下的 */
-const moreItems: NavItem[] = [{ path: '/operations/mobile', title: '扫码作业', icon: 'inventory' }, { path: '/procurement', title: '集中采购', icon: 'ledger' }, { path: '/finance', title: '资金对账', icon: 'report' }, { path: '/workbench/exceptions', title: '异常中心', icon: 'kanban' }, { path: '/settings', title: '设置', icon: 'settings' }];
+const moreItems: NavItem[] = [
+  { path: '/operations/mobile', title: '扫码作业', icon: 'scan' },
+  { path: '/procurement', title: '集中采购', icon: 'layers' },
+  { path: '/finance', title: '资金对账', icon: 'ledger' },
+  { path: '/finance/invoices', title: '发票池', icon: 'receipt' },
+  { path: '/operations/drafts', title: '操作草稿', icon: 'clipboard' },
+  { path: '/workbench/exceptions', title: '异常中心', icon: 'alert-circle' },
+  { path: '/insights/monthly', title: '月度复盘', icon: 'report' },
+  { path: '/settings', title: '设置', icon: 'settings' },
+];
 
 /**
  * 当前所在的分区：按路径前缀判断。/requests/:id 与 /requests 是并列的路由，router-link 的 isActive 认不出来，
@@ -153,6 +162,16 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
       </nav>
 
       <div class="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 text-xs text-muted hover:border-line-strong hover:text-ink cursor-pointer transition-colors duration-150"
+          aria-label="快捷跳转与全局检索"
+          @click="paletteOpen = true"
+        >
+          <Icon name="search" :size="14" class="text-faint" />
+          <span>搜索 / 直达</span>
+          <kbd class="rounded border border-line bg-surface-2 px-1 py-0.5 font-mono text-[10px] text-faint">⌘K</kbd>
+        </button>
         <router-link :to="primaryAction.to" :class="buttonClass({ variant: primaryAction.variant })">
           <Icon :name="primaryAction.icon" :size="16" />
           {{ primaryAction.long }}
@@ -179,13 +198,32 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
       </div>
     </header>
 
-    <!-- 手机顶栏：方印 + 词标，右侧 AI 助手和主动作（「导入」，导入页里换成「申请」）；页标题由各页的 PageHeader 给出 -->
-    <header class="lg:hidden flex h-13 shrink-0 items-center gap-2.5 border-b border-line bg-canvas px-(--main-px)">
-      <router-link to="/workbench" class="flex min-w-0 items-center gap-2.5 rounded-sm" aria-label="仓廪 工作台">
-        <span :class="SEAL" class="size-6.5 text-[10px]" aria-hidden="true">仓廪</span>
-        <span class="truncate text-[15px] font-semibold text-ink" aria-hidden="true">仓廪</span>
+    <!-- 手机顶栏：方印 + 词标，右侧快捷直达、扫码、AI 助手和主动作（「导入」，导入页里换成「申请」） -->
+    <header class="lg:hidden flex h-13.5 shrink-0 items-center gap-2 border-b-2 border-double border-line-strong bg-canvas px-(--main-px)">
+      <router-link to="/workbench" class="flex min-w-0 items-center gap-2 rounded-sm" aria-label="仓廪 工作台">
+        <span :class="SEAL" class="size-7 text-[10px] shadow-xs" aria-hidden="true">仓廪</span>
+        <span class="flex flex-col leading-[1.15] min-w-0" aria-hidden="true">
+          <span class="truncate text-[14px] font-semibold text-ink">仓廪</span>
+          <span class="truncate text-[10px] text-faint">采购与领用账册</span>
+        </span>
       </router-link>
-      <div class="ml-auto flex items-center gap-1.5">
+      <div class="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-xs font-medium text-muted active:bg-surface-2 transition-colors"
+          aria-label="快捷跳转与全局检索"
+          @click="paletteOpen = true"
+        >
+          <Icon name="search" :size="13" class="text-accent" />
+          <span>直达</span>
+        </button>
+        <router-link
+          to="/operations/mobile"
+          :class="buttonClass({ variant: 'ghost', iconOnly: true })"
+          aria-label="扫码作业"
+        >
+          <Icon name="scan" :size="18" />
+        </router-link>
         <button
           type="button"
           :class="buttonClass({ variant: 'ghost', iconOnly: true })"
@@ -217,32 +255,52 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
       </RouteErrorBoundary>
     </main>
 
-    <!-- 手机底部标签栏：当前项墨色 600、图标朱砂 -->
+    <!-- 手机底部标签栏：当前项墨色 600、顶部朱砂墨线指示条与柔底胶囊 -->
     <nav
-      class="lg:hidden fixed bottom-0 inset-x-0 z-30 grid grid-cols-5 border-t border-line bg-surface/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
+      class="lg:hidden fixed bottom-0 inset-x-0 z-30 grid grid-cols-5 border-t border-line bg-surface/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] shadow-xs"
       aria-label="主导航"
     >
       <router-link v-for="item in tabItems" :key="item.path" v-slot="{ href, navigate }" :to="item.path" custom>
         <a
           :href="href"
-          class="flex h-15 flex-col items-center justify-center gap-1 text-[11px] leading-none transition-colors duration-150"
+          class="relative flex h-15 flex-col items-center justify-center gap-1 text-[11px] leading-none transition-colors duration-150"
           :class="inSection(item.path) ? 'font-semibold text-ink' : 'text-faint'"
           :aria-label="item.ariaLabel"
           :aria-current="currentAttr(item.path)"
           @click="navigate"
         >
-          <Icon :name="item.icon" :size="22" :class="inSection(item.path) ? 'text-accent' : ''" />
+          <span
+            v-if="inSection(item.path)"
+            class="absolute top-0 h-0.5 w-7 rounded-b-full bg-accent"
+            aria-hidden="true"
+          />
+          <span
+            class="flex items-center justify-center rounded-full px-2.5 py-0.5 transition-colors"
+            :class="inSection(item.path) ? 'bg-accent-soft/60 text-accent' : ''"
+          >
+            <Icon :name="item.icon" :size="20" />
+          </span>
           {{ item.title }}
         </a>
       </router-link>
       <button
         type="button"
-        class="flex h-15 flex-col items-center justify-center gap-1 text-[11px] leading-none cursor-pointer transition-colors duration-150"
+        class="relative flex h-15 flex-col items-center justify-center gap-1 text-[11px] leading-none cursor-pointer transition-colors duration-150"
         :class="moreActive ? 'font-semibold text-ink' : 'text-faint'"
         :aria-expanded="moreOpen"
         @click="moreOpen = true"
       >
-        <Icon name="more-horizontal" :size="22" :class="moreActive ? 'text-accent' : ''" />
+        <span
+          v-if="moreActive"
+          class="absolute top-0 h-0.5 w-7 rounded-b-full bg-accent"
+          aria-hidden="true"
+        />
+        <span
+          class="flex items-center justify-center rounded-full px-2.5 py-0.5 transition-colors"
+          :class="moreActive ? 'bg-accent-soft/60 text-accent' : ''"
+        >
+          <Icon name="more-horizontal" :size="20" />
+        </span>
         更多
       </button>
     </nav>
@@ -253,11 +311,11 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
         <DialogOverlay class="overlay lg:hidden fixed inset-0 z-50 data-[state=open]:animate-fade-in" />
         <DialogContent
           aria-label="更多功能"
-          class="lg:hidden fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-y-auto bg-canvas border-t border-line rounded-t-xl px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-(--shadow-pop) focus:outline-hidden data-[state=open]:animate-sheet-in"
+          class="lg:hidden fixed inset-x-0 bottom-0 z-50 max-h-[78vh] overflow-y-auto bg-canvas border-t border-line rounded-t-xl px-4 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-(--shadow-pop) focus:outline-hidden data-[state=open]:animate-sheet-in"
         >
           <div class="mx-auto mb-2 h-1 w-9 rounded-full bg-line-strong" aria-hidden="true" />
-          <div class="flex items-center justify-between mb-4">
-            <DialogTitle class="text-[15px] font-semibold text-ink">更多功能</DialogTitle>
+          <div class="flex items-center justify-between mb-3">
+            <DialogTitle class="text-[15px] font-semibold text-ink">更多功能与工作台</DialogTitle>
             <DialogDescription class="sr-only">设置、深浅色切换和退出登录</DialogDescription>
             <button
               type="button"
@@ -268,14 +326,28 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
               <Icon name="close" :size="16" />
             </button>
           </div>
+
+          <button
+            type="button"
+            class="mb-4 flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface px-3.5 py-2.5 text-left text-xs text-muted active:bg-surface-2 transition-colors"
+            @click="moreOpen = false; paletteOpen = true"
+          >
+            <Icon name="search" :size="15" class="text-accent shrink-0" />
+            <span class="truncate">搜索单号、物品，或输入 P-12 / D-45 直达…</span>
+          </button>
+
           <div class="grid grid-cols-4 gap-2">
             <router-link
               v-for="item in moreItems"
               :key="item.path"
               :to="item.path"
-              class="flex flex-col items-center gap-1.5 py-2 rounded-(--radius-card) text-xs text-muted active:bg-surface-2 transition-colors duration-150"
+              class="flex flex-col items-center gap-1.5 py-2 rounded-(--radius-card) text-xs transition-colors duration-150"
+              :class="inSection(item.path) ? 'text-ink font-semibold bg-surface-2/70' : 'text-muted active:bg-surface-2'"
             >
-              <span class="flex items-center justify-center size-11 rounded-xl bg-surface border border-line text-ink">
+              <span
+                class="flex items-center justify-center size-11 rounded-xl border transition-colors"
+                :class="inSection(item.path) ? 'bg-accent-soft border-accent text-accent' : 'bg-surface border-line text-ink'"
+              >
                 <Icon :name="item.icon" :size="20" />
               </span>
               {{ item.title }}

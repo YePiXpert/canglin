@@ -14,9 +14,7 @@ export default defineConfig({
     vue(),
     tailwindcss(),
     VitePWA({
-      // prompt 而非 autoUpdate：旧 SW 继续伺服旧的 precache，直到用户点「立即更新」。
-      // autoUpdate 会在用户还开着页面时换掉 SW，旧页面再去加载已被删除的路由分片就会报错。
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
         name: '仓廪 · 采购与领用',
@@ -33,6 +31,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],

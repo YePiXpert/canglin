@@ -51,13 +51,13 @@ function openPalette() {
 
     <button
       type="button"
-      class="ml-auto hidden sm:inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted hover:bg-surface/80 hover:text-ink cursor-pointer transition-colors duration-150"
+      class="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted hover:bg-surface/80 hover:text-ink cursor-pointer transition-colors duration-150"
       aria-label="快捷跳转与全局检索"
       @click="openPalette"
     >
-      <Icon name="search" :size="13" class="text-faint" />
+      <Icon name="search" :size="13" class="text-accent" />
       <span>直达</span>
-      <kbd class="rounded border border-line bg-surface px-1 py-0.5 font-mono text-[10px] text-faint">⌘K</kbd>
+      <kbd class="hidden sm:inline rounded border border-line bg-surface px-1 py-0.5 font-mono text-[10px] text-faint">⌘K</kbd>
     </button>
   </nav>
 </template>

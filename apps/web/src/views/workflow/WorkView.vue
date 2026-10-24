@@ -81,17 +81,17 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
     <ExecutionLinks />
 
     <div class="mb-7">
-      <!-- 桌面一行数字（上下发丝线、项间竖线）；窄屏是通栏横向滑动的小卡 -->
+      <!-- 桌面一行数字（上下双线、项间竖线）；窄屏是通栏横向滑动的墨线小卡 -->
       <section
         aria-label="待办概览"
-        class="-mx-(--main-px) flex snap-x scroll-px-(--main-px) gap-2 overflow-x-auto px-(--main-px) pb-1 lg:mx-0 lg:flex-wrap lg:items-baseline lg:gap-x-0 lg:gap-y-3 lg:overflow-visible lg:border-y lg:border-line lg:px-0 lg:py-4.5"
+        class="-mx-(--main-px) flex snap-x scroll-px-(--main-px) gap-2.5 overflow-x-auto px-(--main-px) pb-1.5 lg:mx-0 lg:flex-wrap lg:items-baseline lg:gap-x-0 lg:gap-y-3 lg:overflow-visible lg:border-y-2 lg:border-double lg:border-line-strong lg:px-0 lg:py-4.5"
       >
         <router-link
           v-for="item in overviewItems"
           :key="item.key"
           :to="item.to"
-          class="group flex min-w-24 shrink-0 snap-start flex-col gap-0.5 rounded-lg border px-3 py-2.5 transition-colors duration-150 lg:mr-6 lg:min-w-0 lg:flex-row lg:items-baseline lg:gap-2 lg:rounded-none lg:border-0 lg:border-r lg:border-line lg:bg-transparent lg:py-0 lg:pl-0 lg:pr-6 lg:last:mr-0 lg:last:border-r-0 lg:last:pr-0"
-          :class="[item.urgent ? 'border-accent-soft bg-accent-soft/40' : 'border-line bg-surface max-lg:hover:border-line-strong', item.end ? 'lg:ml-auto' : '']"
+          class="group flex min-w-26 shrink-0 snap-start flex-col gap-1 rounded-lg border border-l-4 px-3.5 py-2.5 shadow-xs transition-colors duration-150 lg:mr-6 lg:min-w-0 lg:flex-row lg:items-baseline lg:gap-2 lg:rounded-none lg:border-0 lg:border-r lg:border-line lg:bg-transparent lg:py-0 lg:pl-0 lg:pr-6 lg:shadow-none lg:last:mr-0 lg:last:border-r-0 lg:last:pr-0"
+          :class="[item.urgent ? 'border-accent-soft border-l-accent bg-accent-soft/40' : 'border-line border-l-line-strong bg-surface max-lg:hover:border-line-strong', item.end ? 'lg:ml-auto' : '']"
         >
           <b
             class="num text-xl leading-none font-bold tracking-[-0.02em]"

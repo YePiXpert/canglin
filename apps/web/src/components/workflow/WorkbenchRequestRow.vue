@@ -73,11 +73,19 @@ const action = computed((): { label: string; variant: ButtonVariant; reason: str
   if (step === 'purchase') return { label: '登记采购', variant: 'secondary', reason: `${lines('purchase').length} 条明细待采购` };
   return { label: '查看申请', variant: 'secondary', reason: '没有待办数量' };
 });
+const stepTone = computed(() => {
+  const step = nextStep(props.request);
+  if (step === 'allocate') return 'border-l-4 border-l-blue';
+  if (step === 'receive') return 'border-l-4 border-l-amber';
+  if (step === 'purchase') return 'border-l-4 border-l-line-strong';
+  return '';
+});
 </script>
 
 <template>
   <li
     class="grid grid-cols-1 gap-x-5 gap-y-3 px-4 py-4 transition-colors duration-150 hover:bg-surface-2/40 md:grid-cols-[200px_minmax(0,1fr)_180px] md:px-5"
+    :class="stepTone"
     :data-request-id="request.id"
   >
     <!-- 窄屏：流水号与 chip 同一行、元信息在下；桌面：流水号、元信息、chip 依次向下 -->

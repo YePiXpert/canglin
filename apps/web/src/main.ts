@@ -43,15 +43,14 @@ void router.isReady().finally(() => {
 app.mount('#app');
 
 /**
- * PWA 更新：不再静默换版本。
- * 新版本就绪时提示用户，由他决定什么时候刷新——填到一半的表单不该被自动重载吞掉。
+ * PWA 自动更新：新版本 SW 立即激活，遇到旧分片加载失败时自动刷新。
  */
+window.addEventListener('vite:preloadError', () => {
+  window.location.reload();
+});
 const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    useToastStore(pinia).success('有新版本可用', {
-      label: '立即更新',
-      run: () => updateSW(true),
-    });
+    void updateSW(true);
   },
 });
