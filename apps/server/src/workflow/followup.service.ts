@@ -1,3 +1,4 @@
+import { settlementsTx } from '../execution/settlement-query';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { quantityText, type FollowupPlanInput, type FollowupRow, type PlanningQuery } from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,14 +18,18 @@ export class FollowupService {
       tx.purchaseFollowup.findMany({ include: { entries: { orderBy: { id: 'desc' }, take: 1 } } }),
       tx.businessLine.findMany({ where: { document: { kind: 'SUPPLIER_RETURN', status: 'POSTED', returnMode: 'REPLACEMENT' } }, include: { sourceLine: true } }),
     ]);
+    const settlements = new Map((await settlementsTx(tx)).map(s => [s.documentId, s]));
+    const invoiceManaged = new Set((await tx.invoiceAllocation.findMany({ where: { invoice: { status: { not: 'VOIDED' } } }, select: { documentId: true }, distinct: ['documentId'] })).map(a => a.documentId));
     const planMap = new Map(plans.map(p => [`${p.kind}:${p.purchaseLineId ?? p.purchaseDocumentId}`, p]));
     const replacementMap = new Map<number, { documentId: number; quantity: string; reason: string | null }[]>();
     for (const r of replacements) { const id = r.sourceLine?.sourceLineId; if (id) { const list = replacementMap.get(id) ?? []; list.push({ documentId: r.documentId, quantity: quantityText(r.quantityUnits), reason: r.reason }); replacementMap.set(id, list); } }
     const today = todayString();
     const rows: FollowupRow[] = [];
     for (const d of documents) {
+      const financial = settlements.get(d.id), managed = d.settlementMode === 'DETAIL' || invoiceManaged.has(d.id);
+      const invoiceComplete = managed ? !!financial && financial.invoiceMissing === '0.00' && financial.invoiceExcess === '0.00' : d.invoiceIssued && d.attachments.some(a => a.kind === 'INVOICE');
       const targets = [
-        { kind: 'INVOICE' as const, targetId: d.id, label: `采购 #${d.id} 发票`, quantity: null, unit: null, complete: d.invoiceIssued && d.attachments.some(a => a.kind === 'INVOICE'), replacement: false, lines: d.lines },
+        { kind: 'INVOICE' as const, targetId: d.id, label: `采购 #${d.id} 发票`, quantity: null, unit: null, complete: invoiceComplete, replacement: false, lines: d.lines },
         ...d.lines.map(l => ({ kind: 'ARRIVAL' as const, targetId: l.id, label: `${l.itemName}${l.specification ? ` · ${l.specification}` : ''}`, quantity: quantityText(l.quantityUnits - l.cancelledUnits - l.receivedUnits), unit: l.unit, complete: l.quantityUnits - l.cancelledUnits - l.receivedUnits <= 0n, replacement: replacementMap.has(l.id), lines: [l] })),
       ];
       for (const t of targets) {
@@ -37,7 +42,7 @@ export class FollowupService {
           expectedDate: p?.expectedDate ?? null, nextDate: p?.nextDate ?? null, dismissed: !!p?.dismissedAt, dismissReason: p?.dismissReason ?? null, state,
           overdue: active && !!p?.expectedDate && p.expectedDate < today, due: active && !!p?.nextDate && p.nextDate <= today, replacement: t.replacement, latestNote: p?.entries[0]?.note ?? null,
           waitingDays: Math.max(0, Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${d.date}T00:00:00Z`)) / 86400000)),
-          stateReason: state === 'VOIDED' ? '采购已撤销' : t.kind === 'ARRIVAL' ? t.complete ? '已到齐或剩余采购已取消' : t.replacement ? '含换货待到货，按当前有效剩余量合计' : '仍有未到货数量（含撤销到货后的余量）' : t.complete ? '已开票且发票附件齐全' : !d.invoiceIssued ? '尚未登记已开票' : '缺少发票附件（含最后一份附件被删除）', replacements: returns });
+          stateReason: state === 'VOIDED' ? '采购已撤销' : t.kind === 'ARRIVAL' ? t.complete ? '已到齐或剩余采购已取消' : t.replacement ? '含换货待到货，按当前有效剩余量合计' : '仍有未到货数量（含撤销到货后的余量）' : t.complete ? (managed ? '有效票据与采购净额已匹配' : '已开票且发票附件齐全') : managed ? '票据与采购净额尚未完全匹配，请到发票池核对' : !d.invoiceIssued ? '尚未登记已开票' : '缺少发票附件（含最后一份附件被删除）', replacements: returns });
       }
     }
     return rows.sort((a, b) => Number(b.overdue || b.due) - Number(a.overdue || a.due) || (a.nextDate ?? '9999').localeCompare(b.nextDate ?? '9999') || b.documentId - a.documentId || a.key.localeCompare(b.key));

@@ -22,7 +22,7 @@ import { clientIp } from '../common/request.util';
 import { config } from '../config';
 import { autoBackupConfigSchema, type AutoBackupConfig } from '@canglin/shared';
 
-const APP_VERSION = '1.0.0-beta.1';
+const APP_VERSION = '1.0.0-beta.2';
 
 @Controller('system')
 export class SystemController {

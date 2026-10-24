@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { operation } from '../common/operation';
 import { WorkflowQueryService } from './workflow-query.service';
 import { snapshot, sum, type Tx } from './workflow-records';
+import { settlementsTx } from '../execution/settlement-query';
 
 type SourceLine = Prisma.BusinessLineGetPayload<{ include: { document: true; sourceLine: { include: { document: true } } } }>;
 
@@ -267,6 +268,7 @@ export class WorkflowService {
     if (received + cancelled > line.quantityUnits) throw new ConflictException(`「${line.itemName}」超过了这批采购还没到的数量（${quantityText(line.quantityUnits - line.cancelledUnits - line.receivedUnits)} ${line.unit}）`);
     const result = await tx.businessLine.updateMany({ where: { id, receivedUnits: line.receivedUnits, cancelledUnits: line.cancelledUnits }, data: { receivedUnits: received, cancelledUnits: cancelled } });
     if (!result.count) throw new ConflictException('采购明细已发生变化，请重新载入');
+    if (cancelledDelta !== 0n) await tx.businessDocument.update({ where: { id: line.documentId }, data: { settlementVersion: { increment: 1 } } });
     return line;
   }
 
@@ -317,10 +319,14 @@ export class WorkflowService {
   }
 
   async purchase(input: WorkflowPurchaseInput, key: string, ip?: string) {
-    return this.write('purchase', input, key, ip, async (tx) => {
+    return this.write('purchase', input, key, ip, tx => this.purchaseTx(tx, input));
+  }
+
+  /** Caller owns the transaction, audit and idempotency receipt. */
+  async purchaseTx(tx: Tx, input: WorkflowPurchaseInput) {
       const supplier = await tx.supplier.findUnique({ where: { id: input.supplierId } });
       if (!supplier) throw new NotFoundException('供应商不存在');
-      const document = await tx.businessDocument.create({ data: { kind: 'PURCHASE', date: input.date, supplierId: supplier.id, supplierName: supplier.name, note: input.note } });
+      const document = await tx.businessDocument.create({ data: { kind: 'PURCHASE', settlementMode: input.settlementMode ?? 'LEGACY', date: input.date, supplierId: supplier.id, supplierName: supplier.name, note: input.note } });
       let total = 0n;
       for (const inputLine of input.lines) {
         const quantity = quantityUnits(inputLine.quantity), price = priceUnits(inputLine.unitPrice);
@@ -336,11 +342,14 @@ export class WorkflowService {
       }
       await tx.businessDocument.update({ where: { id: document.id }, data: { totalAmountUnits: total } });
       return this.query.documentTx(tx, document.id);
-    });
   }
 
   async receive(input: WorkflowReceiptInput, key: string, ip?: string) {
-    return this.write('receipt', input, key, ip, async (tx) => {
+    return this.write('receipt', input, key, ip, tx => this.receiveTx(tx, input));
+  }
+
+  /** Caller owns the transaction, audit and idempotency receipt. */
+  async receiveTx(tx: Tx, input: WorkflowReceiptInput) {
       const document = await tx.businessDocument.create({ data: { kind: 'RECEIPT', date: input.date, note: input.note } });
       let total = 0n;
       const suppliers = new Map<number, string>();
@@ -360,11 +369,13 @@ export class WorkflowService {
       const soleSupplier = suppliers.size === 1 ? [...suppliers.entries()][0] : undefined;
       await tx.businessDocument.update({ where: { id: document.id }, data: { totalAmountUnits: total, supplierId: soleSupplier?.[0], supplierName: soleSupplier?.[1] } });
       return this.query.documentTx(tx, document.id);
-    });
   }
 
   async stockIn(input: WorkflowStockInInput, key: string, ip?: string) {
-    return this.write('stock_in', input, key, ip, async (tx) => {
+    return this.write('stock_in', input, key, ip, tx => this.stockInTx(tx, input));
+  }
+
+  async stockInTx(tx: Tx, input: WorkflowStockInInput) {
       const document = await tx.businessDocument.create({ data: { kind: 'STOCK_IN', date: input.date, note: input.note } });
       for (const inputLine of input.lines) {
         const source = await this.sourceLine(tx, inputLine.receiptLineId, 'RECEIPT'), quantity = quantityUnits(inputLine.quantity);
@@ -374,11 +385,14 @@ export class WorkflowService {
         await this.stockChange(tx, { productId: source.productId, originLineId: source.id, businessLineId: line.id, location: 'STOCK', quantity, date: input.date });
       }
       return this.query.documentTx(tx, document.id);
-    });
   }
 
   async distribute(input: WorkflowDistributionInput, key: string, ip?: string) {
-    return this.write('distribution', input, key, ip, async (tx) => {
+    return this.write('distribution', input, key, ip, tx => this.distributeTx(tx, input));
+  }
+
+  /** Caller owns the transaction, audit and idempotency receipt. */
+  async distributeTx(tx: Tx, input: WorkflowDistributionInput) {
       const document = await tx.businessDocument.create({ data: { kind: 'DISTRIBUTION', date: input.date, source: input.source, department: input.department, note: input.note } });
       for (const inputLine of input.lines) {
         const quantity = quantityUnits(inputLine.quantity);
@@ -395,7 +409,6 @@ export class WorkflowService {
         }
       }
       return this.query.documentTx(tx, document.id);
-    });
   }
 
   private afterSourceDate(date: string, sourceDate: string) {
@@ -517,22 +530,32 @@ export class WorkflowService {
 
   async paymentBatch(input: PaymentBatchInput, key: string, ip?: string): Promise<PaymentBatchResult> {
     return this.write('metadata_batch', input, key, ip, async (tx, audit) => {
-      const documents = await tx.businessDocument.findMany({ where: { id: { in: input.documents.map((r) => r.id) } } });
+      const ids = input.documents.map((r) => r.id);
+      const documents = await tx.businessDocument.findMany({ where: { id: { in: ids } } });
+      if (documents.some(d => d.settlementMode === 'DETAIL')) throw new ConflictException('所选采购包含金额对账记录，请在资金与票据页面办理；本次全部未修改');
+      const invoiceLinks = await tx.invoiceAllocation.findMany({ where: { documentId: { in: ids }, invoice: { status: { not: 'VOIDED' } } }, select: { documentId: true } });
+      if ('invoiceIssued' in input.change && invoiceLinks.length) throw new ConflictException('所选采购已匹配发票，请在发票池处理；本次全部未修改');
+      const managedIds = [...new Set(invoiceLinks.map(a => a.documentId))];
+      const settlements = managedIds.length ? await settlementsTx(tx, { id: { in: managedIds } }) : [];
       const byId = new Map(documents.map((d) => [d.id, d]));
+      const effectiveInvoice = (row: (typeof documents)[number]) => {
+        const settlement = settlements.find(s => s.documentId === row.id);
+        return settlement ? settlement.invoiceMissing === '0.00' && settlement.invoiceExcess === '0.00' : row.invoiceIssued;
+      };
       const conflicts = input.documents.filter((expected) => {
         const row = byId.get(expected.id);
-        return !row || row.kind !== 'PURCHASE' || row.status !== 'POSTED' || row.paymentStatus !== expected.paymentStatus || row.invoiceIssued !== expected.invoiceIssued;
+        return !row || row.kind !== 'PURCHASE' || row.status !== 'POSTED' || row.paymentStatus !== expected.paymentStatus || effectiveInvoice(row) !== expected.invoiceIssued;
       }).map((r) => r.id);
       if (conflicts.length) throw new ConflictException({ message: `采购 #${conflicts.join('、#')} 已撤销、不存在或状态已变化，本次全部未修改。请刷新后重新核对。`, conflictIds: conflicts });
       const updatedIds: number[] = [], unchangedIds: number[] = [];
       const changes: { id: number; before: { paymentStatus: string; invoiceIssued: boolean }; after: { paymentStatus: string; invoiceIssued: boolean } }[] = [];
       for (const expected of input.documents) {
         const row = byId.get(expected.id)!;
-        const before = { paymentStatus: row.paymentStatus, invoiceIssued: row.invoiceIssued };
+        const before = { paymentStatus: row.paymentStatus, invoiceIssued: effectiveInvoice(row) };
         const after = { ...before, ...input.change };
         if (before.paymentStatus === after.paymentStatus && before.invoiceIssued === after.invoiceIssued) { unchangedIds.push(row.id); continue; }
         // 与审计、幂等回执同一事务；只改选定状态，不触碰备注、附件或账目。
-        const updated = await tx.businessDocument.updateMany({ where: { id: row.id, kind: 'PURCHASE', status: 'POSTED', ...before }, data: input.change });
+        const updated = await tx.businessDocument.updateMany({ where: { id: row.id, kind: 'PURCHASE', status: 'POSTED', paymentStatus: row.paymentStatus, invoiceIssued: row.invoiceIssued }, data: { ...input.change, settlementVersion: { increment: 1 } } });
         if (updated.count !== 1) throw new ConflictException('采购状态已变化，本次全部未修改。请刷新后重新核对。');
         updatedIds.push(row.id); changes.push({ id: row.id, before, after });
       }
@@ -546,9 +569,11 @@ export class WorkflowService {
     return this.write('metadata', { id, ...input }, key, ip, async (tx) => {
       const document = await tx.businessDocument.findUnique({ where: { id } });
       if (!document) throw new NotFoundException('业务单据不存在');
+      if (document.settlementMode === 'DETAIL' && (input.paymentStatus !== undefined || input.invoiceIssued !== undefined)) throw new ConflictException('该采购使用金额对账，请在资金与票据页面修改付款和发票记录');
+      if (input.invoiceIssued !== undefined && await tx.invoiceAllocation.count({ where: { documentId: id, invoice: { status: { not: 'VOIDED' } } } })) throw new ConflictException('该采购已有票据匹配记录，请在发票池处理');
       if (document.status !== 'POSTED') throw new ConflictException('已撤销的记录不能修改');
       if (document.kind !== 'PURCHASE' && (input.paymentStatus !== undefined || input.invoiceIssued !== undefined)) throw new BadRequestException('付款和开票状态请在采购单上登记');
-      await tx.businessDocument.update({ where: { id }, data: input });
+      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(input.paymentStatus !== undefined || input.invoiceIssued !== undefined ? { settlementVersion: { increment: 1 } } : {}) } });
       return this.query.documentTx(tx, id);
     });
   }
@@ -564,6 +589,10 @@ export class WorkflowService {
       this.afterSourceDate(input.date, document.date);
       const downstream = await tx.businessLine.findFirst({ where: { sourceLineId: { in: document.lines.map((line) => line.id) }, document: { status: 'POSTED' } } });
       if (downstream) throw new ConflictException('之后还有用到它的登记，请先撤销那些记录');
+      if (document.kind === 'PURCHASE' && (
+        await tx.financialAllocation.count({ where: { documentId: id, record: { status: 'POSTED' } } }) ||
+        await tx.invoiceAllocation.count({ where: { documentId: id, invoice: { status: { not: 'VOIDED' } } } })
+      )) throw new ConflictException('采购已有资金或票据记录，请先处理这些关联记录再撤销');
       for (const line of document.lines) {
         // Reductions apportion rounding cents cumulatively. Later reductions depend on that allocation.
         if (document.kind === 'PURCHASE_CANCEL' || document.kind === 'SUPPLIER_RETURN') {

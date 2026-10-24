@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ExecutionAside from '@/components/execution/ExecutionAside.vue';
+import ExecutionLinks from '@/components/execution/ExecutionLinks.vue';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { workflowApi, type WorkflowRequestRow } from '@/api/workflow';
@@ -35,6 +37,7 @@ const importTotal = ref<number | null>(null);
 const imports = ref<InstanceType<typeof ImportPendingAside>>();
 const recent = ref<InstanceType<typeof RecentDocumentsAside>>();
 const planning = ref<InstanceType<typeof PlanningAside>>();
+const execution = ref<InstanceType<typeof ExecutionAside>>();
 const payments = ref<InstanceType<typeof PaymentPendingAside>>();
 onMounted(() => { void loadOverview(); void loadPending(); });
 
@@ -61,6 +64,7 @@ function refresh() {
   void recent.value?.refresh();
   void payments.value?.refresh();
   void planning.value?.refresh();
+  void execution.value?.refresh();
 }
 function created(request: WorkflowRequestRow) { void router.push(`/requests/${request.id}`); }
 </script>
@@ -74,6 +78,7 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
       <span class="sr-only" role="status">{{ refreshing ? '刷新中…' : '' }}</span>
       <Button @click="creating = true"><Icon name="plus" :size="16" />人工录入申请</Button>
     </PageHeader>
+    <ExecutionLinks />
 
     <div class="mb-7">
       <!-- 桌面一行数字（上下发丝线、项间竖线）；窄屏是通栏横向滑动的小卡 -->
@@ -155,7 +160,7 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
 
       <div class="grid min-w-0 grid-cols-1 items-start gap-6 md:grid-cols-2 xl:grid-cols-1">
         <ImportPendingAside ref="imports" @total="importTotal = $event" />
-        <PlanningAside ref="planning" />
+        <PlanningAside ref="planning" /><ExecutionAside ref="execution" />
         <PaymentPendingAside ref="payments" />
         <RecentDocumentsAside ref="recent" />
       </div>

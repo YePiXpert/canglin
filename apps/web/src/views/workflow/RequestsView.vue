@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExecutionLinks from '@/components/execution/ExecutionLinks.vue';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { WorkflowRequestRow } from '@/api/workflow';
@@ -19,6 +20,7 @@ function created(request: WorkflowRequestRow) { void router.push(`/requests/${re
     <PageHeader title="申请单" description="查找并查阅申请；一张申请的原件、采购、到货与物品去向都在详情里办理">
       <Button variant="secondary" @click="creating = true"><Icon name="plus" :size="16" />人工录入申请</Button>
     </PageHeader>
+    <ExecutionLinks />
     <RequestCollection @create="creating = true" />
     <RequestCreateDialog v-model:open="creating" @created="created" />
   </div>

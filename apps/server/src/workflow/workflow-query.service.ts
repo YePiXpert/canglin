@@ -1,3 +1,4 @@
+import { settlementsTx } from '../execution/settlement-query';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -92,18 +93,22 @@ export class WorkflowQueryService {
   private async projectDocuments(tx: Tx, documents: DocumentRecord[]): Promise<WorkflowDocumentRow[]> {
     const receiptIds = documents.filter((document) => document.kind === 'RECEIPT').flatMap((document) => document.lines.map((line) => line.id));
     const allocatedIds = documents.filter((document) => ['DISTRIBUTION', 'EMPLOYEE_RETURN'].includes(document.kind)).flatMap((document) => document.lines.map((line) => line.id));
+    const purchaseIds = documents.filter(d => d.kind === 'PURCHASE').map(d => d.id);
+    const [settlements, managed] = await Promise.all([settlementsTx(tx, { id: { in: purchaseIds } }), tx.invoiceAllocation.findMany({ where: { documentId: { in: purchaseIds }, invoice: { status: { not: 'VOIDED' } } }, select: { documentId: true } })]);
     const [balances, allocations] = await Promise.all([
       tx.stockBalance.findMany({ where: { originLineId: { in: receiptIds }, location: 'RECEIVING' } }),
       tx.stockEntry.findMany({ where: { businessLineId: { in: allocatedIds }, reversalOfId: null }, include: { originLine: { include: { requestLine: { include: { request: true } } } } }, orderBy: { id: 'asc' } }),
     ]);
-    return documents.map((document) => ({
+    return documents.map((document) => { const settlement = settlements.find(s => s.documentId === document.id), invoiceManaged = document.settlementMode === 'DETAIL' || managed.some(a => a.documentId === document.id); return ({
       ...(document.stocktake ? { stocktakeId: document.stocktake.id } : {}),
       id: document.id, kind: document.kind as WorkflowDocumentKind, date: document.date,
       status: document.status as 'POSTED' | 'VOIDED', supplierId: document.supplierId, supplierName: document.supplierName,
       department: document.department, source: document.source as 'DIRECT' | 'STOCK' | null,
       returnMode: document.returnMode as 'REFUND' | 'REPLACEMENT' | null, note: document.note,
       totalAmount: document.totalAmountUnits === null ? null : moneyText(document.totalAmountUnits),
-      paymentStatus: document.paymentStatus as WorkflowDocumentRow['paymentStatus'], invoiceIssued: document.invoiceIssued,
+      settlementMode: document.settlementMode as 'LEGACY' | 'DETAIL',
+      ...(settlement ? { settlement } : {}), invoiceManaged,
+      paymentStatus: settlement?.mode === 'DETAIL' ? settlement.payable === '0.00' ? 'PAID' : 'UNPAID' : document.paymentStatus as WorkflowDocumentRow['paymentStatus'], invoiceIssued: invoiceManaged && settlement ? settlement.invoiceMissing === '0.00' && settlement.invoiceExcess === '0.00' : document.invoiceIssued,
       voidReason: document.voidReason, voidDate: document.voidDate, createdAt: document.createdAt.toISOString(), attachments: document.attachments,
       lines: document.lines.map((line): WorkflowDocumentLineRow => ({
         id: line.id, documentId: document.id, requestLineId: line.requestLineId, sourceLineId: line.sourceLineId,
@@ -120,7 +125,7 @@ export class WorkflowQueryService {
         })),
         remainingQuantity: quantityText(document.status === 'VOIDED' ? 0n : document.kind === 'PURCHASE' ? line.quantityUnits - line.cancelledUnits - line.receivedUnits : document.kind === 'RECEIPT' ? sum(balances.filter((balance) => balance.originLineId === line.id).map((balance) => balance.quantityUnits)) : document.kind === 'DISTRIBUTION' ? line.quantityUnits - line.cancelledUnits : 0n),
       })),
-    }));
+    }); });
   }
 
   private async pendingIds(tx: Tx, stage?: WorkflowStage) {

@@ -101,6 +101,7 @@ export const workflowRequestUpdateSchema = z.object(headerFields).superRefine(ch
 export type WorkflowRequestUpdateInput = z.input<typeof workflowRequestUpdateSchema>;
 
 export const workflowPurchaseSchema = z.object({
+  settlementMode: z.enum(['LEGACY', 'DETAIL']).optional(),
   date: workflowDateSchema,
   supplierId: idSchema,
   note: noteSchema,
@@ -255,6 +256,9 @@ export interface WorkflowDocumentLineRow {
   sourceAllocations?: { originLineId: number; quantity: string; requestId: number | null; serialNumber: string | null }[];
 }
 export interface WorkflowDocumentRow {
+  settlement?: import('./execution.js').SettlementRow;
+  invoiceManaged?: boolean;
+  settlementMode?: 'LEGACY' | 'DETAIL';
   stocktakeId?: number;
   id: number; kind: WorkflowDocumentKind; date: string; status: 'POSTED' | 'VOIDED';
   supplierId: number | null; supplierName: string | null; department: string | null;

@@ -14,6 +14,7 @@ import Menu from '@/components/ui/Menu.vue';
 import { buttonClass } from '@/components/ui/button';
 import type { MenuItem } from '@/components/ui/types';
 import AiPanel from '@/components/ai/AiPanel.vue';
+import CommandPalette from './CommandPalette.vue';
 import RouteErrorBoundary from './RouteErrorBoundary.vue';
 import SessionExpiredDialog from './SessionExpiredDialog.vue';
 import { onSessionExpired } from '@/api/client';
@@ -55,7 +56,7 @@ const tabItems: NavItem[] = [
 ];
 
 /** 「更多」抽屉里的导航：底部标签放不下的 */
-const moreItems: NavItem[] = [{ path: '/settings', title: '设置', icon: 'settings' }];
+const moreItems: NavItem[] = [{ path: '/operations/mobile', title: '扫码作业', icon: 'inventory' }, { path: '/procurement', title: '集中采购', icon: 'ledger' }, { path: '/finance', title: '资金对账', icon: 'report' }, { path: '/workbench/exceptions', title: '异常中心', icon: 'kanban' }, { path: '/settings', title: '设置', icon: 'settings' }];
 
 /**
  * 当前所在的分区：按路径前缀判断。/requests/:id 与 /requests 是并列的路由，router-link 的 isActive 认不出来，
@@ -73,6 +74,7 @@ const moreOpen = ref(false);
 /** 当前页属于「更多」里的入口（如设置）时，「更多」标签也显示为当前项 */
 const moreActive = computed(() => moreOpen.value || moreItems.some((i) => inSection(i.path)));
 const aiOpen = ref(false);
+const paletteOpen = ref(false);
 const mainEl = ref<HTMLElement>();
 // 路由一变就收起面板，并把页面滚动容器回到顶部
 watch(() => route.path, () => {
@@ -123,7 +125,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
     变量用 100vw 算：在子元素里展开，写 100% 会按子元素的宽度算错。
   -->
   <div
-    class="flex h-dvh flex-col overflow-hidden bg-canvas [--main-px:1rem] [--main-pt:1rem] [--main-pb:6rem] lg:[--main-px:max(2rem,calc((100vw_-_1536px)/2))] lg:[--main-pt:1.75rem] lg:[--main-pb:3rem]"
+    class="app-shell flex h-dvh flex-col overflow-hidden bg-canvas [--main-px:1rem] [--main-pt:1rem] [--main-pb:6rem] lg:[--main-px:max(2rem,calc((100vw_-_1536px)/2))] lg:[--main-pt:1.75rem] lg:[--main-pb:3rem]"
   >
     <!-- 桌面顶栏：方印 + 词标 | 六项主导航（当前项墨色 600 + 朱砂下划线压在顶栏底线上）| 主按钮、AI、深浅色、账号 -->
     <header class="hidden lg:flex h-14 shrink-0 items-center gap-7 border-b border-line bg-canvas px-(--main-px)">
@@ -304,9 +306,19 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
       </DialogPortal>
     </DialogRoot>
 
+    <!-- 全局快捷命令面板（⌘K / Ctrl+K） -->
+    <CommandPalette v-model:open="paletteOpen" @open-ai="aiOpen = true" />
     <!-- 全局 AI 助手抽屉 -->
     <AiPanel :open="aiOpen" @close="aiOpen = false" />
     <!-- 会话过期时原地重新登录 -->
     <SessionExpiredDialog ref="sessionDialog" />
   </div>
 </template>
+
+<style scoped>
+@media print {
+  .app-shell { display: block; height: auto; overflow: visible; background: white; }
+  .app-shell > header, .app-shell > nav { display: none !important; }
+  .app-shell > main { height: auto; overflow: visible; padding: 0; }
+}
+</style>

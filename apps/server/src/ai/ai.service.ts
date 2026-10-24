@@ -22,7 +22,7 @@ const MAX_TOOL_ROUNDS = 6;
 const MAX_LINES = 20;
 const DROPPED_KEYS = new Set(['createdAt', 'updatedAt', 'createdBy', 'updatedBy']);
 /** 金额、价格、数量的 null 表示「未知」（提示词规则 4），不能当空值删掉 */
-const MEANINGFUL_NULL = /amount|price|quantity/i;
+const MEANINGFUL_NULL = /amount|price|quantity|paid|payable|due/i;
 
 /**
  * 工具结果回传前精简，替代按字符截断（截断会给模型残缺的 JSON）：去掉空值与时间戳，附件只留「类型:文件名」，

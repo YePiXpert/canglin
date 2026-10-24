@@ -187,6 +187,7 @@ describe('PurchaseRegisterDialog', () => {
     await field(wrapper, '验收纸 本次采购数量（盒）').setValue('6');
     await submit(wrapper);
     expect(api.purchase).toHaveBeenCalledWith({
+      settlementMode: 'DETAIL',
       date: TODAY,
       supplierId: 7,
       note: '',

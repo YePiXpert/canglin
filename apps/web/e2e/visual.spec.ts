@@ -16,7 +16,7 @@ const BASE = 'http://127.0.0.1:5174';
 const password = 'browser-test-password';
 const NOW = new Date('2026-10-14T10:00:00+08:00');
 
-interface Seed { r1: number; r2: number; r3: number; r4: number; taskId: string; countId: number; draftId: number }
+interface Seed { r1: number; r2: number; r3: number; r4: number; taskId: string; countId: number; draftId: number; batchId: number; invoiceId: number; actionId: number; productId: number; purchaseId: number }
 let seed: Seed | null = null;
 
 async function post(request: APIRequestContext, url: string, data: object) {
@@ -102,7 +102,15 @@ test.beforeAll(async ({ playwright }) => {
   const supply = await post(request, '/api/planning/replenishment/drafts', { title: '常用文具补货', department: '仓库', handler: '李雯', requestDate: '2026-10-14', lines: [{ productId: pen.productId, quantity: '5', token: pen.token }] });
   const plan = await request.patch(`${BASE}/api/planning/followups/plans`, { headers: { 'Idempotency-Key': randomUUID() }, data: { targets: [{ kind: 'ARRIVAL', targetId: p1.lines[0].id, version: 0 }], expectedDate: '2020-01-01', nextDate: '2020-01-02', note: '供应商答复周五送达剩余复印纸' } });
   expect(plan.ok(), await plan.text()).toBeTruthy();
-  seed = { countId: count.id, draftId: supply.id, r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId };
+  const batch = await post(request, '/api/execution/batches', { title: '十月集中补充采购', date: '2026-10-14', requestLineIds: [r2.lines[0].id, r3.lines[1].id] });
+  const batchSaved = await request.patch(`${BASE}/api/execution/batches/${batch.id}`, { headers: { 'Idempotency-Key': randomUUID() }, data: { version: batch.version, title: batch.title, date: batch.date, lines: batch.lines.map((l: { requestLineId: number; quantity: string }) => ({ requestLineId: l.requestLineId, quantity: l.quantity, supplierId: supB.id, unitPrice: '18.5', purchaseLink: null })) } });
+  expect(batchSaved.ok(), await batchSaved.text()).toBeTruthy();
+  const r5 = await post(request, '/api/workflow/requests', { serialNumber: 'OA-2026-1005-0066', department: '行政部', handler: '李雯', requestDate: '2026-10-05', lines: [{ itemName: '桌面收纳盒', specification: '三层灰色', unit: '套', quantity: '8' }] });
+  const p5 = await post(request, '/api/workflow/purchases', { settlementMode: 'DETAIL', date: '2026-10-06', supplierId: supA.id, lines: [{ requestLineId: r5.lines[0].id, quantity: '8', unitPrice: '35' }] });
+  await post(request, '/api/execution/financial-records', { kind: 'PAYMENT', date: '2026-10-07', supplierId: supA.id, payer: 'EMPLOYEE', employee: '李雯', amount: '200', note: '部分垫付，尾款到货后支付', allocations: [{ documentId: p5.id, amount: '200', version: 0 }] });
+  const inv = await post(request, '/api/execution/invoices', { supplierId: supA.id, number: '261014000000001', date: '2026-10-14', amount: '280', note: '收纳盒票据，待核对原件' });
+  const action = await post(request, '/api/execution/drafts', { title: '收纳盒第一批到货', action: { kind: 'RECEIPT', data: { date: '2026-10-14', lines: [{ purchaseLineId: p5.lines[0].id, quantity: '4' }], note: '手机登记，现场核对后确认' } } });
+  seed = { countId: count.id, draftId: supply.id, r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId, batchId: batch.id, invoiceId: inv.id, actionId: action.id, productId: r1.lines[0].productId, purchaseId: p5.id };
   await request.dispose();
 });
 
@@ -172,6 +180,22 @@ for (const variant of VARIANTS) {
       ]) { await page.goto(url); await shot(page, `${v}-${name}`); }
       await page.getByRole('button', { name: '记录跟进', exact: true }).first().click();
       await shot(page, `${v}-followup-plan`);
+      for (const [name, url] of [
+        ['procurement', '/procurement'], ['procurement-batch', `/procurement/batches/${s.batchId}`],
+        ['finance', '/finance'], ['financial-records', '/finance?tab=records'],
+        ['invoices', '/finance/invoices'], ['invoice-detail', `/finance/invoices/${s.invoiceId}`],
+        ['action-drafts', '/operations/drafts'], ['action-detail', `/operations/drafts/${s.actionId}`],
+        ['exceptions', '/workbench/exceptions'], ['monthly-review', '/insights/monthly?month=2026-10'],
+        ['mobile-work', `/operations/mobile?documentId=${s.purchaseId}`], ['labels', `/operations/labels?productId=${s.productId}`],
+      ]) { await page.goto(url); await shot(page, `${v}-${name}`); expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true); }
+      await page.goto(`/finance?documentId=${s.purchaseId}`); await settle(page);
+      await page.getByRole('button', { name: '登记付款', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '付供应商', exact: true })).toBeVisible();
+      await shot(page, `${v}-financial-dialog`);
+      await page.goto(`/operations/drafts/${s.actionId}`); await settle(page);
+      await page.getByRole('button', { name: '核对并执行', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '确认执行本次操作' })).toBeVisible();
+      await shot(page, `${v}-action-confirm`);
       await page.goto('/import');
       await shot(page, `${v}-import-empty`);
       await page.goto(`/import?task=${s.taskId}`);

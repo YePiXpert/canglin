@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -18,7 +19,7 @@ import { clientIp } from '../common/request.util';
 import { readUpload } from '../common/multipart.util';
 
 const kindQuery = z.object({
-  kind: z.enum(['INVOICE', 'SIGNOFF']).default('INVOICE'),
+  kind: z.enum(['INVOICE', 'SIGNOFF', 'DELIVERY']).default('INVOICE'),
 });
 
 @Controller('attachments')
@@ -33,10 +34,25 @@ export class AttachmentsController {
   @Post('documents/:id')
   async uploadForDocument(
     @Param('id', ParseIntPipe) id: number,
-    @Query(new ZodValidationPipe(kindQuery)) query: { kind: 'INVOICE' | 'SIGNOFF' },
+    @Query(new ZodValidationPipe(kindQuery)) query: { kind: 'INVOICE' | 'SIGNOFF' | 'DELIVERY' },
     @Req() req: FastifyRequest,
   ) {
     return this.attachments.save({ file: await readUpload(req), kind: query.kind, businessDocumentId: id, ip: clientIp(req) });
+  }
+
+  @Post('financial-records/:id')
+  uploadForFinancial(@Param('id', ParseIntPipe) id: number, @Req() req: FastifyRequest) {
+    return readUpload(req).then(file => this.attachments.save({ file, kind: 'PAYMENT', financialRecordId: id, ip: clientIp(req) }));
+  }
+
+  @Post('invoices/:id')
+  uploadForInvoice(@Param('id', ParseIntPipe) id: number, @Req() req: FastifyRequest) {
+    return readUpload(req).then(file => this.attachments.save({ file, kind: 'INVOICE', invoiceRecordId: id, ip: clientIp(req) }));
+  }
+
+  @Post('invoices/:id/link')
+  linkInvoice(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(z.object({ attachmentId: z.number().int().positive() }).strict())) body: { attachmentId: number }, @Req() req: FastifyRequest) {
+    return this.attachments.linkInvoice(id, body.attachmentId, clientIp(req));
   }
 
   @Get()
@@ -46,10 +62,12 @@ export class AttachmentsController {
         z.object({
           procurementRequestId: z.coerce.number().int().positive().optional(),
           businessDocumentId: z.coerce.number().int().positive().optional(),
+          financialRecordId: z.coerce.number().int().positive().optional(),
+          invoiceRecordId: z.coerce.number().int().positive().optional(),
         }),
       ),
     )
-    query: { procurementRequestId?: number; businessDocumentId?: number },
+    query: { procurementRequestId?: number; businessDocumentId?: number; financialRecordId?: number; invoiceRecordId?: number },
   ) {
     return this.attachments.list(query);
   }

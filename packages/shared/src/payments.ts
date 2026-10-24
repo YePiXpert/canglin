@@ -15,6 +15,8 @@ export const paymentQuerySchema = z.object({
 }).refine((q) => !q.dateFrom || !q.dateTo || q.dateFrom <= q.dateTo, '起始日期不能晚于结束日期');
 export type PaymentQuery = z.infer<typeof paymentQuerySchema>;
 export interface PaymentRow {
+  settlement?: import('./execution.js').SettlementRow;
+  invoiceManaged?: boolean;
   id: number; date: string; supplierId: number | null; supplierName: string | null;
   totalAmount: string; paymentStatus: PaymentStatus; invoiceIssued: boolean; invoiceCount: number;
   requests: { id: number; serialNumber: string }[];

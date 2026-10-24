@@ -56,6 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout(): Promise<void> {
     await http.post('/auth/logout').catch(() => undefined);
+    sessionStorage.removeItem('canglin-mobile-work');
     loggedIn.value = false;
     await refresh();
   }

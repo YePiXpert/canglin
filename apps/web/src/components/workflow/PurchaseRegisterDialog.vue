@@ -162,7 +162,7 @@ async function save() {
     const link = linkIssue(line.purchaseLink);
     if (link) invalid[`link.${line.id}`] = link;
   }
-  const parsed = workflowPurchaseSchema.safeParse({ ...form, supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
+  const parsed = workflowPurchaseSchema.safeParse({ ...form, settlementMode: 'DETAIL', supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
   if (!parsed.success) { failure.value = issueText(parsed.error); return; }

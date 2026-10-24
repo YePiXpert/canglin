@@ -40,7 +40,7 @@ const OVERVIEW: WorkflowOverview = {
 const page = <T>(items: T[], total = items.length) => ({ items, total, page: 1, pageSize: 10 });
 
 async function mountView(): Promise<VueWrapper> {
-  const wrapper = mount(WorkView, { global: { stubs: { RouterLink: RouterLinkStub, RequestCreateDialog: true } } });
+  const wrapper = mount(WorkView, { global: { stubs: { RouterLink: RouterLinkStub, RequestCreateDialog: true, ExecutionAside: { template: '<div />', methods: { refresh: vi.fn() } } } } });
   await flushPromises();
   return wrapper;
 }

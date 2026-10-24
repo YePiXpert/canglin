@@ -1,3 +1,7 @@
+import { FinanceService } from '../execution/finance.service';
+import { ExceptionsService } from '../execution/exceptions.service';
+import { BatchesService } from '../execution/batches.service';
+import { executionQuerySchema } from '@canglin/shared';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import {
@@ -45,6 +49,10 @@ const queryWorkflowReportsArgs = z.object({
   groupBy: z.enum(['month', 'department', 'supplier']).default('month'),
 }).strict().refine(orderedDates, '起始日期不能晚于结束日期');
 const requestUrl = (id: number | null) => id === null ? null : `/requests/${id}`;
+const executionPaging = { search: z.string().trim().max(100).optional(), page: z.number().int().positive().optional(), pageSize: z.number().int().min(1).max(50).optional() };
+const settlementArgs = z.object({ ...executionPaging, supplierId: z.number().int().positive().optional(), documentId: z.number().int().positive().optional() }).strict();
+const exceptionArgs = z.object({ ...executionPaging, status: z.enum(['ACTIVE', 'SNOOZED', 'IGNORED', 'RESOLVED', 'ALL']).optional() }).strict();
+const demandArgs = z.object(executionPaging).strict();
 
 /** 交给 LLM 的工具清单：全部只读，直接复用现有查询服务 */
 @Injectable()
@@ -52,6 +60,9 @@ export class AiToolsService {
   constructor(
     private readonly suppliers: SuppliersService,
     private readonly workflow: WorkflowQueryService,
+    private readonly finance: FinanceService,
+    private readonly exceptions: ExceptionsService,
+    private readonly batches: BatchesService,
   ) {}
 
   definitions(): ToolDef[] {
@@ -68,6 +79,10 @@ export class AiToolsService {
       type: 'function', function: { name, description, parameters: { type: 'object', properties, additionalProperties: false } },
     });
     return [
+      tool('query_settlements', '查询采购金额对账，包含净实付、待付款、待退款、员工报销及发票匹配。LEGACY 的空金额表示尚未核实，不能推算。', { search: { type: 'string' }, supplierId: { type: 'integer' }, documentId: { type: 'integer' }, page: paging.page, pageSize: paging.pageSize }),
+      tool('query_exceptions', '查询站内异常，含来源链接和人工处理状态。只读，不变更提醒或业务。', { search: { type: 'string' }, status: { type: 'string', enum: ['ACTIVE','SNOOZED','IGNORED','RESOLVED','ALL'] }, page: paging.page, pageSize: paging.pageSize }),
+      tool('query_monthly_review', '查询指定月份采购、实际资金、供应商交付、个人净领用及当前长期未领用库存，注意月份和当前快照口径。', { month: { type: 'string', description: 'YYYY-MM' } }),
+      tool('query_purchase_demands', '查询剩余采购需求和已有批次草稿，保留申请来源；整理或操作请引导用户到集中采购建立人工核对草稿。', { search: { type: 'string' }, page: paging.page, pageSize: paging.pageSize }),
       tool('query_requests', '查询申请（OA 审批单导入或人工录入）及每条物理明细的进度、待采购/到货/处理数量。日期按申请日期过滤，同名不同规格/单位分别保留。autoSerial 为 true 的申请没有 OA 单号，流水号是系统编号「无OA-日期-序号」；补填 OA 流水号后 systemSerial 仍是原系统编号。', {
         search: { type: 'string', description: '流水号/品名/部门/经办人关键字；只支持单个关键字，如『签字笔』或『综合管理部』，不支持多个关键字' },
         ...paging, ...dates,
@@ -99,6 +114,11 @@ export class AiToolsService {
   /** 执行一次工具调用；返回值会 JSON 序列化后回给 LLM */
   async execute(name: string, args: Record<string, unknown>): Promise<{ result: unknown; count: number }> {
     switch (name) {
+      case 'query_settlements': { const q = executionQuerySchema.parse(settlementArgs.parse(args)); const result = await this.finance.settlements(q); return { result: { ...result, items: result.items.map(r => ({ ...r, url: `/finance?documentId=${r.documentId}` })) }, count: result.items.length }; }
+      case 'query_exceptions': { const result = await this.exceptions.list(executionQuerySchema.parse(exceptionArgs.parse(args))); return { result, count: result.items.length }; }
+      case 'query_purchase_demands': { const result = await this.batches.demands(executionQuerySchema.parse(demandArgs.parse(args))); return { result: { ...result, url: '/procurement' }, count: result.items.length }; }
+      case 'query_monthly_review': { const { month } = z.object({ month: z.string().regex(/^[1-9]\d{3}-(0[1-9]|1[0-2])$/) }).strict().parse(args); const result = await this.exceptions.monthly(month); return { result: { ...result, url: `/insights/monthly?month=${month}` }, count: 1 }; }
+
       case 'query_requests': {
         const a = queryRequestsArgs.parse(args);
         const query: WorkflowQuery = { ...a, pending: a.pending ? '1' : undefined };
@@ -167,6 +187,7 @@ export class AiToolsService {
     return [
       '你是「仓廪」办公用品业务的只读查询助手。今天日期 ' + todayString() + '。',
       '业务模型：申请来自 OA 审批单，或没有 OA 单号、打过招呼先采购的人工录入（流水号以「无OA-」开头），保留物理明细，以品名+规格+单位区分物品；每条可分次、多供应商、不同成交价采购，部分收货后直发或入库，库存再领用。另有供应商退货、员工归还及撤销/取消。',
+      '新增资金、退款、报销和票据金额用 query_settlements；历史 LEGACY 不推算金额。异常用 query_exceptions，月度汇总用 query_monthly_review。用户要求整理采购或匹配发票时，引导到 /procurement 或 /finance/invoices 生成可编辑草稿，必须人工核对并执行；你没有写入工具。',
       '回答规则：',
       '1. 申请与待办查询用 query_requests，供应商/价格/付款报销/发票/领用/退回明细用 query_documents，当前待处理量和库存用 query_stock，统计优先用 query_workflow_reports。',
       '2. 所有数字、状态和来源 ID 必须来自工具结果；没有数据就明确说明。总条数用 total，页内明细不能代表全量；truncated 时说明结果截断或进一步查询。',

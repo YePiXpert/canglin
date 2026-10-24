@@ -9,13 +9,15 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 };
 
 /** 附件类型：OA_DOC 为导入时留存的审批单原件 */
-export const ATTACHMENT_KINDS = ['INVOICE', 'SIGNOFF', 'OA_DOC'] as const;
+export const ATTACHMENT_KINDS = ['INVOICE', 'SIGNOFF', 'OA_DOC', 'DELIVERY', 'PAYMENT'] as const;
 export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
 
 export const ATTACHMENT_KIND_LABELS: Record<AttachmentKind, string> = {
   INVOICE: '发票',
   SIGNOFF: '签收单',
   OA_DOC: 'OA 原件',
+  DELIVERY: '到货凭证',
+  PAYMENT: '资金凭证',
 };
 
 /** 已移除的旧台账（Item）字段中文名：仅为审计日志给旧台账留下的历史记录标注字段名而保留，新代码不得使用。 */

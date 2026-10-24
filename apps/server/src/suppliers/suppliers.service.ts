@@ -39,13 +39,18 @@ export class SuppliersService {
   async remove(id: number, ip?: string) {
     const supplier = await this.prisma.supplier.findUnique({
       where: { id },
-      include: { _count: { select: { businessDocuments: true } } },
+      include: { _count: { select: { businessDocuments: true, financialRecords: true, invoices: true, batchLines: true } } },
     });
     if (!supplier) throw new NotFoundException('供应商不存在');
-    if (supplier._count.businessDocuments > 0) {
+    if (supplier._count.businessDocuments + supplier._count.financialRecords + supplier._count.invoices + supplier._count.batchLines > 0) {
       throw new ConflictException('该供应商已关联采购记录，不能删除');
     }
-    await this.prisma.supplier.delete({ where: { id } });
+    await this.prisma.supplier.delete({ where: { id } }).catch((e) => {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException('该供应商已关联采购记录，不能删除');
+      }
+      throw e;
+    });
     await this.audit.log('SUPPLIER_DELETE', { entity: 'supplier', entityId: id, ip });
     return { ok: true };
   }

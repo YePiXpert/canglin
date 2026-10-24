@@ -43,4 +43,14 @@ describe('renderMarkdown', () => {
       '<p>见 <a href="https://example.com" target="_blank" rel="noreferrer noopener">文档</a></p>',
     );
   });
+
+  it('业务依据链接可打开，协议相对地址和脚本地址保持普通文本', () => {
+    expect(renderMarkdown('[采购对账](/finance?documentId=12)')).toBe('<p><a href="/finance?documentId=12">采购对账</a></p>');
+    expect(renderMarkdown('[资金流水](/finance?tab=records&documentId=12)')).toBe('<p><a href="/finance?tab=records&amp;documentId=12">资金流水</a></p>');
+    expect(renderMarkdown('[外链](https://example.com/a**b**c)')).toBe('<p><a href="https://example.com/a**b**c" target="_blank" rel="noreferrer noopener">外链</a></p>');
+    expect(renderMarkdown('[发票](/finance/invoices/7)')).toContain('href="/finance/invoices/7"');
+    for (const url of ['//evil.example/finance', '/finance\\evil.example', 'javascript:alert(1)', '/api/execution']) {
+      expect(renderMarkdown(`[来源](${url})`)).not.toContain('<a ');
+    }
+  });
 });

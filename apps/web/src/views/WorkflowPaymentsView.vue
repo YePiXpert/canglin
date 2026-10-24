@@ -50,6 +50,7 @@ const { data, loading, refreshing, error, load } = useResource(async () => {
 });
 const busy = computed(() => loading.value || refreshing.value);
 const selectable = computed(() => !busy.value && !error.value);
+const eligible = computed(() => (data.value?.items ?? []).filter(r => !r.settlement));
 const picked = computed(() => (data.value?.items ?? []).filter((r) => selected.value.includes(r.id)));
 watch(filters, () => { selected.value = []; }, { flush: 'sync' });
 async function loadPage() {
@@ -63,7 +64,7 @@ async function loadPage() {
 function search() { filters.page = 1; void loadPage(); }
 function page(value: number) { filters.page = value; void loadPage(); }
 function clear() { Object.assign(filters, defaults); void loadPage(); }
-function selectAll(value: boolean) { selected.value = value ? (data.value?.items.map((r) => r.id) ?? []) : []; }
+function selectAll(value: boolean) { selected.value = value ? eligible.value.map(r => r.id) : []; }
 async function edit(row: PaymentRow) {
   if (opening.value !== undefined) return;
   opening.value = row.id; actionError.value = '';
@@ -132,10 +133,10 @@ onMounted(() => { void loadPage(); void supplierResource.load(); });
     <Panel title="采购付款清单" description="一张采购单只列一次；已撤销的采购不计入" flush>
       <template #actions><Button size="sm" :disabled="!data?.total || busy" :loading="exporting" @click="exportRows">导出筛选结果 CSV</Button></template>
       <template #toolbar>
-        <Checkbox :checked="!!data?.items.length && picked.length === data.items.length" :indeterminate="picked.length > 0 && picked.length < (data?.items.length ?? 0)" label="选择本页" :disabled="!selectable || !data?.items.length" @update:model-value="selectAll($event === true)" />
+        <Checkbox :checked="!!eligible.length && picked.length === eligible.length" :indeterminate="picked.length > 0 && picked.length < eligible.length" label="选择本页" :disabled="!selectable || !eligible.length" @update:model-value="selectAll($event === true)" />
         <span class="text-meta">已选 {{ picked.length }} 单</span>
         <Button size="sm" :disabled="!picked.length || !selectable" @click="openBatch('paymentStatus')">批量付款状态</Button>
-        <Button size="sm" :disabled="!picked.length || !selectable" @click="openBatch('invoiceIssued')">批量开票状态</Button>
+        <Button size="sm" :disabled="!picked.length || !selectable || picked.some(r => r.invoiceManaged)" @click="openBatch('invoiceIssued')">批量开票状态</Button>
       </template>
       <div v-if="loading" class="space-y-4 p-5"><Skeleton v-for="i in 4" :key="i" class="h-5 w-full" /></div>
       <div v-else-if="data?.items.length" class="overflow-x-auto" :aria-busy="refreshing">
@@ -143,11 +144,11 @@ onMounted(() => { void loadPage(); void supplierResource.load(); });
           <thead><tr><th scope="col">采购</th><th scope="col">关联申请</th><th scope="col">供应商</th><th scope="col">采购日期</th><th scope="col" class="text-right">成交原额</th><th scope="col">付款状态</th><th scope="col">开票与附件</th><th scope="col">操作</th></tr></thead>
           <tbody>
             <tr v-for="row in data.items" :key="row.id" :data-payment-id="row.id">
-              <td><Checkbox v-model="selected" :value="row.id" :label="`采购 #${row.id}`" :disabled="!selectable" /></td>
+              <td><Checkbox v-model="selected" :value="row.id" :label="`采购 #${row.id}`" :disabled="!selectable || !!row.settlement" /></td>
               <td data-label="关联申请"><div class="flex flex-wrap gap-x-2 gap-y-1"><router-link v-for="request in row.requests" :key="request.id" :to="`/requests/${request.id}`" :class="buttonClass({ variant: 'link' })">{{ request.serialNumber }}</router-link></div></td>
               <td data-label="供应商">{{ row.supplierName }}</td><td data-label="采购日期" class="num">{{ row.date }}</td>
               <td data-label="成交原额" class="text-right num font-medium">{{ moneyLabel(row.totalAmount) }}</td>
-              <td data-label="付款状态"><Badge :tone="row.paymentStatus === 'UNPAID' ? 'amber' : 'teal'">{{ PAYMENT_STATUS_LABELS[row.paymentStatus] }}</Badge></td>
+              <td data-label="付款状态"><Badge :tone="row.paymentStatus === 'UNPAID' ? 'amber' : 'teal'">{{ PAYMENT_STATUS_LABELS[row.paymentStatus] }}</Badge><p v-if="row.settlement" class="text-meta mt-1">实付 {{ row.settlement.netPaid }} · 待付 {{ row.settlement.payable }} · 待退 {{ row.settlement.refundDue }}</p></td>
               <td data-label="开票与附件"><Badge :tone="row.invoiceIssued ? 'teal' : 'gray'">{{ row.invoiceIssued ? '已开票' : '未开票' }}</Badge><p class="mt-1 text-meta">{{ row.invoiceCount ? `${row.invoiceCount} 份发票附件` : '未上传发票' }}</p></td>
               <td class="card-actions"><Button size="sm" :loading="opening === row.id" :disabled="busy" :aria-label="`处理采购 #${row.id} 的付款与发票`" @click="edit(row)">付款与发票</Button></td>
             </tr>
@@ -157,7 +158,7 @@ onMounted(() => { void loadPage(); void supplierResource.load(); });
       <EmptyState v-else-if="!error" title="没有符合条件的采购" description="可以清空筛选，查看全部未撤销的采购单。"><Button size="sm" @click="clear">查看全部采购</Button></EmptyState>
       <template v-if="data?.total" #footer><Pagination :page="data.page" :page-size="pageSize" :total="data.total" @change="page" /></template>
     </Panel>
-    <p class="mt-3 text-meta">成交原额是下单时的金额，不是待付款余额；取消与退款不会自动改变付款状态。已付款不代表一定需要报销。开票状态和是否上传附件分别记录。</p>
+    <p class="mt-3 text-meta">成交原额是下单时的金额。金额对账采购按有效资金及发票明细计算状态，请进入资金对账处理；批量状态按钮仅用于尚未转入金额对账的历史记录。</p>
     <WorkflowActions ref="actions" @recorded="loadPage" @attachments-changed="loadPage" />
     <ConfirmDialog v-model:open="batchOpen" :title="batchTitle" :message="`将 ${batchRows.length} 张采购单统一改为「${targetLabel}」。任何一单已撤销或状态变化，本次全部不改。`" confirm-text="确认批量修改" :loading="saving" @confirm="saveBatch">
       <NativeSelect v-model="batchValue" :options="batchOptions" aria-label="批量目标状态" :disabled="saving" class="w-full" />

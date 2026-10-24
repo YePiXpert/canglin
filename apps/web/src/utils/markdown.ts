@@ -14,13 +14,23 @@ function escapeHtml(s: string): string {
 
 /** 行内语法：入参是原始文本，先转义再套标签 */
 function inline(raw: string): string {
-  return escapeHtml(raw)
+  const links: string[] = [];
+  return escapeHtml(raw.replaceAll('\0', ''))
+    .replace(
+      /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+|\/(?:finance|procurement|operations|workbench|stock|requests|insights)(?:\/[a-z0-9-]+)*(?:\?(?:[a-z0-9%=._+-]|&amp;)*)?)\)/gi,
+      (_, label: string, url: string) => {
+        const renderedLabel = label
+          .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+          .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+        const tag = url.startsWith('/')
+          ? `<a href="${url}">${renderedLabel}</a>`
+          : `<a href="${url}" target="_blank" rel="noreferrer noopener">${renderedLabel}</a>`;
+        return `\0${links.push(tag) - 1}\0`;
+      },
+    )
     .replace(/`([^`\n]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(
-      /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g,
-      '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>',
-    );
+    .replace(/\0(\d+)\0/g, (_, idx: string) => links[Number(idx)]);
 }
 
 /** 表格分隔行：| --- | :---: | 之类 */

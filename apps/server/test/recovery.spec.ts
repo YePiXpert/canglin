@@ -137,9 +137,10 @@ async function olderBackup(name: string, before: string, seed: string[]) {
 }
 /** The id the next new attachment receives (the probe row is removed again). */
 async function nextAttachmentId() {
+  const owner = await prisma.procurementRequest.create({ data: { serialNumber: 'attachment-sequence-probe', department: 'test', handler: 'test', requestDate: '2026-01-01' } });
   const probe = await prisma.attachment.create({
     data: {
-      kind: 'INVOICE',
+      kind: 'OA_DOC', procurementRequestId: owner.id,
       filename: 'probe.pdf',
       storagePath: 'attachments/probe.pdf',
       mimeType: 'application/pdf',
@@ -147,6 +148,7 @@ async function nextAttachmentId() {
     },
   });
   await prisma.attachment.delete({ where: { id: probe.id } });
+  await prisma.procurementRequest.delete({ where: { id: owner.id } });
   return probe.id;
 }
 it('migrates a legacy backup in an isolated copy before replacing the live database', async () => {

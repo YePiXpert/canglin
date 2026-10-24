@@ -14,6 +14,7 @@ import { AiModule } from './ai/ai.module';
 import { HealthController } from './health.controller';
 import { WorkflowModule } from './workflow/workflow.module';
 import { WorkflowImportModule } from './workflow-import/workflow-import.module';
+import { ExecutionModule } from './execution/execution.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { WorkflowImportModule } from './workflow-import/workflow-import.module';
     SystemModule,
     AttachmentsModule,
     WorkflowModule,
+    ExecutionModule,
     WorkflowImportModule,
     AiModule,
   ],

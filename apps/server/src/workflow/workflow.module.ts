@@ -12,6 +12,6 @@ import { PaymentsQueryService } from './payments-query.service';
 @Module({
   controllers: [WorkflowController, PlanningController],
   providers: [StocktakeService, ReplenishmentService, FollowupService, WorkflowService, WorkflowQueryService, StockReconcileService, PaymentsQueryService],
-  exports: [WorkflowService, WorkflowQueryService, StockReconcileService],
+  exports: [WorkflowService, WorkflowQueryService, StockReconcileService, FollowupService, ReplenishmentService],
 })
 export class WorkflowModule {}

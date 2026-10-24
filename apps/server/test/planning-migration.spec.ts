@@ -10,7 +10,7 @@ it('从上一版增量迁移保留旧申请、物品、外键与 CHECK，并加�
   const schema = path.join(dir, 'schema.prisma'), migrations = path.join(dir, 'migrations');
   mkdirSync(migrations); copyFileSync('prisma/schema.prisma', schema);
   const next = '20261023000000_inventory_planning';
-  for (const name of readdirSync('prisma/migrations')) if (name !== next) cpSync(path.join('prisma/migrations', name), path.join(migrations, name), { recursive: true });
+  for (const name of readdirSync('prisma/migrations')) if (name < next || name === 'migration_lock.toml') cpSync(path.join('prisma/migrations', name), path.join(migrations, name), { recursive: true });
   const url = `file:${dir}/migration.db`;
   const migrate = () => execFileSync(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', schema], { env: { ...process.env, DATABASE_URL: url }, stdio: 'pipe' });
   const db = new PrismaClient({ datasources: { db: { url } } });

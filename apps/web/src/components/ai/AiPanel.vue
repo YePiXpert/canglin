@@ -37,6 +37,8 @@ const configured = computed(() => config.value?.enabled && config.value.apiKeySe
 const STEP_LABELS: Record<string, string> = {
   query_requests: '查询申请', query_documents: '查询业务记录', query_stock: '查询库存',
   query_workflow_reports: '查询报表', query_suppliers: '查询供应商',
+  query_settlements: '查询采购对账', query_exceptions: '查询异常事项',
+  query_monthly_review: '查询月度复盘', query_purchase_demands: '查询待采购需求',
 };
 const EXAMPLES = [
   '本月各部门采购金额是多少？',

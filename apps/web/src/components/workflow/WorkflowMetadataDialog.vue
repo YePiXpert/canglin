@@ -23,7 +23,7 @@ watch(() => props.open, (open) => {
   reset();
 }, { immediate: true });
 async function save() {
-  const parsed = workflowMetadataSchema.safeParse(form);
+  const parsed = workflowMetadataSchema.safeParse({ note: form.note, ...(props.document.settlementMode !== 'DETAIL' ? { paymentStatus: form.paymentStatus } : {}), ...(!props.document.invoiceManaged ? { invoiceIssued: form.invoiceIssued } : {}) });
   if (!parsed.success) { failure.value = issueText(parsed.error); return; }
   const result = await submit(() => workflowApi.metadata(props.document.id, parsed.data));
   if (result === undefined) return;
@@ -35,9 +35,10 @@ async function save() {
 <template>
   <Dialog :open="open" title="付款与发票" :description="`采购 #${document.id} · ${document.supplierName} · 成交 ${moneyLabel(document.totalAmount)}`" :dirty="dirty && !saving" :persistent="saving" @update:open="emit('update:open', $event)">
     <div class="grid gap-4 sm:grid-cols-2 sm:items-end">
-      <Select v-model="form.paymentStatus" label="付款 / 报销状态" :options="paymentOptions" :disabled="saving" />
-      <Checkbox v-model="form.invoiceIssued" label="已开具发票" :disabled="saving" class="sm:h-9 sm:items-center" />
+      <Select v-if="document.settlementMode !== 'DETAIL'" v-model="form.paymentStatus" label="付款 / 报销状态" :options="paymentOptions" :disabled="saving" />
+      <Checkbox v-if="!document.invoiceManaged" v-model="form.invoiceIssued" label="已开具发票" :disabled="saving" class="sm:h-9 sm:items-center" />
     </div>
+    <Notice v-if="document.settlementMode === 'DETAIL' || document.invoiceManaged" class="mt-3">付款和票据按明细记录核对。<router-link :to="`/finance?documentId=${document.id}`" class="underline" @click="emit('update:open', false)">前往资金对账</router-link> · <router-link :to="`/finance/invoices?documentId=${document.id}`" class="underline" @click="emit('update:open', false)">查看匹配发票</router-link></Notice>
     <Textarea v-model="form.note" label="采购备注" :disabled="saving" class="mt-4" />
     <slot name="attachments" />
     <template #footer="{ close }">

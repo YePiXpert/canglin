@@ -48,6 +48,27 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   AUTH_CHANGE_PASSWORD: { label: '修改密码', tone: 'amber', group: '账号' },
   AUTH_REGENERATE_RECOVERY: { label: '重置恢复码', tone: 'amber', group: '账号' },
   // 申请、采购、到货、库存与领用的业务登记（服务端按 WORKFLOW_<操作> 记录）
+  WORKFLOW_BATCH_CREATE: { label: '建立采购批次', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_BATCH_SAVE: { label: '保存采购批次', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_BATCH_CONFIRM: { label: '批次登记采购', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_BATCH_CANCEL: { label: '取消采购批次', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_FINANCIAL_CREATE: { label: '登记实际资金', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_FINANCIAL_VOID: { label: '撤销资金记录', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_SETTLEMENT_OPENING: { label: '核对历史期初', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_INVOICE_CREATE: { label: '建立发票草稿', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_INVOICE_SAVE: { label: '修改发票草稿', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_INVOICE_ALLOCATE: { label: '匹配发票金额', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_INVOICE_POST: { label: '确认发票', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_INVOICE_VOID: { label: '作废发票', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_EXCEPTION_ACTION: { label: '处理异常提醒', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_EXCEPTION_RULES: { label: '设置异常规则', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_ACTION_CREATE: { label: '保存操作草稿', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_ACTION_SAVE: { label: '修改操作草稿', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_ACTION_RECHECK: { label: '重新核对操作依据', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_ACTION_EXECUTE: { label: '确认执行操作', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_ACTION_DISCARD: { label: '放弃操作草稿', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_AI_PROPOSAL: { label: '生成 AI 操作草稿', tone: 'gray', group: '执行与对账' },
+  INVOICE_ATTACH_ORIGINAL: { label: '关联发票历史原件', tone: 'gray', group: '执行与对账' },
   WORKFLOW_REQUEST: { label: '人工录入申请', tone: 'gray', group: '申请' },
   REQUEST_IMPORT_CONFIRM: { label: '导入生成申请', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_CANCEL: { label: '取消未采购量', tone: 'gray', group: '申请' },
@@ -120,7 +141,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
 
 /** 「对象」列：服务端记的对象类型配中文名 */
 const ENTITY_LABELS: Record<string, string> = {
-  system: '系统', workflow: '业务登记', supplier: '供应商', procurementRequest: '申请', attachment: '附件', stock: '库存',
+  system: '系统', workflow: '业务登记', supplier: '供应商', procurementRequest: '申请', attachment: '附件', stock: '库存', invoice: '发票',
 };
 /** 筛选只列现在会记的动作；旧版本（旧台账等）的动作名只用来显示以前的记录 */
 const actionOptions = computed(() =>

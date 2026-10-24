@@ -54,7 +54,7 @@ async function state() {
 describe('新业务 AI 只读查询', () => {
   it('向模型只声明新业务查询和供应商查询，链接只指向已存在页面', () => {
     expect(tools.definitions().map((tool) => tool.function.name)).toEqual([
-      'query_requests', 'query_documents', 'query_stock', 'query_workflow_reports', 'query_suppliers',
+      'query_settlements', 'query_exceptions', 'query_monthly_review', 'query_purchase_demands', 'query_requests', 'query_documents', 'query_stock', 'query_workflow_reports', 'query_suppliers',
     ]);
     const prompt = tools.systemPrompt();
     expect(prompt).toContain('缺失价格表示未知');
@@ -125,8 +125,18 @@ describe('新业务 AI 只读查询', () => {
       ['query_requests', { dateFrom: '2026-02-30' }], ['query_documents', { dateFrom: '2026-09-30', dateTo: '2026-09-01' }],
       ['query_requests', { pageSize: 51 }], ['query_stock', { limit: 101 }],
       ['query_workflow_reports', { requestId: request.id }], ['query_documents', { delete: true }],
+      ['query_settlements', { delete: true }], ['query_exceptions', { status: 'GUESS' }], ['query_purchase_demands', { pageSize: 51 }],
     ] as [string, Record<string, unknown>][]) await expect(tools.execute(name, args)).rejects.toThrow();
     await expect(tools.execute('create_request', {})).rejects.toThrow('未知工具');
+    expect(await state()).toEqual(before);
+  });
+
+  it('资金、需求、异常与月报工具保留未知余额和业务链接，查询不改变记录', async () => {
+    const before = await state();
+    expect((await tools.execute('query_settlements', { documentId: purchase.id })).result).toMatchObject({ items: [{ netPaid: null, mode: 'LEGACY', url: `/finance?documentId=${purchase.id}` }] });
+    expect((await tools.execute('query_purchase_demands', { search: request.serialNumber })).result).toMatchObject({ url: '/procurement', total: 2, items: [expect.objectContaining({ remaining: '0.1' }), expect.objectContaining({ remaining: '2' })] });
+    expect((await tools.execute('query_exceptions', { search: `采购 #${purchase.id} 历史资金` })).result).toMatchObject({ items: [{ type: 'LEGACY', url: `/finance?documentId=${purchase.id}` }] });
+    expect((await tools.execute('query_monthly_review', { month: '2026-09' })).result).toMatchObject({ month: '2026-09', cash: { payments: '0.00' }, url: '/insights/monthly?month=2026-09' });
     expect(await state()).toEqual(before);
   });
 
@@ -164,7 +174,7 @@ describe('新业务 AI 只读查询', () => {
       expect(row).not.toHaveProperty('priceRecordCount');
     }
     expect(tools.definitions().map((tool) => tool.function.name).sort()).toEqual(
-      ['query_documents', 'query_requests', 'query_stock', 'query_suppliers', 'query_workflow_reports'],
+      ['query_documents', 'query_exceptions', 'query_monthly_review', 'query_purchase_demands', 'query_requests', 'query_settlements', 'query_stock', 'query_suppliers', 'query_workflow_reports'],
     );
     for (const legacy of ['query_items', 'query_facets', 'query_inventory', 'query_price_records', 'query_distributions', 'query_report_dashboard', 'query_report_amount', 'query_report_recipients'])
       await expect(tools.execute(legacy, {})).rejects.toThrow('未知工具');

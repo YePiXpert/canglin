@@ -30,50 +30,70 @@ model Supplier {
   updatedAt DateTime @updatedAt
 
   businessDocuments BusinessDocument[]
+  financialRecords  FinancialRecord[]
+  invoices          InvoiceRecord[]
+  batchLines        ProcurementBatchLine[]
 }
 
-/* 附件：申请原件（OA_DOC）、采购发票、发放签收凭证 */
+/**
+ * 附件：申请原件（OA_DOC）、采购发票、发放签收凭证
+ */
 model Attachment {
-  id            Int          @id @default(autoincrement())
-  kind          String // OA_DOC | INVOICE | SIGNOFF
+  id                   Int                 @id @default(autoincrement())
+  financialRecordId    Int?
+  financialRecord      FinancialRecord?    @relation(fields: [financialRecordId], references: [id], onDelete: Restrict)
+  invoiceRecordId      Int?
+  invoiceRecord        InvoiceRecord?      @relation(fields: [invoiceRecordId], references: [id], onDelete: Restrict)
+  contentHash          String?
+  kind                 String // OA_DOC | INVOICE | SIGNOFF | PAYMENT | DELIVERY
   procurementRequestId Int?
-  procurementRequest ProcurementRequest? @relation(fields: [procurementRequestId], references: [id], onDelete: Restrict)
-  businessDocumentId Int?
-  businessDocument BusinessDocument? @relation(fields: [businessDocumentId], references: [id], onDelete: Restrict)
-  filename      String
-  storagePath   String
-  mimeType      String
-  sizeBytes     Int
-  createdAt     DateTime     @default(now())
+  procurementRequest   ProcurementRequest? @relation(fields: [procurementRequestId], references: [id], onDelete: Restrict)
+  businessDocumentId   Int?
+  businessDocument     BusinessDocument?   @relation(fields: [businessDocumentId], references: [id], onDelete: Restrict)
+  filename             String
+  storagePath          String
+  mimeType             String
+  sizeBytes            Int
+  createdAt            DateTime            @default(now())
 
   @@index([procurementRequestId])
   @@index([businessDocumentId])
-}
-
-/* OA 导入任务（持久化，重启不丢） */
-model ImportTask {
-  id          String    @id
-  filename    String
-  status      String // PENDING | RUNNING | DONE | FAILED
-  result      String? // JSON ParseResult
-  error       String?
-  /** 原件相对 uploads 的路径；确认导入后转为申请原件附件，未确认的由定期清理回收 */
-  storagePath String?
-  createdAt   DateTime  @default(now())
-  finishedAt  DateTime?
-  contentHash String?
-  draft       String?
-  version     Int      @default(0)
-  generation  Int      @default(0)
-  aiStatus    String   @default("DISABLED")
-  aiResult    String?
-  confirmedAt DateTime?
-  confirmation String?
-  procurementRequest ProcurementRequest?
+  @@index([financialRecordId])
+  @@index([invoiceRecordId])
   @@index([contentHash])
 }
 
-/* 单管理员安全状态 */
+/**
+ * OA 导入任务（持久化，重启不丢）
+ */
+model ImportTask {
+  id                 String              @id
+  filename           String
+  status             String // PENDING | RUNNING | DONE | FAILED
+  result             String? // JSON ParseResult
+  error              String?
+  /**
+   * 原件相对 uploads 的路径；确认导入后转为申请原件附件，未确认的由定期清理回收
+   */
+  storagePath        String?
+  createdAt          DateTime            @default(now())
+  finishedAt         DateTime?
+  contentHash        String?
+  draft              String?
+  version            Int                 @default(0)
+  generation         Int                 @default(0)
+  aiStatus           String              @default("DISABLED")
+  aiResult           String?
+  confirmedAt        DateTime?
+  confirmation       String?
+  procurementRequest ProcurementRequest?
+
+  @@index([contentHash])
+}
+
+/**
+ * 单管理员安全状态
+ */
 model SystemSecurity {
   id               Int       @id @default(1)
   passwordHash     String
@@ -89,291 +109,472 @@ model Setting {
   value String
 }
 
-
 model OperationReceipt {
-  id String @id
-  scope String
+  id          String   @id
+  scope       String
   requestHash String
-  response String
-  createdAt DateTime @default(now())
+  response    String
+  createdAt   DateTime @default(now())
+
   @@index([createdAt])
 }
 
 model ImportRevision {
-  id Int @id @default(autoincrement())
-  taskId String
-  kind String // DRAFT | LOCAL | RECOGNITION | CONFIRMATION（撤回入账时保存的入账快照）
-  version Int
-  snapshot String
+  id        Int      @id @default(autoincrement())
+  taskId    String
+  kind      String // DRAFT | LOCAL | RECOGNITION | CONFIRMATION（撤回入账时保存的入账快照）
+  version   Int
+  snapshot  String
   createdAt DateTime @default(now())
+
   @@unique([taskId, kind, version])
 }
 
 model AiCall {
-  id String @id
-  taskId String?
-  page Int?
-  generation Int @default(0)
-  model String
-  status String
-  response String?
-  inputTokens Int?
-  outputTokens Int?
-  cost Float?
-  requestId String?
-  durationMs Int?
+  id            String   @id
+  taskId        String?
+  page          Int?
+  generation    Int      @default(0)
+  model         String
+  status        String
+  response      String?
+  inputTokens   Int?
+  outputTokens  Int?
+  cost          Float?
+  requestId     String?
+  durationMs    Int?
   // RECOGNITION | REVIEW 与提示词版本（apps/server/src/ai/prompts.ts），评测按版本归因
   promptVersion String?
-  mode String?
-  createdAt DateTime @default(now())
+  mode          String?
+  createdAt     DateTime @default(now())
+
   @@index([taskId, createdAt])
 }
 
 // V3 workflow. CHECK constraints on enum-like columns live in the migrations (Prisma cannot model them).
 // Scaled integers: quantities 6 decimals, unit prices 4, line amounts CNY fen.
 model CatalogProduct {
-  stockVersion Int @default(0)
-  stocktakeLines StocktakeLine[]
-  stockPolicy StockPolicy?
+  stockVersion       Int                      @default(0)
+  stocktakeLines     StocktakeLine[]
+  stockPolicy        StockPolicy?
   replenishmentLines ReplenishmentDraftLine[]
-  id Int @id @default(autoincrement())
-  name String
-  specification String @default("")
-  unit String
-  createdAt DateTime @default(now())
-  requestLines ProcurementLine[]
-  businessLines BusinessLine[]
-  balances StockBalance[]
-  entries StockEntry[]
+  id                 Int                      @id @default(autoincrement())
+  name               String
+  specification      String                   @default("")
+  unit               String
+  createdAt          DateTime                 @default(now())
+  requestLines       ProcurementLine[]
+  businessLines      BusinessLine[]
+  balances           StockBalance[]
+  entries            StockEntry[]
+
   @@unique([name, specification, unit])
 }
 
 model ProcurementRequest {
-  purpose String @default("GENERAL")
+  purpose            String              @default("GENERAL")
   replenishmentDraft ReplenishmentDraft?
-  id Int @id @default(autoincrement())
-  serialNumber String
+  id                 Int                 @id @default(autoincrement())
+  serialNumber       String
   // System number given when there is no OA serial (无OA-yyyymmdd-nn); kept after the OA serial is filled in.
-  systemSerial String? @unique
-  department String
-  handler String
-  requestDate String
-  note String?
-  sourceTaskId String? @unique
-  sourceTask ImportTask? @relation(fields: [sourceTaskId], references: [id], onDelete: Restrict)
-  createdAt DateTime @default(now())
-  lines ProcurementLine[]
-  attachments Attachment[]
+  systemSerial       String?             @unique
+  department         String
+  handler            String
+  requestDate        String
+  note               String?
+  sourceTaskId       String?             @unique
+  sourceTask         ImportTask?         @relation(fields: [sourceTaskId], references: [id], onDelete: Restrict)
+  createdAt          DateTime            @default(now())
+  lines              ProcurementLine[]
+  attachments        Attachment[]
+
   @@index([requestDate])
   @@index([serialNumber])
 }
 
 model ProcurementLine {
-  id Int @id @default(autoincrement())
-  requestId Int
-  request ProcurementRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  lineNumber Int
-  productId Int
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  itemName String
-  specification String @default("")
-  unit String
-  quantityUnits BigInt
-  cancelledUnits BigInt @default(0)
-  orderedUnits BigInt @default(0)
-  note String?
+  id             Int                    @id @default(autoincrement())
+  requestId      Int
+  request        ProcurementRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  lineNumber     Int
+  productId      Int
+  product        CatalogProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName       String
+  specification  String                 @default("")
+  unit           String
+  quantityUnits  BigInt
+  cancelledUnits BigInt                 @default(0)
+  orderedUnits   BigInt                 @default(0)
+  note           String?
   // Link given with the request (OA remark); canonicalised, prefilled when a purchase is registered.
-  purchaseLink String?
-  businessLines BusinessLine[]
+  purchaseLink   String?
+  businessLines  BusinessLine[]
+  batchLines     ProcurementBatchLine[]
+
   @@unique([requestId, lineNumber])
   @@index([productId])
 }
 
 model BusinessDocument {
-  stocktake Stocktake?
-  invoiceFollowup PurchaseFollowup?
-  id Int @id @default(autoincrement())
-  kind String // WORKFLOW_DOCUMENT_KINDS
-  date String
-  status String @default("POSTED") // POSTED | VOIDED
-  supplierId Int?
-  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  supplierName String?
-  department String?
-  source String?
-  returnMode String?
-  note String?
-  totalAmountUnits BigInt?
-  paymentStatus String @default("UNPAID") // PAYMENT_STATUSES
-  invoiceIssued Boolean @default(false)
-  voidReason String?
-  voidDate String?
-  voidedAt DateTime?
-  createdAt DateTime @default(now())
-  lines BusinessLine[]
-  attachments Attachment[]
+  settlementMode       String                @default("LEGACY")
+  settlementVersion    Int                   @default(0)
+  settlementAsOf       String?
+  financialAllocations FinancialAllocation[]
+  invoiceAllocations   InvoiceAllocation[]
+  procurementBatchId   Int?
+  procurementBatch     ProcurementBatch?     @relation(fields: [procurementBatchId], references: [id], onDelete: Restrict)
+  stocktake            Stocktake?
+  invoiceFollowup      PurchaseFollowup?
+  id                   Int                   @id @default(autoincrement())
+  kind                 String // WORKFLOW_DOCUMENT_KINDS
+  date                 String
+  status               String                @default("POSTED") // POSTED | VOIDED
+  supplierId           Int?
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierName         String?
+  department           String?
+  source               String?
+  returnMode           String?
+  note                 String?
+  totalAmountUnits     BigInt?
+  paymentStatus        String                @default("UNPAID") // PAYMENT_STATUSES
+  invoiceIssued        Boolean               @default(false)
+  voidReason           String?
+  voidDate             String?
+  voidedAt             DateTime?
+  createdAt            DateTime              @default(now())
+  lines                BusinessLine[]
+  attachments          Attachment[]
+
   @@index([kind, status, date])
   @@index([supplierId])
 }
 
 model BusinessLine {
-  arrivalFollowup PurchaseFollowup?
-  id Int @id @default(autoincrement())
-  documentId Int
-  document BusinessDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
-  requestLineId Int?
-  requestLine ProcurementLine? @relation(fields: [requestLineId], references: [id], onDelete: Restrict)
-  sourceLineId Int?
-  sourceLine BusinessLine? @relation("BusinessLineSource", fields: [sourceLineId], references: [id], onDelete: Restrict)
-  derivedLines BusinessLine[] @relation("BusinessLineSource")
-  productId Int
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  itemName String
-  specification String @default("")
-  unit String
-  quantityUnits BigInt
-  unitPriceUnits BigInt?
-  amountUnits BigInt?
+  arrivalFollowup              PurchaseFollowup?
+  id                           Int               @id @default(autoincrement())
+  documentId                   Int
+  document                     BusinessDocument  @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  requestLineId                Int?
+  requestLine                  ProcurementLine?  @relation(fields: [requestLineId], references: [id], onDelete: Restrict)
+  sourceLineId                 Int?
+  sourceLine                   BusinessLine?     @relation("BusinessLineSource", fields: [sourceLineId], references: [id], onDelete: Restrict)
+  derivedLines                 BusinessLine[]    @relation("BusinessLineSource")
+  productId                    Int
+  product                      CatalogProduct    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName                     String
+  specification                String            @default("")
+  unit                         String
+  quantityUnits                BigInt
+  unitPriceUnits               BigInt?
+  amountUnits                  BigInt?
   purchaseReductionAmountUnits BigInt?
-  receivedUnits BigInt @default(0)
-  cancelledUnits BigInt @default(0)
-  purchaseLink String?
-  recipient String?
-  location String?
-  reason String?
-  balances StockBalance[] @relation("BalanceOrigin")
-  originEntries StockEntry[] @relation("EntryOrigin")
-  entries StockEntry[] @relation("EntryBusinessLine")
+  receivedUnits                BigInt            @default(0)
+  cancelledUnits               BigInt            @default(0)
+  purchaseLink                 String?
+  recipient                    String?
+  location                     String?
+  reason                       String?
+  balances                     StockBalance[]    @relation("BalanceOrigin")
+  originEntries                StockEntry[]      @relation("EntryOrigin")
+  entries                      StockEntry[]      @relation("EntryBusinessLine")
+
   @@index([requestLineId])
   @@index([sourceLineId])
   @@index([documentId])
 }
 
 model StockBalance {
-  id Int @id @default(autoincrement())
-  productId Int
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  originLineId Int
-  originLine BusinessLine @relation("BalanceOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
-  location String
-  quantityUnits BigInt @default(0)
+  id            Int            @id @default(autoincrement())
+  productId     Int
+  product       CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  originLineId  Int
+  originLine    BusinessLine   @relation("BalanceOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
+  location      String
+  quantityUnits BigInt         @default(0)
+
   @@unique([productId, originLineId, location])
   @@index([productId, location])
 }
 
 model StockEntry {
-  id Int @id @default(autoincrement())
-  productId Int
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  id             Int            @id @default(autoincrement())
+  productId      Int
+  product        CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
   businessLineId Int
-  businessLine BusinessLine @relation("EntryBusinessLine", fields: [businessLineId], references: [id], onDelete: Restrict)
-  originLineId Int
-  originLine BusinessLine @relation("EntryOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
-  location String
-  quantityUnits BigInt
-  date String
-  reversalOfId Int? @unique
-  reversalOf StockEntry? @relation("StockEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversal StockEntry? @relation("StockEntryReversal")
-  createdAt DateTime @default(now())
+  businessLine   BusinessLine   @relation("EntryBusinessLine", fields: [businessLineId], references: [id], onDelete: Restrict)
+  originLineId   Int
+  originLine     BusinessLine   @relation("EntryOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
+  location       String
+  quantityUnits  BigInt
+  date           String
+  reversalOfId   Int?           @unique
+  reversalOf     StockEntry?    @relation("StockEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal       StockEntry?    @relation("StockEntryReversal")
+  createdAt      DateTime       @default(now())
+
   @@index([productId, date])
   @@index([originLineId, location])
   @@index([businessLineId])
 }
 
 model Stocktake {
-  id Int @id @default(autoincrement())
-  title String
-  note String @default("")
-  status String @default("DRAFT")
-  version Int @default(1)
-  createdAt DateTime @default(now())
-  postedAt DateTime?
-  voidedAt DateTime?
-  voidReason String?
-  adjustmentDocumentId Int? @unique
-  adjustmentDocument BusinessDocument? @relation(fields: [adjustmentDocumentId], references: [id], onDelete: Restrict)
-  lines StocktakeLine[]
+  id                   Int               @id @default(autoincrement())
+  title                String
+  note                 String            @default("")
+  status               String            @default("DRAFT")
+  version              Int               @default(1)
+  createdAt            DateTime          @default(now())
+  postedAt             DateTime?
+  voidedAt             DateTime?
+  voidReason           String?
+  adjustmentDocumentId Int?              @unique
+  adjustmentDocument   BusinessDocument? @relation(fields: [adjustmentDocumentId], references: [id], onDelete: Restrict)
+  lines                StocktakeLine[]
+
   @@index([status, createdAt])
 }
+
 model StocktakeLine {
-  id Int @id @default(autoincrement())
-  stocktakeId Int
-  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
-  productId Int
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  itemName String
+  id            Int            @id @default(autoincrement())
+  stocktakeId   Int
+  stocktake     Stocktake      @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName      String
   specification String
-  unit String
+  unit          String
   baselineUnits BigInt
-  stockVersion Int
-  baselineAt DateTime @default(now())
-  actualUnits BigInt?
-  countedAt DateTime?
-  reason String @default("")
+  stockVersion  Int
+  baselineAt    DateTime       @default(now())
+  actualUnits   BigInt?
+  countedAt     DateTime?
+  reason        String         @default("")
+
   @@unique([stocktakeId, productId])
 }
+
 model StockPolicy {
-  productId Int @id
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  enabled Boolean @default(false)
-  minimumUnits BigInt @default(0)
-  targetUnits BigInt
+  productId     Int            @id
+  product       CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  enabled       Boolean        @default(false)
+  minimumUnits  BigInt         @default(0)
+  targetUnits   BigInt
   multipleUnits BigInt?
-  note String @default("")
-  version Int @default(1)
+  note          String         @default("")
+  version       Int            @default(1)
 }
+
 model ReplenishmentDraft {
-  id Int @id @default(autoincrement())
-  title String
-  department String @default("")
-  handler String @default("")
-  requestDate String
-  note String @default("")
-  status String @default("DRAFT")
-  version Int @default(1)
-  requestId Int? @unique
-  request ProcurementRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  id            Int                      @id @default(autoincrement())
+  title         String
+  department    String                   @default("")
+  handler       String                   @default("")
+  requestDate   String
+  note          String                   @default("")
+  status        String                   @default("DRAFT")
+  version       Int                      @default(1)
+  requestId     Int?                     @unique
+  request       ProcurementRequest?      @relation(fields: [requestId], references: [id], onDelete: SetNull)
   requestSerial String?
-  createdAt DateTime @default(now())
-  confirmedAt DateTime?
-  lines ReplenishmentDraftLine[]
+  createdAt     DateTime                 @default(now())
+  confirmedAt   DateTime?
+  lines         ReplenishmentDraftLine[]
+
   @@index([status, createdAt])
 }
+
 model ReplenishmentDraftLine {
-  id Int @id @default(autoincrement())
-  draftId Int
-  draft ReplenishmentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
-  productId Int
-  product CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  itemName String
+  id            Int                @id @default(autoincrement())
+  draftId       Int
+  draft         ReplenishmentDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       CatalogProduct     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  itemName      String
   specification String
-  unit String
+  unit          String
   quantityUnits BigInt
-  suggestion String
-  reason String @default("")
+  suggestion    String
+  reason        String             @default("")
+
   @@unique([draftId, productId])
 }
+
 model PurchaseFollowup {
-  id Int @id @default(autoincrement())
-  kind String
-  purchaseLineId Int? @unique
-  purchaseLine BusinessLine? @relation(fields: [purchaseLineId], references: [id], onDelete: Restrict)
-  purchaseDocumentId Int? @unique
-  purchaseDocument BusinessDocument? @relation(fields: [purchaseDocumentId], references: [id], onDelete: Restrict)
-  expectedDate String?
-  nextDate String?
-  dismissedAt DateTime?
-  dismissReason String?
-  version Int @default(1)
-  entries PurchaseFollowupEntry[]
+  id                 Int                     @id @default(autoincrement())
+  kind               String
+  purchaseLineId     Int?                    @unique
+  purchaseLine       BusinessLine?           @relation(fields: [purchaseLineId], references: [id], onDelete: Restrict)
+  purchaseDocumentId Int?                    @unique
+  purchaseDocument   BusinessDocument?       @relation(fields: [purchaseDocumentId], references: [id], onDelete: Restrict)
+  expectedDate       String?
+  nextDate           String?
+  dismissedAt        DateTime?
+  dismissReason      String?
+  version            Int                     @default(1)
+  entries            PurchaseFollowupEntry[]
 }
+
 model PurchaseFollowupEntry {
-  id Int @id @default(autoincrement())
+  id         Int              @id @default(autoincrement())
   followupId Int
-  followup PurchaseFollowup @relation(fields: [followupId], references: [id], onDelete: Restrict)
-  createdAt DateTime @default(now())
-  note String
-  changed String
+  followup   PurchaseFollowup @relation(fields: [followupId], references: [id], onDelete: Restrict)
+  createdAt  DateTime         @default(now())
+  note       String
+  changed    String
+
   @@index([followupId, id])
+}
+
+model ProcurementBatch {
+  id           Int                    @id @default(autoincrement())
+  title        String
+  date         String
+  note         String                 @default("")
+  status       String                 @default("DRAFT")
+  version      Int                    @default(1)
+  createdAt    DateTime               @default(now())
+  confirmedAt  DateTime?
+  cancelReason String?
+  lines        ProcurementBatchLine[]
+  documents    BusinessDocument[]
+
+  @@index([status, createdAt])
+}
+
+model ProcurementBatchLine {
+  id             Int              @id @default(autoincrement())
+  batchId        Int
+  batch          ProcurementBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  requestLineId  Int?
+  requestLine    ProcurementLine? @relation(fields: [requestLineId], references: [id], onDelete: SetNull)
+  requestSerial  String
+  department     String
+  itemName       String
+  specification  String
+  unit           String
+  quantityUnits  BigInt
+  supplierId     Int?
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  unitPriceUnits BigInt?
+  purchaseLink   String?
+
+  @@index([batchId])
+  @@index([requestLineId])
+}
+
+model FinancialRecord {
+  id                     Int                   @id @default(autoincrement())
+  kind                   String // PAYMENT | REFUND | REIMBURSEMENT | REIMBURSEMENT_RETURN | OPENING
+  status                 String                @default("POSTED")
+  date                   String
+  supplierId             Int
+  supplier               Supplier              @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  payer                  String // COMPANY | EMPLOYEE
+  employee               String                @default("")
+  amountUnits            BigInt
+  openingReimbursedUnits BigInt                @default(0)
+  sourceId               Int?
+  source                 FinancialRecord?      @relation("FinancialSource", fields: [sourceId], references: [id], onDelete: Restrict)
+  subsequent             FinancialRecord[]     @relation("FinancialSource")
+  method                 String                @default("")
+  reference              String                @default("")
+  note                   String                @default("")
+  version                Int                   @default(1)
+  voidReason             String?
+  voidDate               String?
+  createdAt              DateTime              @default(now())
+  allocations            FinancialAllocation[]
+  attachments            Attachment[]
+
+  @@index([supplierId, date])
+  @@index([sourceId])
+}
+
+model FinancialAllocation {
+  id          Int              @id @default(autoincrement())
+  recordId    Int
+  record      FinancialRecord  @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  documentId  Int
+  document    BusinessDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  amountUnits BigInt
+
+  @@unique([recordId, documentId])
+  @@index([documentId])
+}
+
+model InvoiceRecord {
+  id          Int                 @id @default(autoincrement())
+  supplierId  Int
+  supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  number      String
+  date        String
+  kind        String              @default("NORMAL") // NORMAL | CREDIT
+  originalId  Int?
+  original    InvoiceRecord?      @relation("InvoiceCredit", fields: [originalId], references: [id], onDelete: Restrict)
+  credits     InvoiceRecord[]     @relation("InvoiceCredit")
+  amountUnits BigInt
+  status      String              @default("DRAFT")
+  version     Int                 @default(1)
+  note        String              @default("")
+  voidReason  String?
+  createdAt   DateTime            @default(now())
+  allocations InvoiceAllocation[]
+  attachments Attachment[]
+
+  @@index([supplierId, number])
+  @@index([status, date])
+}
+
+model InvoiceAllocation {
+  id          Int              @id @default(autoincrement())
+  invoiceId   Int
+  invoice     InvoiceRecord    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  documentId  Int
+  document    BusinessDocument @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  amountUnits BigInt
+
+  @@unique([invoiceId, documentId])
+  @@index([documentId])
+}
+
+model ExceptionDisposition {
+  key       String             @id
+  action    String // SNOOZE | IGNORE | RESUME
+  untilDate String?
+  reason    String
+  version   Int                @default(1)
+  updatedAt DateTime           @updatedAt
+  entries   ExceptionHistory[]
+}
+
+model ExceptionHistory {
+  id          Int                  @id @default(autoincrement())
+  key         String
+  disposition ExceptionDisposition @relation(fields: [key], references: [key], onDelete: Restrict)
+  action      String
+  untilDate   String?
+  reason      String
+  createdAt   DateTime             @default(now())
+
+  @@index([key, id])
+}
+
+model ExecutionDraft {
+  id         Int      @id @default(autoincrement())
+  kind       String // PURCHASE_BATCH | RECEIPT | STOCK_IN | DISTRIBUTION | INVOICE_MATCH
+  title      String
+  source     String   @default("MANUAL") // MANUAL | AI
+  status     String   @default("DRAFT")
+  version    Int      @default(1)
+  payload    String
+  basis      String
+  suggestion String?
+  prompt     String?
+  explanation String?
+  result     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status, kind, updatedAt])
 }

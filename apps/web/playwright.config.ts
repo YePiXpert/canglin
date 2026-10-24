@@ -15,6 +15,7 @@ export default defineConfig({
   ],
   use: {
     actionTimeout: 10_000,
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {},
     baseURL: 'http://127.0.0.1:5174',
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
