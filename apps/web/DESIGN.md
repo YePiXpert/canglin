@@ -71,7 +71,7 @@
 - 只改令牌：`html.dark` 下 `.dark` 块覆盖令牌值，工具类自动翻转；朱砂与状态色提亮一档保证对比度。页面颜色只用令牌；`dark:` 变体只留给令牌表达不了的少数细节（分段控件当前项；遮罩已是 `scrim` 令牌）。
 - `html.dark { color-scheme: dark }`，原生日期面板、滚动条、`<select>` 弹层跟着变深。
 - 面板靠 1px `line` 描边分层，不靠阴影；`shadow-pop` 与 `shadow-(--shadow-pop)` 两种写法都跟随主题。
-- 实心底上的字用 `text-primary-fg`（`bg-primary text-primary-fg`，Button 已处理；朱砂方印同理）；不要写 `bg-primary text-white`，深色下 primary 近白。深色浮层（`bg-panel` / `bg-panel-red`）两个主题都是深底，上面的字用 `text-white`。
+- 实心底上的字用 `text-primary-fg`（`bg-primary text-primary-fg`，Button 已处理）；不要写 `bg-primary text-white`，深色下 primary 近白。深色浮层（`bg-panel` / `bg-panel-red`）两个主题都是深底，上面的字用 `text-white`。
 - 局部翻转：深色浮层（Toast 图标、批量操作条）在子树上挂 `.dark`，令牌就地换成深色主题的值。
 - 主题由 `useThemeStore` 管理，`localStorage` 键 `canglin-theme`（`light` / `dark` / `system`）；`index.html` 在首帧前预置 `.dark`，避免闪烁；`<meta name="theme-color">` 跟着换成 canvas 色。
 
@@ -482,3 +482,12 @@ apps/web/scripts/visual.sh               # 视觉回归：在 Playwright 容器�
 - 手机扫码清单按作业类型暂存，固定保存条位于底部导航上方，页面底部预留足够空间。保存到服务器后再核对执行；不用扫码事件直接写业务。
 - 二维码保持白底黑码，深色界面也不反色。打印时隐藏外壳导航并解除主滚动容器的高度限制，标签避免跨页拆分。
 - `e2e/visual.spec.ts` 的矩阵扩至160张，新增需求池、批次、对账、流水、票据、草稿、异常、月报、扫码、标签和两类确认窗口，均覆盖桌面/手机与明/暗。
+
+
+## 品牌图标与供应商结算（2026-10-26）
+
+品牌图形以 `public/favicon.svg` 为唯一源：朱砂底、白色屋檐与仓门、两层物资。`BrandMark` 在桌面/手机顶栏和登录页复用同一图形；启动画面也引用该源。品牌资产保持固定朱砂白色，深色主题不反转；管理员入口用 `AdminAvatar` 的圆形人物线稿，颜色跟随 accent 令牌。PWA/iOS 图标由 `scripts/render-icons.mjs` 从 SVG 生成，保留 Android maskable 安全区，禁止另画一套不一致的图形。
+
+`/finance` 是供应商结算：默认汇总所有未结及旧账待核对的采购，可按采购日期选周期，按供应商展开、导出明细并登记一次公司结算。每张供应商卡片展示原额、退货/取消抵扣、净采购、已核实结算、待结及票据金额。旧账未知金额单独显示；已付款后的待退款单独提示。统一结算弹窗自动合计所选采购当前待结额，保存实际日期、采购周期、参考号和凭证，不展示员工垫付/报销输入。
+
+此前未结算的旧采购须明确勾选确认；已有付款标记的旧采购仍通过折叠的“旧账与特殊往来”进入 `/finance/history` 核实。原有特殊往来和旧书签保留，`recordId` 深链接继续打开对应记录。金额或版本冲突保留输入，重新核对只更新原选择范围内的余额，不添加别的采购。

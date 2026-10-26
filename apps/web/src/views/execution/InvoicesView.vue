@@ -26,8 +26,8 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 const router = useRouter();
 const route = useRoute();
 const { busy, failure, run } = usePlanningAction();
-const state = reactive({ search: '', status: '', page: '1', documentId: '' });
-useUrlState(state, { search: '', status: '', page: '1', documentId: '' });
+const state = reactive({ search: '', status: '', page: '1', documentId: '', supplierId: '' });
+useUrlState(state, { search: '', status: '', page: '1', documentId: '', supplierId: '' });
 
 const list = useResource(() =>
   executionApi.invoices({
@@ -36,6 +36,7 @@ const list = useResource(() =>
     page: Number(state.page),
     pageSize: 20,
     documentId: state.documentId ? Number(state.documentId) : undefined,
+    supplierId: state.supplierId ? Number(state.supplierId) : undefined,
   }),
 );
 const suppliers = useResource(suppliersApi.list);
@@ -168,7 +169,7 @@ onMounted(async () => {
           @update:model-value="state.status === 'ALL' && (state.status = ''); filter()"
         />
         <Button @click="filter">查询</Button>
-        <Button v-if="state.documentId" @click="state.documentId = ''; filter()">清除采购筛选</Button>
+        <Button v-if="state.documentId || state.supplierId" @click="state.documentId = ''; state.supplierId = ''; filter()">清除定位条件</Button>
       </template>
 
       <ErrorState v-if="list.error.value" :message="list.error.value" @retry="list.load" />

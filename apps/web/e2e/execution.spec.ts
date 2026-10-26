@@ -81,7 +81,7 @@ test('历史期初：净垫付已为零，仍能核实员工应退报销款', as
   await login(page); const { supplier, request } = await source(page, `期初-${randomUUID().slice(0,8)}`);
   const d = await write(page, 'workflow/purchases', { date, supplierId: supplier.id, lines: [{ requestLineId: request.lines[0].id, quantity: '3', unitPrice: '10' }] });
   await write(page, 'workflow/purchase-cancellations', { date, reason: '历史取消，已收回供应商退款', lines: [{ purchaseLineId: d.lines[0].id, quantity: '3' }] });
-  await page.goto(`/finance?documentId=${d.id}`); await page.getByRole('button', { name: '核对期初余额', exact: true }).click();
+  await page.goto(`/finance/history?documentId=${d.id}`); await page.getByRole('button', { name: '核对期初余额', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: `核对采购 #${d.id} 的期初余额` });
   await dialog.getByRole('button', { name: '添加核实余额' }).click();
   await dialog.getByRole('combobox', { name: '付款主体', exact: true }).click(); await page.getByRole('option', { name: '员工垫付', exact: true }).click();
@@ -95,7 +95,7 @@ test('历史期初：净垫付已为零，仍能核实员工应退报销款', as
 test('资金与发票：分次付款、原件上传、一票匹配、异常处理和月报导出', async ({ page }) => {
   await login(page); const { supplier, request } = await source(page, `财务-${randomUUID().slice(0,8)}`);
   const d = await write(page, 'workflow/purchases', { settlementMode: 'DETAIL', date, supplierId: supplier.id, lines: [{ requestLineId: request.lines[0].id, quantity: '3', unitPrice: '10' }] });
-  await page.goto(`/finance?documentId=${d.id}`); await page.getByRole('button', { name: '登记付款', exact: true }).click(); const payment = page.getByRole('dialog', { name: '付供应商', exact: true });
+  await page.goto(`/finance/history?documentId=${d.id}`); await page.getByRole('button', { name: '登记付款', exact: true }).click(); const payment = page.getByRole('dialog', { name: '付供应商', exact: true });
   await payment.getByLabel('本次总金额（元）', { exact: true }).fill('20'); await payment.getByLabel(`采购 #${d.id} 本次分配金额`, { exact: true }).fill('20');
   const basis = (await read(page, `execution/settlements?documentId=${d.id}`)).items[0];
   await write(page, 'execution/financial-records', { kind: 'PAYMENT', date, supplierId: supplier.id, payer: 'COMPANY', amount: '1', allocations: [{ documentId: d.id, amount: '1', version: basis.version }] });

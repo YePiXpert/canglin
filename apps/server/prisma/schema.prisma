@@ -482,6 +482,8 @@ model ProcurementBatchLine {
 }
 
 model FinancialRecord {
+  settlementFrom         String?
+  settlementTo           String?
   id                     Int                   @id @default(autoincrement())
   kind                   String // PAYMENT | REFUND | REIMBURSEMENT | REIMBURSEMENT_RETURN | OPENING
   status                 String                @default("POSTED")

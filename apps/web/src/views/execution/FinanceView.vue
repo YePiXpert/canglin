@@ -29,8 +29,8 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 
 const route = useRoute();
 const { busy, failure, run } = usePlanningAction();
-const state = reactive({ search: '', status: '', tab: 'settlements', page: '1', documentId: '' });
-useUrlState(state, { search: '', status: '', tab: 'settlements', page: '1', documentId: '' });
+const state = reactive({ search: '', status: '', tab: 'settlements', page: '1', documentId: '', supplierId: '' });
+useUrlState(state, { search: '', status: '', tab: 'settlements', page: '1', documentId: '', supplierId: '' });
 
 const query = () => ({
   search: state.search,
@@ -38,6 +38,7 @@ const query = () => ({
   page: Number(state.page),
   pageSize: 20,
   documentId: state.documentId ? Number(state.documentId) : undefined,
+    supplierId: state.supplierId ? Number(state.supplierId) : undefined,
 });
 const settlements = useResource(() => executionApi.settlements(query()));
 const records = useResource(() => executionApi.records(query()));
@@ -241,7 +242,8 @@ onMounted(async () => {
 
 <template>
   <div>
-    <PageHeader title="资金对账" description="按实际金额记录付款、退款与员工垫付报销，采购和资金分别核对">
+    <PageHeader title="旧账与特殊往来" description="核实旧采购余额，查询处理退款、员工垫付及报销记录">
+      <router-link to="/finance" class="text-sm text-blue underline">返回供应商结算</router-link>
       <router-link to="/insights/payments" class="text-sm text-blue underline">历史付款标记</router-link>
     </PageHeader>
     <ExecutionLinks />
@@ -285,7 +287,7 @@ onMounted(async () => {
           @update:model-value="state.status === 'ALL' && (state.status = ''); filter()"
         />
         <Button @click="filter">查询</Button>
-        <Button v-if="state.documentId" variant="ghost" @click="state.documentId = ''; filter()">清除采购筛选</Button>
+        <Button v-if="state.documentId || state.supplierId" variant="ghost" @click="state.documentId = ''; state.supplierId = ''; filter()">清除定位条件</Button>
         <Button v-if="state.tab === 'settlements'" variant="primary" :disabled="!selectedRows.length" @click="openPayment(selectedRows)">
           合并登记付款（{{ selected.length }}）
         </Button>

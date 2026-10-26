@@ -42,11 +42,11 @@ const staticItems = computed<CommandItem[]>(() => [
   { id: 'nav-stock', group: '收货与库存', title: '库存与领用', subtitle: '当前库存、到货待处理、领用与出入库流水', icon: 'inventory', run: () => void router.push('/stock') },
   { id: 'nav-drafts', group: '收货与库存', title: '操作草稿', subtitle: '核对并执行已保存的操作与 AI 建议草稿', icon: 'clipboard', run: () => void router.push('/operations/drafts') },
   { id: 'nav-counts', group: '收货与库存', title: '库房盘点与补货', subtitle: '实盘核对库存差异与安全库存补货建议', icon: 'box', run: () => void router.push('/stock/counts') },
-  { id: 'nav-finance', group: '资金、发票与复盘', title: '资金对账', subtitle: '按实际金额记录付供应商、退款与员工垫付报销', icon: 'ledger', badge: '财务', run: () => void router.push('/finance') },
+  { id: 'nav-finance', group: '资金、发票与复盘', title: '供应商结算', subtitle: '按供应商和采购周期核对账单、统一结算', icon: 'ledger', badge: '财务', run: () => void router.push('/finance') },
   { id: 'nav-invoices', group: '资金、发票与复盘', title: '发票池', subtitle: '核对发票原件与票面，支持一票多单、多票一单与冲减', icon: 'receipt', badge: '票据', run: () => void router.push('/finance/invoices') },
   { id: 'nav-monthly', group: '资金、发票与复盘', title: '月度复盘', subtitle: '同月对比净采购、实际现金流、供应商交付与净领用', icon: 'report', run: () => void router.push('/insights/monthly') },
   { id: 'nav-insights', group: '资金、发票与复盘', title: '采购与领用报表', subtitle: '按部门、物品、供应商汇总统计与历史付款标记', icon: 'report', run: () => void router.push('/insights') },
-  { id: 'act-ai', group: '快捷动作', title: '打开 AI 助手', subtitle: '用自然语言查询申请、库存、资金对账与异常事项', icon: 'sparkles', run: () => emit('openAi') },
+  { id: 'act-ai', group: '快捷动作', title: '打开 AI 助手', subtitle: '用自然语言查询申请、库存、供应商结算与异常事项', icon: 'sparkles', run: () => emit('openAi') },
   { id: 'act-theme', group: '快捷动作', title: theme.resolved === 'dark' ? '切换到浅色模式' : '切换到深色模式', subtitle: '切换「墨线」纸面浅色或暖黑深色外观', icon: theme.resolved === 'dark' ? 'sun' : 'moon', run: () => theme.toggle() },
   { id: 'nav-suppliers', group: '系统与设置', title: '供应商与比价', subtitle: '维护常用供应商名录与历史采购单价', icon: 'supplier', run: () => void router.push('/settings/suppliers') },
   { id: 'nav-audit', group: '系统与设置', title: '审计日志', subtitle: '查阅全部业务登记、资金票据与系统操作记录', icon: 'audit', run: () => void router.push('/settings/audit') },
@@ -69,7 +69,7 @@ const dynamicItems = computed<CommandItem[]>(() => {
   if ((docMatch || numMatch) && Number.isSafeInteger(Number((docMatch ?? numMatch)![1]))) {
     const id = Number((docMatch ?? numMatch)![1]);
     items.push(
-      { id: `go-doc-fin-${id}`, group: '单据直达', title: `查看采购 #${id} 资金与票据对账`, subtitle: '在资金对账中定位该采购单', icon: 'ledger', badge: `#${id}`, run: () => void router.push(`/finance?documentId=${id}`) },
+      { id: `go-doc-fin-${id}`, group: '单据直达', title: `查看采购 #${id} 资金与票据对账`, subtitle: '在供应商结算中定位该采购单', icon: 'ledger', badge: `#${id}`, run: () => void router.push(`/finance?documentId=${id}`) },
       { id: `go-doc-${id}`, group: '单据直达', title: `打开业务单据 D-${id}`, subtitle: '到对应申请或库存页面办理', icon: 'truck', run: () => void router.push(`/documents/${id}`) },
     );
   }
@@ -77,7 +77,7 @@ const dynamicItems = computed<CommandItem[]>(() => {
   items.push(
     { id: `search-req-${raw}`, group: '按关键词检索', title: `在「申请单」中搜索“${raw}”`, subtitle: '匹配申请号、部门、经办人或物品名称', icon: 'search', run: () => void router.push(`/requests?search=${encoded}`) },
     { id: `search-proc-${raw}`, group: '按关键词检索', title: `在「集中采购」中搜索“${raw}”`, subtitle: '匹配待采购需求池中的物品或申请', icon: 'layers', run: () => void router.push(`/procurement?search=${encoded}`) },
-    { id: `search-fin-${raw}`, group: '按关键词检索', title: `在「资金对账」中搜索“${raw}”`, subtitle: '匹配供应商、申请号或资金参考号', icon: 'ledger', run: () => void router.push(`/finance?search=${encoded}`) },
+    { id: `search-fin-${raw}`, group: '按关键词检索', title: `在「供应商结算」中搜索“${raw}”`, subtitle: '匹配供应商、申请号或资金参考号', icon: 'ledger', run: () => void router.push(`/finance?search=${encoded}`) },
     { id: `search-inv-${raw}`, group: '按关键词检索', title: `在「发票池」中搜索“${raw}”`, subtitle: '匹配发票号码或销售方供应商', icon: 'receipt', run: () => void router.push(`/finance/invoices?search=${encoded}`) },
   );
   return items;

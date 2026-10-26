@@ -1,5 +1,5 @@
 import { http, mutate } from './client';
-import type { DraftContextRow, AiProposalInput, BatchCreateInput, BatchRow, BatchSaveInput, DemandRow, ExceptionActionInput, ExceptionRow, ExceptionRules, ExecutionDraftRow, ExecutionPayload, ExecutionQuery, FinancialCreateInput, FinancialRow, InvoiceAllocationInput, InvoiceInput, InvoiceRow, MonthlyReview, OpeningInput, SettlementRow, WorkflowPage } from '@canglin/shared';
+import type { SupplierSettlementInput, SupplierStatementRow, DraftContextRow, AiProposalInput, BatchCreateInput, BatchRow, BatchSaveInput, DemandRow, ExceptionActionInput, ExceptionRow, ExceptionRules, ExecutionDraftRow, ExecutionPayload, ExecutionQuery, FinancialCreateInput, FinancialRow, InvoiceAllocationInput, InvoiceInput, InvoiceRow, MonthlyReview, OpeningInput, SettlementRow, WorkflowPage } from '@canglin/shared';
 const get = <T>(path: string, params?: object) => http.get<T>(`/execution${path}`, { params }).then(r => r.data);
 const write = <T>(path: string, body: unknown, method: 'post' | 'patch' = 'post') => mutate<T>(method, `/execution${path}`, body);
 export interface BatchHeader { id: number; title: string; date: string; status: string; version: number; _count: { lines: number; documents: number } }
@@ -14,6 +14,9 @@ export const executionApi = {
   saveBatch: (id: number, b: BatchSaveInput) => write<BatchRow>(`/batches/${id}`, b, 'patch'),
   confirmBatch: (id: number, version: number) => write<BatchRow>(`/batches/${id}/confirm`, { version }),
   cancelBatch: (id: number, version: number, date: string, reason: string) => write<BatchRow>(`/batches/${id}/cancel`, { version, date, reason }),
+  supplierStatements: (q: Partial<ExecutionQuery>) => get<WorkflowPage<SupplierStatementRow>>('/supplier-statements', q),
+  supplierSettlements: (q: Partial<ExecutionQuery>) => get<WorkflowPage<FinancialRow>>('/supplier-settlements', q),
+  settleSupplier: (b: SupplierSettlementInput) => write<FinancialRow>('/supplier-settlements', b),
   settlements: (q: Partial<ExecutionQuery>) => get<WorkflowPage<SettlementRow>>('/settlements', q),
   opening: (id: number, b: OpeningInput) => write<SettlementRow>(`/settlements/${id}/opening`, b),
   records: (q: Partial<ExecutionQuery>) => get<WorkflowPage<FinancialRow>>('/financial-records', q),

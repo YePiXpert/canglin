@@ -30,10 +30,10 @@ it('Beta 1 升级保留数量账、历史付款标记、附件身份与 CHECK，
     expect(await db.$queryRawUnsafe(`SELECT name,sql FROM sqlite_master WHERE type='table' AND name IN ('StockBalance','StockEntry','BusinessLine')`)).toEqual(oldTables);
     expect(await db.$queryRawUnsafe('PRAGMA foreign_key_check')).toEqual([]); expect(await db.$queryRawUnsafe('PRAGMA integrity_check')).toEqual([{ integrity_check: 'ok' }]);
     await expect(db.$executeRawUnsafe(`UPDATE BusinessDocument SET settlementMode='GUESS' WHERE id=1`)).rejects.toThrow();
-    await expect(db.financialRecord.create({ data: { kind: 'PAYMENT', date: '2026-01-02', payer: 'COMPANY', supplierId: 1, amountUnits: -1 } })).rejects.toThrow();
-    const opening = await db.financialRecord.create({ data: { kind: 'OPENING', date: '2026-01-02', payer: 'EMPLOYEE', employee: '小周', supplierId: 1, amountUnits: 0, openingReimbursedUnits: 1000 } });
+    await expect(db.financialRecord.create({ select: { id: true }, data: { kind: 'PAYMENT', date: '2026-01-02', payer: 'COMPANY', supplierId: 1, amountUnits: -1 } })).rejects.toThrow();
+    const opening = await db.financialRecord.create({ select: { id: true }, data: { kind: 'OPENING', date: '2026-01-02', payer: 'EMPLOYEE', employee: '小周', supplierId: 1, amountUnits: 0, openingReimbursedUnits: 1000 } });
     expect(await db.financialAllocation.create({ data: { recordId: opening.id, documentId: 1, amountUnits: 0 } })).toMatchObject({ amountUnits: 0n });
-    const payment = await db.financialRecord.create({ data: { kind: 'PAYMENT', date: '2026-01-02', payer: 'COMPANY', supplierId: 1, amountUnits: 1000 } });
+    const payment = await db.financialRecord.create({ select: { id: true }, data: { kind: 'PAYMENT', date: '2026-01-02', payer: 'COMPANY', supplierId: 1, amountUnits: 1000 } });
     await expect(db.financialAllocation.create({ data: { recordId: payment.id, documentId: 1, amountUnits: 0 } })).rejects.toThrow();
     await expect(db.attachment.create({ data: { kind: 'INVOICE', filename: 'bad.pdf', storagePath: 'bad.pdf', mimeType: 'application/pdf', sizeBytes: 1 } })).rejects.toThrow();
     const draft = await db.executionDraft.create({ data: { kind: 'STOCK_IN', title: '入库', payload: '{}', basis: 'test' } }); expect(draft.kind).toBe('STOCK_IN');

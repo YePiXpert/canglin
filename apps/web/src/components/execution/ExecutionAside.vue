@@ -51,7 +51,7 @@ defineExpose({ refresh: load });
         <Icon name="box" :size="14" />办理入库与发放
       </router-link>
       <router-link to="/finance" class="float-right" :class="buttonClass({ variant: 'link' })">
-        资金对账 →
+        供应商结算 →
       </router-link>
     </template>
   </Panel>

@@ -38,7 +38,7 @@ async function save() {
       <Select v-if="document.settlementMode !== 'DETAIL'" v-model="form.paymentStatus" label="付款 / 报销状态" :options="paymentOptions" :disabled="saving" />
       <Checkbox v-if="!document.invoiceManaged" v-model="form.invoiceIssued" label="已开具发票" :disabled="saving" class="sm:h-9 sm:items-center" />
     </div>
-    <Notice v-if="document.settlementMode === 'DETAIL' || document.invoiceManaged" class="mt-3">付款和票据按明细记录核对。<router-link :to="`/finance?documentId=${document.id}`" class="underline" @click="emit('update:open', false)">前往资金对账</router-link> · <router-link :to="`/finance/invoices?documentId=${document.id}`" class="underline" @click="emit('update:open', false)">查看匹配发票</router-link></Notice>
+    <Notice v-if="document.settlementMode === 'DETAIL' || document.invoiceManaged" class="mt-3">付款和票据按明细记录核对。<router-link :to="`/finance?documentId=${document.id}`" class="underline" @click="emit('update:open', false)">前往供应商结算</router-link> · <router-link :to="`/finance/invoices?documentId=${document.id}`" class="underline" @click="emit('update:open', false)">查看匹配发票</router-link></Notice>
     <Textarea v-model="form.note" label="采购备注" :disabled="saving" class="mt-4" />
     <slot name="attachments" />
     <template #footer="{ close }">

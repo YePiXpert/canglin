@@ -48,7 +48,7 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
       <template v-if="document.kind === 'PURCHASE'"><Badge :tone="!posted ? 'gray' : document.paymentStatus === 'UNPAID' ? 'amber' : 'teal'">{{ PAYMENT_STATUS_LABELS[document.paymentStatus] }}</Badge><Badge :tone="posted && document.invoiceIssued ? 'teal' : 'gray'">{{ document.invoiceIssued ? '已开票' : '未开票' }}</Badge></template>
       <span v-if="document.totalAmount != null" class="ml-auto text-[13px] text-muted">{{ amountLabel }} <span class="num font-semibold text-ink">{{ moneyLabel(document.totalAmount) }}</span></span>
     </header>
-    <p v-if="document.settlement?.mode === 'DETAIL'" class="mt-2 text-sm">净采购 {{ document.settlement.netAmount }} · 净实付 {{ document.settlement.netPaid }} · 待付 {{ document.settlement.payable }} · 待收退款 {{ document.settlement.refundDue }} 元 <router-link :to="`/finance?documentId=${document.id}`" class="underline">资金对账</router-link></p>
+    <p v-if="document.settlement?.mode === 'DETAIL'" class="mt-2 text-sm">净采购 {{ document.settlement.netAmount }} · 净实付 {{ document.settlement.netPaid }} · 待付 {{ document.settlement.payable }} · 待收退款 {{ document.settlement.refundDue }} 元 <router-link :to="`/finance?documentId=${document.id}`" class="underline">供应商结算</router-link></p>
     <p v-if="document.note" class="mt-1.5 text-meta">{{ document.note }}</p>
     <p v-if="document.voidReason" class="mt-1.5 text-[13px] text-muted">撤销日期：{{ document.voidDate }} · 原因：{{ document.voidReason }}</p>
     <p v-if="document.returnMode" class="mt-1.5 text-[13px] text-muted">{{ document.returnMode === 'REFUND' ? `退款退货 · 成交额扣减 ${moneyLabel(refundReduction)}` : '换货补货 · 等待补发' }}</p>

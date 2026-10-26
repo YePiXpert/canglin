@@ -9,7 +9,7 @@ const currentPath = computed(() => {
 });
 const links = [
   { to: '/procurement', match: '/procurement', label: '集中采购', icon: 'layers' },
-  { to: '/finance', match: '/finance', exact: true, label: '资金对账', icon: 'ledger' },
+  { to: '/finance', match: '/finance', exact: true, label: '供应商结算', icon: 'ledger' },
   { to: '/finance/invoices', match: '/finance/invoices', label: '发票池', icon: 'receipt' },
   { to: '/operations/drafts', match: '/operations/drafts', label: '操作草稿', icon: 'clipboard' },
   { to: '/workbench/exceptions', match: '/workbench/exceptions', label: '异常中心', icon: 'alert-circle' },
@@ -18,7 +18,7 @@ const links = [
 
 function isActive(l: (typeof links)[number]): boolean {
   const path = currentPath.value;
-  if (l.exact) return path === l.match;
+  if (l.exact) return path === l.match || (l.match === '/finance' && path === '/finance/history');
   return path === l.match || path.startsWith(`${l.match}/`);
 }
 

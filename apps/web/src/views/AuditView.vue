@@ -52,6 +52,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   WORKFLOW_BATCH_SAVE: { label: '保存采购批次', tone: 'gray', group: '执行与对账' },
   WORKFLOW_BATCH_CONFIRM: { label: '批次登记采购', tone: 'gray', group: '执行与对账' },
   WORKFLOW_BATCH_CANCEL: { label: '取消采购批次', tone: 'gray', group: '执行与对账' },
+  WORKFLOW_SUPPLIER_SETTLEMENT: { label: '登记供应商统一结算', tone: 'gray', group: '执行与对账' },
   WORKFLOW_FINANCIAL_CREATE: { label: '登记实际资金', tone: 'gray', group: '执行与对账' },
   WORKFLOW_FINANCIAL_VOID: { label: '撤销资金记录', tone: 'gray', group: '执行与对账' },
   WORKFLOW_SETTLEMENT_OPENING: { label: '核对历史期初', tone: 'gray', group: '执行与对账' },

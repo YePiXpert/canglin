@@ -107,7 +107,7 @@ test.beforeAll(async ({ playwright }) => {
   expect(batchSaved.ok(), await batchSaved.text()).toBeTruthy();
   const r5 = await post(request, '/api/workflow/requests', { serialNumber: 'OA-2026-1005-0066', department: '行政部', handler: '李雯', requestDate: '2026-10-05', lines: [{ itemName: '桌面收纳盒', specification: '三层灰色', unit: '套', quantity: '8' }] });
   const p5 = await post(request, '/api/workflow/purchases', { settlementMode: 'DETAIL', date: '2026-10-06', supplierId: supA.id, lines: [{ requestLineId: r5.lines[0].id, quantity: '8', unitPrice: '35' }] });
-  await post(request, '/api/execution/financial-records', { kind: 'PAYMENT', date: '2026-10-07', supplierId: supA.id, payer: 'EMPLOYEE', employee: '李雯', amount: '200', note: '部分垫付，尾款到货后支付', allocations: [{ documentId: p5.id, amount: '200', version: 0 }] });
+  await post(request, '/api/execution/financial-records', { kind: 'PAYMENT', date: '2026-10-07', supplierId: supA.id, payer: 'COMPANY', amount: '200', note: '此前结算200元，本期余款待结', allocations: [{ documentId: p5.id, amount: '200', version: 0 }] });
   const inv = await post(request, '/api/execution/invoices', { supplierId: supA.id, number: '261014000000001', date: '2026-10-14', amount: '280', note: '收纳盒票据，待核对原件' });
   const action = await post(request, '/api/execution/drafts', { title: '收纳盒第一批到货', action: { kind: 'RECEIPT', data: { date: '2026-10-14', lines: [{ purchaseLineId: p5.lines[0].id, quantity: '4' }], note: '手机登记，现场核对后确认' } } });
   seed = { countId: count.id, draftId: supply.id, r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId, batchId: batch.id, invoiceId: inv.id, actionId: action.id, productId: r1.lines[0].productId, purchaseId: p5.id, receiptId: rc1.id };
@@ -188,8 +188,8 @@ for (const variant of VARIANTS) {
         ['exceptions', '/workbench/exceptions'], ['monthly-review', '/insights/monthly?month=2026-10'],
       ]) { await page.goto(url); await shot(page, `${v}-${name}`); expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true); }
       await page.goto(`/finance?documentId=${s.purchaseId}`); await settle(page);
-      await page.getByRole('button', { name: '登记付款', exact: true }).click();
-      await expect(page.getByRole('dialog', { name: '付供应商', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '登记统一结算', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '登记统一结算', exact: true })).toBeVisible();
       await shot(page, `${v}-financial-dialog`);
       await page.goto(`/operations/drafts/${s.actionId}`); await settle(page);
       await page.getByRole('button', { name: '核对并执行', exact: true }).click();

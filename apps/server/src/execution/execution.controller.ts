@@ -10,13 +10,15 @@ import { ExceptionsService } from './exceptions.service';
 import { DraftsService } from './drafts.service';
 import { BatchesService } from './batches.service';
 import { FinanceService } from './finance.service';
+import { SupplierSettlementsService } from './supplier-settlements.service';
+import { supplierSettlementSchema, type SupplierSettlementInput } from '@canglin/shared';
 import { InvoicesService } from './invoices.service';
 
 const versionSchema = z.object({ version: z.number().int().nonnegative() }).strict();
 type Reason = z.infer<typeof executionReasonSchema>;
 @Controller('execution')
 export class ExecutionController {
-  constructor(private readonly recognition: InvoiceRecognitionService, private readonly batches: BatchesService, private readonly finance: FinanceService, private readonly invoices: InvoicesService, private readonly exceptions: ExceptionsService, private readonly drafts: DraftsService) {}
+  constructor(private readonly recognition: InvoiceRecognitionService, private readonly batches: BatchesService, private readonly finance: FinanceService, private readonly supplierSettlements: SupplierSettlementsService, private readonly invoices: InvoicesService, private readonly exceptions: ExceptionsService, private readonly drafts: DraftsService) {}
   @Get('demands') demands(@Query(new ZodValidationPipe(executionQuerySchema)) q: ExecutionQuery) { return this.batches.demands(q); }
   @Get('batches') batchesList(@Query(new ZodValidationPipe(executionQuerySchema)) q: ExecutionQuery) { return this.batches.list(q); }
   @Get('batches/:id') batch(@Param('id', ParseIntPipe) id: number) { return this.batches.detail(id); }
@@ -25,6 +27,9 @@ export class ExecutionController {
   @Post('batches/:id/confirm') batchConfirm(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(versionSchema)) b: { version: number }, @Req() r: FastifyRequest) { return this.batches.confirm(id, b.version, operationId(r), clientIp(r)); }
   @Post('batches/:id/cancel') batchCancel(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(executionReasonSchema)) b: Reason, @Req() r: FastifyRequest) { return this.batches.cancel(id, b.version, b.reason, operationId(r), clientIp(r)); }
   @Get('batches/:id/export') @Header('Content-Type', 'text/csv; charset=utf-8') @Header('Content-Disposition', 'attachment; filename="procurement-batch.csv"') batchExport(@Param('id', ParseIntPipe) id: number) { return this.batches.export(id); }
+  @Get('supplier-statements') supplierStatements(@Query(new ZodValidationPipe(executionQuerySchema)) q: ExecutionQuery) { return this.supplierSettlements.list(q); }
+  @Post('supplier-settlements') supplierSettle(@Body(new ZodValidationPipe(supplierSettlementSchema)) b: SupplierSettlementInput, @Req() r: FastifyRequest) { return this.supplierSettlements.settle(b, operationId(r), clientIp(r)); }
+  @Get('supplier-settlements') supplierPayments(@Query(new ZodValidationPipe(executionQuerySchema)) q: ExecutionQuery) { return this.finance.list(q, true); }
   @Get('settlements') settlements(@Query(new ZodValidationPipe(executionQuerySchema)) q: ExecutionQuery) { return this.finance.settlements(q); }
   @Post('settlements/:id/opening') opening(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(openingSchema)) b: OpeningInput, @Req() r: FastifyRequest) { return this.finance.opening(id, b, operationId(r), clientIp(r)); }
   @Get('financial-records') financialRecords(@Query(new ZodValidationPipe(executionQuerySchema)) q: ExecutionQuery) { return this.finance.list(q); }

@@ -1,0 +1,46 @@
+import { test, expect, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { capabilityImage } from '../../server/src/ai/capability-image';
+
+async function write(page: Page, path: string, data: object) { const response = await page.request.post('/api/' + path, { data, headers: { 'Idempotency-Key': randomUUID() } }); expect(response.ok(), await response.text()).toBeTruthy(); return response.json(); }
+const read = async (page: Page, path: string) => (await page.request.get('/api/' + path)).json();
+for (const width of [1440, 390]) test(`供应商账期统一结算 ${width}px：抵扣、旧账确认、凭证和撤销`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 960 });
+  const password = 'browser-test-password'; await page.request.post('/api/auth/setup', { data: { password } });
+  await page.goto('/login'); await page.locator('input[type=password]').fill(password); await page.getByRole('button', { name: /^登\s*录$/ }).click(); await expect(page).toHaveURL(/workbench/);
+  const supplier = await write(page, 'suppliers', { name: `账期验收-${width}-${randomUUID().slice(0, 6)}` });
+  const request = await write(page, 'workflow/requests', { autoSerial: true, requestDate: '2026-10-20', department: '行政', handler: '管理员', lines: ['3','7','2','4'].map((quantity, index) => ({ itemName: `账期物品-${index}-${randomUUID().slice(0,6)}`, unit: '盒', quantity })) });
+  const purchases = [];
+  for (let index = 0; index < 4; index++) purchases.push(await write(page, 'workflow/purchases', { date: index === 3 ? '2026-11-01' : '2026-10-20', supplierId: supplier.id, settlementMode: index === 2 ? 'LEGACY' : 'DETAIL', lines: [{ requestLineId: request.lines[index].id, quantity: request.lines[index].quantity, unitPrice: '10' }] }));
+  await write(page, 'workflow/purchase-cancellations', { date: '2026-10-21', reason: '供应商本期少供一盒', lines: [{ purchaseLineId: purchases[1].lines[0].id, quantity: '1' }] });
+  const receipt = await write(page, 'workflow/receipts', { date: '2026-10-21', lines: [{ purchaseLineId: purchases[0].lines[0].id, quantity: '1' }] });
+  await write(page, 'workflow/stock-in', { date: '2026-10-21', lines: [{ receiptLineId: receipt.lines[0].id, quantity: '1' }] });
+  const stockBefore = await read(page, `workflow/stock?productId=${request.lines[0].productId}`), entriesBefore = await read(page, `workflow/entries?productId=${request.lines[0].productId}`);
+  await page.goto(`/finance?supplierId=${supplier.id}`);
+  await expect(page.getByRole('heading', { name: '供应商结算', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '登记报销', exact: true })).toHaveCount(0);
+  await page.getByLabel('采购日期起', { exact: true }).fill('2026-10-01'); await page.getByLabel('采购日期止', { exact: true }).fill('2026-10-31'); await page.getByRole('button', { name: '查询', exact: true }).click();
+  const group = page.locator(`[data-supplier-statement="${supplier.id}"]`);
+  await expect(group.getByText('¥120.00', { exact: true })).toBeVisible(); await expect(group.getByText('¥10.00', { exact: true })).toBeVisible();
+  const download = page.waitForEvent('download'); await group.getByRole('button', { name: '导出对账单', exact: true }).click(); expect((await download).suggestedFilename()).toContain('2026-10-01');
+  await group.getByRole('button', { name: '登记统一结算', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '登记统一结算', exact: true });
+  await expect(dialog).toContainText('¥110.00'); await expect(dialog.getByLabel('垫付员工', { exact: true })).toHaveCount(0);
+  await dialog.getByLabel('实际结算日期', { exact: true }).fill('2026-11-05'); await dialog.getByLabel('结算单号或交易参考号', { exact: true }).fill('10月账期统一结算');
+  await dialog.getByRole('button', { name: /^确认登记结算/ }).click(); await expect(dialog.getByRole('alert')).toContainText('请先核对并确认');
+  await dialog.getByRole('checkbox', { name: '我已核对：所选旧采购此前尚未结算', exact: true }).check();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath(`supplier-settlement-${width}.png`), fullPage: true });
+  await dialog.getByRole('button', { name: /^确认登记结算/ }).click(); await expect(dialog).not.toBeVisible();
+  const record = page.getByRole('dialog', { name: /^结算记录 #/ }); await expect(record).toContainText('2026-10-01 至 2026-10-31');
+  await record.locator('input[type=file]').setInputFiles({ name: '结算凭证.png', mimeType: 'image/png', buffer: Buffer.from(capabilityImage().split(',')[1]!, 'base64') });
+  await expect(record.getByText('结算凭证.png', { exact: true }).first()).toBeVisible();
+  const rows = await read(page, `execution/supplier-settlements?supplierId=${supplier.id}`); expect(rows.items).toHaveLength(1); expect(rows.items[0]).toMatchObject({ amount: '110.00', payer: 'COMPANY', settlementFrom: '2026-10-01', settlementTo: '2026-10-31' }); expect(rows.items[0].allocations).toHaveLength(3);
+  expect(await read(page, `workflow/stock?productId=${request.lines[0].productId}`)).toEqual(stockBefore); expect(await read(page, `workflow/entries?productId=${request.lines[0].productId}`)).toEqual(entriesBefore);
+  const future = (await read(page, `execution/settlements?documentId=${purchases[3].id}`)).items[0]; expect(future.payable).toBe('40.00');
+  await record.getByRole('button', { name: '撤销错误结算', exact: true }).click();
+  const cancel = page.getByRole('dialog', { name: '撤销结算记录', exact: true }); await cancel.getByLabel('撤销日期', { exact: true }).fill('2026-11-06'); await cancel.getByLabel('撤销原因', { exact: true }).fill('验收撤销重复结算'); await cancel.getByRole('button', { name: '确认', exact: true }).click(); await expect(cancel).not.toBeVisible();
+  await expect(group.getByText('¥110.00', { exact: true }).first()).toBeVisible();
+  expect((await read(page, `execution/supplier-settlements?supplierId=${supplier.id}`)).items[0].status).toBe('VOIDED');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

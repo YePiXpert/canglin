@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from 'reka-ui';
 import Icon from '@/components/ui/Icon.vue';
+import BrandMark from '@/components/ui/BrandMark.vue';
+import AdminAvatar from '@/components/ui/AdminAvatar.vue';
 import Menu from '@/components/ui/Menu.vue';
 import { buttonClass } from '@/components/ui/button';
 import type { MenuItem } from '@/components/ui/types';
@@ -58,7 +60,7 @@ const tabItems: NavItem[] = [
 /** 「更多」抽屉里的导航：底部标签放不下的 */
 const moreItems: NavItem[] = [
   { path: '/procurement', title: '集中采购', icon: 'layers' },
-  { path: '/finance', title: '资金对账', icon: 'ledger' },
+  { path: '/finance', title: '供应商结算', icon: 'ledger' },
   { path: '/finance/invoices', title: '发票池', icon: 'receipt' },
   { path: '/operations/drafts', title: '操作草稿', icon: 'clipboard' },
   { path: '/workbench/exceptions', title: '异常中心', icon: 'alert-circle' },
@@ -119,8 +121,7 @@ onBeforeUnmount(() => {
   sessionDialog.value?.cancel();
 });
 
-/* 朱砂方印：品牌唯一的实心朱砂色块（实心底上的字用 primary-fg：浅色白字，深色墨字） */
-const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent font-bold leading-none text-primary-fg select-none';
+
 </script>
 
 <template>
@@ -138,7 +139,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
     <!-- 桌面顶栏：方印 + 词标 | 六项主导航（当前项墨色 600 + 朱砂下划线压在顶栏底线上）| 主按钮、AI、深浅色、账号 -->
     <header class="hidden lg:flex h-14 shrink-0 items-center gap-7 border-b border-line bg-canvas px-(--main-px)">
       <router-link to="/workbench" class="flex shrink-0 items-center gap-2.5 rounded-sm" aria-label="仓廪 工作台">
-        <span :class="SEAL" class="size-7 text-[11px]" aria-hidden="true">仓廪</span>
+        <BrandMark :size="32" />
         <span class="flex flex-col leading-[1.15]" aria-hidden="true">
           <span class="text-[15px] font-semibold text-ink">仓廪</span>
           <span class="text-xs text-faint">采购与领用</span>
@@ -190,7 +191,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
         <Menu :items="accountItems" label="管理员">
           <template #trigger>
             <button type="button" :class="buttonClass({ variant: 'ghost', iconOnly: true })" aria-label="账号菜单">
-              <span class="flex size-6.5 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold text-ink" aria-hidden="true">管</span>
+              <AdminAvatar />
             </button>
           </template>
         </Menu>
@@ -200,7 +201,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
     <!-- 手机顶栏：方印 + 词标，右侧快捷直达、AI 助手和主动作（「导入」，导入页里换成「申请」） -->
     <header class="lg:hidden flex h-13.5 shrink-0 items-center gap-2 border-b-2 border-double border-line-strong bg-canvas px-(--main-px)">
       <router-link to="/workbench" class="flex min-w-0 items-center gap-2 rounded-sm" aria-label="仓廪 工作台">
-        <span :class="SEAL" class="size-7 text-[10px] shadow-xs" aria-hidden="true">仓廪</span>
+        <BrandMark :size="28" />
         <span class="flex flex-col leading-[1.15] min-w-0" aria-hidden="true">
           <span class="truncate text-[14px] font-semibold text-ink">仓廪</span>
           <span class="truncate text-[10px] text-faint">采购与领用账册</span>

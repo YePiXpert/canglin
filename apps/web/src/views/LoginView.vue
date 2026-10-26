@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandMark from '@/components/ui/BrandMark.vue';
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Button from '@/components/ui/Button.vue';
@@ -130,8 +131,7 @@ const VALUES = [
   { icon: 'layers', title: '按量采购可追溯', text: '同一明细可分次、分供应商采购，每批数量与成交价都留痕。' },
   { icon: 'inventory', title: '库存与领用同一本账', text: '直接发放、入库、领用与归还都按物品和单位记账。' },
 ];
-/* 朱砂方印：品牌唯一的实心朱砂色块（与顶栏一致；实心底上的字用 primary-fg） */
-const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg-accent text-sm font-bold leading-none text-primary-fg select-none';
+
 </script>
 
 <template>
@@ -143,7 +143,7 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
   <div class="min-h-dvh bg-canvas lg:grid lg:grid-cols-12">
     <aside class="paper-grain hidden border-r border-line lg:col-span-5 lg:flex lg:flex-col lg:px-12 lg:py-12 xl:px-16" aria-label="关于仓廪">
       <div class="flex items-center gap-3">
-        <span :class="SEAL" aria-hidden="true">仓廪</span>
+        <BrandMark :size="40" />
         <div class="min-w-0">
           <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
           <p class="text-[13px] text-muted">采购与领用</p>
@@ -172,7 +172,7 @@ const SEAL = 'flex items-center justify-center size-10 shrink-0 rounded-[5px] bg
       <div class="w-full max-w-[420px] bg-surface border border-line rounded-xl p-6 sm:p-8 animate-pop-in">
         <!-- 品牌：朱砂方印 + 词标（与顶栏一致）；桌面上品牌在左栏，这里不再重复 -->
         <div class="mb-8 flex items-center gap-3 lg:hidden">
-          <span :class="SEAL" aria-hidden="true">仓廪</span>
+          <BrandMark :size="40" />
           <div class="min-w-0">
             <p class="text-lg leading-6 font-semibold text-ink">仓廪</p>
             <p class="text-[13px] text-muted">采购与领用</p>

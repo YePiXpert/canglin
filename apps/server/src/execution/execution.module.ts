@@ -7,6 +7,7 @@ import { WorkflowModule } from '../workflow/workflow.module';
 import { ExecutionController } from './execution.controller';
 import { BatchesService } from './batches.service';
 import { FinanceService } from './finance.service';
+import { SupplierSettlementsService } from './supplier-settlements.service';
 import { InvoicesService } from './invoices.service';
-@Module({ imports: [WorkflowModule, ImportsModule], controllers: [ExecutionController], providers: [InvoiceRecognitionService, BatchesService, FinanceService, InvoicesService, ExceptionsService, DraftsService], exports: [BatchesService, FinanceService, InvoicesService, ExceptionsService, DraftsService] })
+@Module({ imports: [WorkflowModule, ImportsModule], controllers: [ExecutionController], providers: [InvoiceRecognitionService, BatchesService, FinanceService, SupplierSettlementsService, InvoicesService, ExceptionsService, DraftsService], exports: [BatchesService, FinanceService, SupplierSettlementsService, InvoicesService, ExceptionsService, DraftsService] })
 export class ExecutionModule {}
