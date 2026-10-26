@@ -9,7 +9,7 @@ import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestLineRow, typ
 import { suppliersApi, type SupplierRow } from '@/api';
 
 vi.mock('@/api/workflow', () => ({
-  workflowApi: { prices: vi.fn(), purchase: vi.fn() },
+  workflowApi: { prices: vi.fn(), purchase: vi.fn(), registerPurchases: vi.fn() },
 }));
 vi.mock('@/api', () => ({
   suppliersApi: { list: vi.fn(), upsert: vi.fn() },
@@ -78,7 +78,7 @@ const button = (wrapper: VueWrapper, text: string) => {
   if (!found) throw new Error(`没有找到「${text}」按钮`);
   return found;
 };
-const pill = (wrapper: VueWrapper, supplier: string) => wrapper.findAll('button').find((b) => b.text().startsWith(supplier))!;
+const pill = (wrapper: VueWrapper, supplier: string) => wrapper.findAll('button').find((b) => b.attributes('title')?.startsWith('历史成交') && b.text().startsWith(supplier))!;
 async function submit(wrapper: VueWrapper) {
   await button(wrapper, '登记已下单').trigger('click');
   await flushPromises();
@@ -91,6 +91,7 @@ beforeEach(() => {
   supplierApi.list.mockResolvedValue(suppliers);
   api.prices.mockImplementation(async (params = {}) => (params.productId === 1 ? paperQuotes : []));
   api.purchase.mockResolvedValue(RESULT);
+  api.registerPurchases.mockResolvedValue({ documents: [RESULT, { ...RESULT, id: 42 }] });
 });
 
 afterEach(() => {
@@ -172,8 +173,8 @@ describe('PurchaseRegisterDialog', () => {
   it('未选供应商、单价未填时不提交：供应商错误贴在字段下方，行级原因在表下汇总', async () => {
     const wrapper = await mountDialog();
     await submit(wrapper);
-    expect(wrapper.text()).toContain('请选择或新增本次成交的供应商');
-    expect(wrapper.find('[role=alert]').text()).toBe('第 1 行 · 验收纸：请填写本次成交单价第 2 行 · 验收笔：请填写本次成交单价');
+    expect(wrapper.text()).toContain('请选择本次供应商，或为各明细单独选择供应商');
+    expect(wrapper.find('[role=alert]').text()).toBe('第 1 行 · 验收纸：请选择本行供应商；请填写本次成交单价第 2 行 · 验收笔：请选择本行供应商；请填写本次成交单价');
     expect(field(wrapper, '验收纸 成交单价（元/盒）').attributes('aria-invalid')).toBe('true');
     expect(field(wrapper, '验收纸 本次采购数量（盒）').attributes('aria-invalid')).toBeUndefined();
     expect(api.purchase).not.toHaveBeenCalled();
@@ -246,5 +247,36 @@ describe('PurchaseRegisterDialog', () => {
     expect(supplierApi.upsert).toHaveBeenCalledWith({ name: '丙供应商' });
     expect(wrapper.find('[role=combobox]').text()).toBe('丙供应商');
     expect(field(wrapper, '新供应商名称').exists()).toBe(false);
+  });
+
+  it('不选默认供应商也能逐行选择不同供应商，一次提交并分别登记', async () => {
+    const wrapper = await mountDialog();
+    const selects = wrapper.findAllComponents(Select);
+    await selects.find(select => select.props('label') === '验收纸 供应商')!.vm.$emit('update:modelValue', '7');
+    await selects.find(select => select.props('label') === '验收笔 供应商')!.vm.$emit('update:modelValue', '8');
+    await field(wrapper, '验收纸 成交单价（元/盒）').setValue('12');
+    await field(wrapper, '验收笔 成交单价（元/支）').setValue('3');
+    expect(wrapper.text()).toContain('将按 2 家供应商分别生成采购记录');
+    await submit(wrapper);
+    expect(api.purchase).not.toHaveBeenCalled();
+    expect(api.registerPurchases).toHaveBeenCalledWith({ date: TODAY, note: '', settlementMode: 'DETAIL', lines: [
+      { supplierId: 7, requestLineId: 11, quantity: '10', unitPrice: '12' },
+      { supplierId: 8, requestLineId: 12, quantity: '5', unitPrice: '3' },
+    ] });
+    expect(wrapper.emitted('recorded')).toEqual([[RESULT]]);
+  });
+
+  it('改默认供应商不影响单独选定行；本行更换供应商时只清理来自其他供应商的历史价格', async () => {
+    const wrapper = await mountDialog(), lineSelect = wrapper.findAllComponents(Select).find(select => select.props('label') === '验收纸 供应商')!;
+    await lineSelect.vm.$emit('update:modelValue', '7');
+    await pill(wrapper, '甲供应商').trigger('click');
+    await wrapper.findComponent(Select).vm.$emit('update:modelValue', '8'); await flushPromises();
+    expect(field(wrapper, '验收纸 成交单价（元/盒）').element).toHaveProperty('value', '20');
+    await lineSelect.vm.$emit('update:modelValue', '8'); await flushPromises();
+    expect(field(wrapper, '验收纸 成交单价（元/盒）').element).toHaveProperty('value', '');
+    expect(pill(wrapper, '乙供应商').attributes('disabled')).toBeUndefined();
+    await field(wrapper, '验收纸 成交单价（元/盒）').setValue('18');
+    await lineSelect.vm.$emit('update:modelValue', '7'); await flushPromises();
+    expect(field(wrapper, '验收纸 成交单价（元/盒）').element).toHaveProperty('value', '18');
   });
 });

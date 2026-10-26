@@ -1,7 +1,7 @@
 import { http, mutate } from './client';
 import type {
   WorkflowDocumentKind, WorkflowDocumentRow, WorkflowOverview, WorkflowPage,
-  WorkflowPurchaseInput, WorkflowQuery, WorkflowReceiptInput, WorkflowRequestCreateInput,
+  WorkflowPurchaseInput, WorkflowPurchaseUpdateInput, WorkflowPurchaseRegistrationInput, WorkflowPurchaseRegistrationResult, WorkflowQuery, WorkflowReceiptInput, WorkflowRequestCreateInput,
   WorkflowRequestRow, WorkflowStockEntryRow, WorkflowStockRow,
   WorkflowStockInInput, WorkflowDistributionInput, WorkflowSupplierReturnInput,
   WorkflowEmployeeReturnInput, WorkflowPurchaseCancelInput, WorkflowRequestCancelInput,
@@ -41,6 +41,8 @@ export const workflowApi = {
   /** 物品库（品名 + 规格 + 单位） */
   products: () => http.get<WorkflowProductRow[]>('/workflow/products').then((r) => r.data),
   purchase: (body: WorkflowPurchaseInput) => post<WorkflowDocumentRow>('/purchases', body),
+  registerPurchases: (body: WorkflowPurchaseRegistrationInput) => post<WorkflowPurchaseRegistrationResult>('/purchases/register', body),
+  updatePurchase: (id: number, body: WorkflowPurchaseUpdateInput) => write<WorkflowDocumentRow>('patch', `/purchases/${id}`, body),
   receipt: (body: WorkflowReceiptInput) => post<WorkflowDocumentRow>('/receipts', body),
   documents: (params: Partial<WorkflowQuery> & { kind?: WorkflowDocumentKind } = {}) =>
     http.get<WorkflowPage<WorkflowDocumentRow>>('/workflow/documents', { params }).then((r) => r.data),

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestRow, type WorkflowStockRow } from '@/api/workflow';
 import { useToastStore } from '@/stores/toast';
 import PurchaseRegisterDialog from './PurchaseRegisterDialog.vue';
+import PurchaseEditDialog from './PurchaseEditDialog.vue';
 import ReceiptRegisterDialog from './ReceiptRegisterDialog.vue';
 import QuantityCommandDialog, { type QuantityCommand, type QuantityChoice } from './QuantityCommandDialog.vue';
 import VoidDocumentDialog from './VoidDocumentDialog.vue';
@@ -17,6 +18,7 @@ import { apiError } from '@/api/client';
 const emit = defineEmits<{ recorded: [document: WorkflowDocumentRow]; attachmentsChanged: []; linkChanged: [] }>();
 const toast = useToastStore();
 const purchaseOpen = ref(false), purchaseTarget = ref<WorkflowRequestRow | null>(null);
+const purchaseEditOpen = ref(false), purchaseEditTarget = ref<WorkflowDocumentRow | null>(null);
 const receiptOpen = ref(false), receiptTarget = ref<WorkflowDocumentRow | null>(null);
 const commandOpen = ref(false), commandTarget = ref<{ action: QuantityCommand; choices: QuantityChoice[]; context: string; department: string; recipient: string } | null>(null);
 const voidOpen = ref(false), voidTarget = ref<WorkflowDocumentRow | null>(null);
@@ -27,6 +29,13 @@ const inspectionOpen = ref(false), inspectionTarget = ref<{ documentId?: number;
 const linkOpen = ref(false), linkTarget = ref<LinkTarget | null>(null);
 
 function purchase(request: WorkflowRequestRow) { purchaseTarget.value = request; purchaseOpen.value = true; }
+async function editPurchase(document: WorkflowDocumentRow) {
+  try {
+    const latest = await workflowApi.document(document.id);
+    if (latest.purchaseEditReason) { toast.error(latest.purchaseEditReason); return; }
+    purchaseEditTarget.value = latest; purchaseEditOpen.value = true;
+  } catch (cause) { toast.error(apiError(cause)); }
+}
 function receipt(document: WorkflowDocumentRow) { receiptTarget.value = document; receiptOpen.value = true; }
 /** department / recipient：从申请详情发起时带上申请部门与经办人（直接发放默认发给经办人，docs/manual-entry-2026-10.md P3） */
 function command(action: QuantityCommand, choices: QuantityChoice[], context = '', department = '', recipient = '') { commandTarget.value = { action, choices, context, department, recipient }; commandOpen.value = true; }
@@ -46,13 +55,14 @@ async function refreshAttachments() {
     emit('attachmentsChanged');
   } catch (cause) { toast.error(apiError(cause)); }
 }
-function closeAll() { purchaseOpen.value = receiptOpen.value = commandOpen.value = voidOpen.value = metadataOpen.value = adjustmentOpen.value = attachmentsOpen.value = inspectionOpen.value = linkOpen.value = false; }
+function closeAll() { purchaseOpen.value = purchaseEditOpen.value = receiptOpen.value = commandOpen.value = voidOpen.value = metadataOpen.value = adjustmentOpen.value = attachmentsOpen.value = inspectionOpen.value = linkOpen.value = false; }
 function recorded(document: WorkflowDocumentRow) { toast.success('业务登记已保存'); emit('recorded', document); }
-defineExpose({ purchase, receipt, command, voidDocument, metadata, adjust, attachments, inspectDocument, inspectLine, editLink, closeAll });
+defineExpose({ purchase, editPurchase, receipt, command, voidDocument, metadata, adjust, attachments, inspectDocument, inspectLine, editLink, closeAll });
 </script>
 
 <template>
   <PurchaseRegisterDialog v-if="purchaseTarget" v-model:open="purchaseOpen" :request="purchaseTarget" @recorded="recorded" />
+  <PurchaseEditDialog v-if="purchaseEditTarget" v-model:open="purchaseEditOpen" :document="purchaseEditTarget" @recorded="recorded" />
   <ReceiptRegisterDialog v-if="receiptTarget" v-model:open="receiptOpen" :purchase="receiptTarget" @recorded="recorded" />
   <QuantityCommandDialog v-if="commandTarget" v-model:open="commandOpen" :action="commandTarget.action" :choices="commandTarget.choices" :context="commandTarget.context" :department="commandTarget.department" :recipient="commandTarget.recipient" @recorded="recorded" />
   <VoidDocumentDialog v-if="voidTarget" v-model:open="voidOpen" :document="voidTarget" @recorded="recorded" />

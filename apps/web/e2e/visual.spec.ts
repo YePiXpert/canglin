@@ -236,6 +236,26 @@ for (const variant of VARIANTS) {
       await shot(page, `${v}-dialog-create`);
     });
 
+    test('修改采购弹窗', async ({ page }) => {
+      test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
+      await page.clock.setFixedTime(NOW);
+      if (variant.dark) await page.addInitScript(() => { localStorage.setItem('canglin-theme', 'dark'); });
+      expect((await page.request.post('/api/auth/login', { data: { password } })).ok()).toBeTruthy();
+      await page.goto(`/requests/${seed!.r3}`); await settle(page);
+      await page.getByRole('button', { name: '修改采购', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '修改采购', exact: true });
+      await expect(dialog).toBeVisible();
+      await page.getByLabel('订书机 采购数量（个）', { exact: true }).fill('8');
+      await page.getByLabel('订书机 成交单价（元/个）', { exact: true }).fill('18.5');
+      await page.getByLabel('修改原因', { exact: true }).fill('核实订单：多购3个备货，修正成交价');
+      await dialog.getByLabel('采购日期', { exact: true }).scrollIntoViewIfNeeded();
+      await shot(page, `${variant.name}-dialog-purchase-edit`);
+      await page.getByLabel('修改原因', { exact: true }).fill('');
+      await dialog.getByRole('button', { name: '保存采购修改', exact: true }).click();
+      await expect(dialog.getByText('请填写修改原因', { exact: true })).toBeVisible();
+      await shot(page, `${variant.name}-dialog-purchase-edit-error`);
+    });
+
     test('零散与多购采购弹窗', async ({ page }) => {
       test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
       await page.clock.setFixedTime(NOW);
@@ -250,6 +270,14 @@ for (const variant of VARIANTS) {
       await expect(page.getByText('多购备货 2 台', { exact: true })).toBeVisible();
       await expect(page.getByLabel('机械键盘 成交单价（元/把）', { exact: true })).toBeDisabled();
       await shot(page, `${variant.name}-dialog-purchase-surplus`);
+      const dialog = page.getByRole('dialog', { name: '登记本次采购', exact: true });
+      await dialog.getByRole('combobox', { name: '本次供应商', exact: true }).press('ArrowDown'); await page.getByRole('option', { name: '晨光文具（北京）', exact: true }).click();
+      await page.getByLabel('机械键盘 本次采购数量（把）', { exact: true }).fill('2');
+      await dialog.getByRole('combobox', { name: '机械键盘 供应商', exact: true }).press('ArrowDown'); await page.getByRole('option', { name: '得力办公直营', exact: true }).click();
+      await page.getByLabel('显示器 成交单价（元/台）', { exact: true }).fill('1373');
+      await page.getByLabel('机械键盘 成交单价（元/把）', { exact: true }).fill('50');
+      await expect(dialog.getByText(/将按 2 家供应商分别生成采购记录/)).toBeVisible();
+      await shot(page, `${variant.name}-dialog-purchase-suppliers`);
     });
   });
 }

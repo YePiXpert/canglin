@@ -16,7 +16,7 @@ import { PAYMENT_STATUS_LABELS, moneyText, parseFixed } from '@canglin/shared';
  *   已撤销 / 付款 / 开票 chip，右侧金额；下面是明细行；最后是动作：「登记到货」是主按钮，「撤销登记」ghost 靠右。
  */
 const props = defineProps<{ document: WorkflowDocumentRow; readonly?: boolean; row?: boolean }>();
-const emit = defineEmits<{ receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number]; link: [line: WorkflowDocumentLineRow, document: WorkflowDocumentRow] }>();
+const emit = defineEmits<{ purchaseEdit: [document: WorkflowDocumentRow]; receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number]; link: [line: WorkflowDocumentLineRow, document: WorkflowDocumentRow] }>();
 const choices = computed<QuantityChoice[]>(() => props.document.lines.filter((line) => line.remainingQuantity !== '0').map((line) => ({ id: line.id, itemName: line.itemName, specification: line.specification, unit: line.unit, available: line.remainingQuantity, sourceHint: `${documentKindLabels[props.document.kind]} #${props.document.id} · 明细 #${line.id}${line.recipient ? ' · ' + line.recipient : ''}`, location: 'RECEIVING' })));
 function command(action: QuantityCommand) { emit('command', action, choices.value, `${documentKindLabels[props.document.kind]} #${props.document.id}`); }
 const refundReduction = computed(() => moneyText(props.document.lines.reduce((sum, line) => sum + parseFixed(line.purchaseReductionAmount ?? '0', 2), 0n)));
@@ -71,11 +71,12 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
     </ul>
     <p v-if="document.attachments.length" class="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"><a v-for="attachment in document.attachments" :key="attachment.id" :href="`/api/attachments/${attachment.id}/download`" target="_blank" rel="noopener" :class="buttonClass({ variant: 'link' })"><Icon name="file" :size="13" />{{ attachment.filename }}</a></p>
     <footer v-if="posted && !readonly" class="mt-3 flex flex-wrap items-center gap-1.5">
-      <template v-if="document.kind === 'PURCHASE'"><Button v-if="choices.length" size="sm" variant="primary" @click="emit('receipt', document)">登记到货</Button><Button v-if="choices.length" size="sm" @click="command('PURCHASE_CANCEL')">取消未到货量</Button><Button size="sm" @click="emit('metadata', document)">付款与发票</Button></template>
+      <template v-if="document.kind === 'PURCHASE'"><Button v-if="choices.length" size="sm" variant="primary" @click="emit('receipt', document)">登记到货</Button><Button v-if="choices.length" size="sm" @click="command('PURCHASE_CANCEL')">取消未到货量</Button><Button size="sm" :disabled="!!document.purchaseEditReason" @click="emit('purchaseEdit', document)">修改采购</Button><Button size="sm" @click="emit('metadata', document)">付款与发票</Button></template>
       <template v-if="document.kind === 'RECEIPT' && choices.length"><Button size="sm" @click="command('DIRECT')">直接发放</Button><Button size="sm" @click="command('STOCK_IN')">登记入库</Button><Button size="sm" @click="command('SUPPLIER_RETURN')">退回供应商</Button></template>
       <Button v-if="document.kind === 'DISTRIBUTION' && choices.length" size="sm" @click="command('EMPLOYEE_RETURN')">员工归还</Button>
       <Button v-if="document.kind === 'DISTRIBUTION'" size="sm" @click="emit('attachments', document)">签收凭证</Button>
       <Button variant="ghost" size="sm" class="ml-auto" @click="emit('void', document)">撤销登记</Button>
     </footer>
+    <p v-if="posted && !readonly && document.kind === 'PURCHASE' && document.purchaseEditReason" class="mt-2 text-meta">修改采购：{{ document.purchaseEditReason }}</p>
   </article>
 </template>

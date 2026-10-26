@@ -159,7 +159,8 @@ const CHIP =
           label="申请部门"
           required
           :error="errors.department"
-          :hint="departmentAuto ? '按以往记录' : undefined"
+          placeholder="输入新部门或选择已有部门"
+          :hint="departmentAuto ? '按以往记录；也可直接改填' : '可直接填写新部门，保存后加入候选'"
           :disabled="disabled"
           empty-text="还没有用过的部门，直接填写"
           @update:model-value="editDepartment"
@@ -171,6 +172,8 @@ const CHIP =
           :model-value="handler"
           :options="handlerChoices"
           label="经办人"
+          placeholder="输入新姓名或选择已有人员"
+          hint="可直接填写新人员，保存后加入候选"
           required
           :error="errors.handler"
           :disabled="disabled"

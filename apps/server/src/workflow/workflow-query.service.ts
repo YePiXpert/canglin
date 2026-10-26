@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AiSearchService } from '../ai/ai-search.service';
 import { documentInclude, purchaseRequestQuantity, requestInclude, snapshot, sum, type DocumentRecord, type RequestRecord, type Tx } from './workflow-records';
+import { purchaseEditDependencies, purchaseEditReason } from './purchase-edit';
 
 /** 链接按规范地址返回：存量里带跟踪参数的商城链接（回填的申请链接、早先登记的采购链接）不改写数据也能直接用 */
 const link = (value: string | null) => (value ? canonicalLink(value) : null);
@@ -98,12 +99,13 @@ export class WorkflowQueryService {
     const receiptIds = documents.filter((document) => document.kind === 'RECEIPT').flatMap((document) => document.lines.map((line) => line.id));
     const allocatedIds = documents.filter((document) => ['DISTRIBUTION', 'EMPLOYEE_RETURN'].includes(document.kind)).flatMap((document) => document.lines.map((line) => line.id));
     const purchaseIds = documents.filter(d => d.kind === 'PURCHASE').map(d => d.id);
-    const [settlements, managed] = await Promise.all([settlementsTx(tx, { id: { in: purchaseIds } }), tx.invoiceAllocation.findMany({ where: { documentId: { in: purchaseIds }, invoice: { status: { not: 'VOIDED' } } }, select: { documentId: true } })]);
+    const [settlements, dependencies] = await Promise.all([settlementsTx(tx, { id: { in: purchaseIds } }), purchaseEditDependencies(tx, purchaseIds)]);
     const [balances, allocations] = await Promise.all([
       tx.stockBalance.findMany({ where: { originLineId: { in: receiptIds }, location: 'RECEIVING' } }),
       tx.stockEntry.findMany({ where: { businessLineId: { in: allocatedIds }, reversalOfId: null }, include: { originLine: { include: { requestLine: { include: { request: true } } } } }, orderBy: { id: 'asc' } }),
     ]);
-    return documents.map((document) => { const settlement = settlements.find(s => s.documentId === document.id), invoiceManaged = document.settlementMode === 'DETAIL' || managed.some(a => a.documentId === document.id); return ({
+    return documents.map((document) => { const settlement = settlements.find(s => s.documentId === document.id), invoiceManaged = document.settlementMode === 'DETAIL' || dependencies.invoices.has(document.id); return ({
+      ...(document.kind === 'PURCHASE' ? { purchaseVersion: document.settlementVersion, purchaseEditReason: purchaseEditReason(document, dependencies) } : {}),
       ...(document.stocktake ? { stocktakeId: document.stocktake.id } : {}),
       id: document.id, kind: document.kind as WorkflowDocumentKind, date: document.date,
       status: document.status as 'POSTED' | 'VOIDED', supplierId: document.supplierId, supplierName: document.supplierName,
@@ -119,6 +121,7 @@ export class WorkflowQueryService {
         requestId: line.requestLine?.requestId ?? null, serialNumber: line.requestLine?.request.serialNumber ?? null,
         ...snapshot(line), quantity: quantityText(line.quantityUnits),
         ...(document.kind === 'PURCHASE' && line.overPurchaseUnits > 0n ? { overPurchaseQuantity: quantityText(line.quantityUnits - line.cancelledUnits - purchaseRequestQuantity(line)) } : {}),
+        ...(document.kind === 'PURCHASE' && line.requestLine ? { purchaseAvailableQuantity: quantityText(line.requestLine.quantityUnits - line.requestLine.cancelledUnits - line.requestLine.orderedUnits + sum(document.lines.filter(entry => entry.requestLineId === line.requestLineId).map(entry => purchaseRequestQuantity(entry)))) } : {}),
         unitPrice: line.unitPriceUnits === null ? null : priceText(line.unitPriceUnits),
         amount: line.amountUnits === null ? null : moneyText(line.amountUnits),
         purchaseReductionAmount: line.purchaseReductionAmountUnits === null ? null : moneyText(line.purchaseReductionAmountUnits),

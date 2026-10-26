@@ -1,13 +1,13 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type BusinessLine } from '@prisma/client';
 import {
-  MAX_FIXED_UNITS, autoSerialPrefix, lineAmountUnits, priceUnits, quantityText, quantityUnits,
+  MAX_FIXED_UNITS, autoSerialPrefix, lineAmountUnits, moneyText, priceText, priceUnits, quantityText, quantityUnits,
   workflowRequestCreateSchema, workflowRequestUpdateSchema, type WorkflowRequestCreateInput, type WorkflowRequestUpdateInput, type WorkflowPurchaseInput,
   type WorkflowReceiptInput, type WorkflowRequestRow, type WorkflowLocation, type WorkflowDocumentKind,
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput,
-  type WorkflowProductCreateInput, type WorkflowLinkUpdateInput,
+  type WorkflowProductCreateInput, type WorkflowLinkUpdateInput, type WorkflowPurchaseUpdateInput, type WorkflowPurchaseRegistrationInput,
   type PaymentBatchInput, type PaymentBatchResult,
 } from '@canglin/shared';
 import fs from 'node:fs';
@@ -16,7 +16,8 @@ import { config } from '../config';
 import { PrismaService } from '../prisma/prisma.service';
 import { operation } from '../common/operation';
 import { WorkflowQueryService } from './workflow-query.service';
-import { purchaseRequestQuantity, snapshot, sum, type Tx } from './workflow-records';
+import { documentInclude, purchaseRequestQuantity, snapshot, sum, type Tx } from './workflow-records';
+import { purchaseEditDependencies, purchaseEditReason } from './purchase-edit';
 import { settlementsTx } from '../execution/settlement-query';
 
 type SourceLine = Prisma.BusinessLineGetPayload<{ include: { document: true; sourceLine: { include: { document: true } } } }>;
@@ -232,6 +233,7 @@ export class WorkflowService {
       if (line.document.status !== 'POSTED') throw new ConflictException('已撤销的采购不能修改');
       audit.previous = line.purchaseLink;
       await tx.businessLine.update({ where: { id }, data: { purchaseLink: input.purchaseLink } });
+      await tx.businessDocument.update({ where: { id: line.documentId }, data: { settlementVersion: { increment: 1 } } });
       return this.query.documentTx(tx, line.documentId);
     });
   }
@@ -324,6 +326,58 @@ export class WorkflowService {
 
   async purchase(input: WorkflowPurchaseInput, key: string, ip?: string) {
     return this.write('purchase', input, key, ip, tx => this.purchaseTx(tx, input));
+  }
+
+  async registerPurchases(input: WorkflowPurchaseRegistrationInput, key: string, ip?: string) {
+    return this.write('purchase_registration', input, key, ip, async (tx, audit) => {
+      const groups = new Map<number, WorkflowPurchaseInput['lines']>();
+      for (const { supplierId, ...line } of input.lines) groups.set(supplierId, [...(groups.get(supplierId) ?? []), line]);
+      const documents = [];
+      for (const [supplierId, lines] of groups) documents.push(await this.purchaseTx(tx, { date: input.date, note: input.note, settlementMode: input.settlementMode, supplierId, lines }));
+      audit.documentIds = documents.map(document => document.id);
+      return { documents };
+    });
+  }
+
+  async updatePurchase(id: number, input: WorkflowPurchaseUpdateInput, key: string, ip?: string) {
+    return this.write('purchase_update', { id, ...input }, key, ip, async (tx, audit) => {
+      const document = await tx.businessDocument.findUnique({ where: { id }, include: documentInclude });
+      if (!document || document.kind !== 'PURCHASE') throw new NotFoundException('采购单不存在');
+      if (document.settlementVersion !== input.version) throw new ConflictException('采购记录已变化，请关闭弹窗并刷新后重新核对');
+      const blocked = purchaseEditReason(document, await purchaseEditDependencies(tx, [id]));
+      if (blocked) throw new ConflictException(blocked);
+      const edits = new Map(input.lines.map(line => [line.id, line]));
+      if (edits.size !== input.lines.length || edits.size !== document.lines.length || document.lines.some(line => !edits.has(line.id)))
+        throw new BadRequestException('请提交这张采购单的全部原明细，不能增加、删除或替换明细');
+      const supplier = await tx.supplier.findUnique({ where: { id: input.supplierId } });
+      if (!supplier) throw new NotFoundException('供应商不存在');
+      const updated = await tx.businessDocument.updateMany({ where: { id, status: 'POSTED', settlementVersion: input.version }, data: { date: input.date, supplierId: supplier.id, supplierName: supplier.name, note: input.note ?? null, settlementVersion: { increment: 1 } } });
+      if (!updated.count) throw new ConflictException('采购记录已变化，请刷新后重新核对');
+      audit.previous = {
+        date: document.date, supplierId: document.supplierId, supplierName: document.supplierName, note: document.note,
+        totalAmount: moneyText(document.totalAmountUnits ?? 0n), version: document.settlementVersion,
+        lines: document.lines.map(line => ({ id: line.id, quantity: quantityText(line.quantityUnits), overPurchaseQuantity: quantityText(line.overPurchaseUnits), unitPrice: priceText(line.unitPriceUnits!), purchaseLink: line.purchaseLink })),
+      };
+      // 先归还本单占用的申请需求，再按原明细编号重新分配；任何冲突整单回滚。
+      for (const line of document.lines) await this.changeRequestCounters(tx, line.requestLineId!, -purchaseRequestQuantity(line));
+      let total = 0n;
+      for (const line of document.lines) {
+        const edit = edits.get(line.id)!;
+        const source = await tx.procurementLine.findUniqueOrThrow({ where: { id: line.requestLineId! }, include: { request: true } });
+        this.afterSourceDate(input.date, source.request.requestDate);
+        const quantity = quantityUnits(edit.quantity), price = priceUnits(edit.unitPrice);
+        const remaining = source.quantityUnits - source.cancelledUnits - source.orderedUnits;
+        const extra = quantityUnits(edit.overPurchaseQuantity ?? '0');
+        if (extra !== (quantity > remaining ? quantity - remaining : 0n))
+          throw new ConflictException('申请待采购数量已变化，请刷新并重新核对多购备货数量');
+        await this.changeRequestCounters(tx, source.id, quantity - extra);
+        const amount = bounded(lineAmountUnits(quantity, price));
+        total = bounded(total + amount);
+        await tx.businessLine.update({ where: { id: line.id }, data: { quantityUnits: quantity, overPurchaseUnits: extra, unitPriceUnits: price, amountUnits: amount, purchaseLink: edit.purchaseLink ?? null } });
+      }
+      await tx.businessDocument.update({ where: { id }, data: { totalAmountUnits: total } });
+      return this.query.documentTx(tx, id);
+    });
   }
 
   /** Caller owns the transaction, audit and idempotency receipt. */
@@ -581,7 +635,7 @@ export class WorkflowService {
       if (input.invoiceIssued !== undefined && await tx.invoiceAllocation.count({ where: { documentId: id, invoice: { status: { not: 'VOIDED' } } } })) throw new ConflictException('该采购已有票据匹配记录，请在发票池处理');
       if (document.status !== 'POSTED') throw new ConflictException('已撤销的记录不能修改');
       if (document.kind !== 'PURCHASE' && (input.paymentStatus !== undefined || input.invoiceIssued !== undefined)) throw new BadRequestException('付款和开票状态请在采购单上登记');
-      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(input.paymentStatus !== undefined || input.invoiceIssued !== undefined ? { settlementVersion: { increment: 1 } } : {}) } });
+      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(document.kind === 'PURCHASE' ? { settlementVersion: { increment: 1 } } : {}) } });
       return this.query.documentTx(tx, id);
     });
   }

@@ -100,21 +100,51 @@ export type WorkflowRequestCreateInput = z.input<typeof workflowRequestCreateSch
 export const workflowRequestUpdateSchema = z.object(headerFields).superRefine(checkSerial);
 export type WorkflowRequestUpdateInput = z.input<typeof workflowRequestUpdateSchema>;
 
+const purchaseLineFields = {
+  requestLineId: idSchema,
+  quantity: workflowQuantitySchema,
+  /** 本次超出待采购量的备货数量；不占用申请数量，实际收货后再入库。 */
+  overPurchaseQuantity: workflowQuantitySchema.optional(),
+  unitPrice: workflowPriceSchema,
+  purchaseLink: linkSchema.optional(),
+};
+const validSurplus = (line: { quantity: string; overPurchaseQuantity?: string }) => !line.overPurchaseQuantity || quantityUnits(line.overPurchaseQuantity) <= quantityUnits(line.quantity);
 export const workflowPurchaseSchema = z.object({
   settlementMode: z.enum(['LEGACY', 'DETAIL']).optional(),
   date: workflowDateSchema,
   supplierId: idSchema,
   note: noteSchema,
-  lines: z.array(z.object({
-    requestLineId: idSchema,
-    quantity: workflowQuantitySchema,
-    /** 本次超出待采购量的备货数量；不占用申请数量，实际收货后再入库。 */
-    overPurchaseQuantity: workflowQuantitySchema.optional(),
-    unitPrice: workflowPriceSchema,
-    purchaseLink: linkSchema.optional(),
-  }).refine(line => !line.overPurchaseQuantity || quantityUnits(line.overPurchaseQuantity) <= quantityUnits(line.quantity), '多购数量不能超过本次采购数量')).min(1).max(200),
+  lines: z.array(z.object(purchaseLineFields).refine(validSurplus, '多购数量不能超过本次采购数量')).min(1).max(200),
 });
 export type WorkflowPurchaseInput = z.infer<typeof workflowPurchaseSchema>;
+
+/** 一次登记多家供应商，全部明细一起提交，按供应商生成独立采购记录。 */
+export const workflowPurchaseRegistrationSchema = z.object({
+  settlementMode: z.enum(['LEGACY', 'DETAIL']).optional(),
+  date: workflowDateSchema,
+  note: noteSchema,
+  lines: z.array(z.object({ ...purchaseLineFields, supplierId: idSchema }).refine(validSurplus, '多购数量不能超过本次采购数量')).min(1).max(200)
+    .refine(lines => new Set(lines.map(line => line.requestLineId)).size === lines.length, '一次登记中每条申请明细只能出现一次'),
+});
+export type WorkflowPurchaseRegistrationInput = z.infer<typeof workflowPurchaseRegistrationSchema>;
+export interface WorkflowPurchaseRegistrationResult { documents: WorkflowDocumentRow[] }
+
+/** 原采购明细原位纠错，保留单据与明细编号；版本和多购数量均由服务端重新核对。 */
+export const workflowPurchaseUpdateSchema = z.object({
+  version: z.number().int().nonnegative(),
+  date: workflowDateSchema,
+  supplierId: idSchema,
+  note: noteSchema,
+  reason: z.string().trim().min(1, '请填写修改原因').max(500),
+  lines: z.array(z.object({
+    id: idSchema,
+    quantity: workflowQuantitySchema,
+    overPurchaseQuantity: workflowQuantitySchema.optional(),
+    unitPrice: workflowPriceSchema,
+    purchaseLink: linkSchema.nullish(),
+  }).refine(line => !line.overPurchaseQuantity || quantityUnits(line.overPurchaseQuantity) <= quantityUnits(line.quantity), '多购数量不能超过采购数量')).min(1).max(200),
+});
+export type WorkflowPurchaseUpdateInput = z.infer<typeof workflowPurchaseUpdateSchema>;
 
 /** 更换申请明细或采购明细的链接；null / 空串表示去掉链接 */
 export const workflowLinkUpdateSchema = z.object({ purchaseLink: linkSchema.nullable() });
@@ -256,12 +286,16 @@ export interface WorkflowDocumentLineRow {
   quantity: string; unitPrice: string | null; amount: string | null; purchaseLink: string | null;
   /** 本采购行当前仍有效的多购部分。 */
   overPurchaseQuantity?: string;
+  /** 修改采购时，同一申请明细可重新分配的需求总量（含本单原来占用的数量）。 */
+  purchaseAvailableQuantity?: string;
   purchaseReductionAmount: string | null;
   recipient: string | null; location: WorkflowLocation | null; reason: string | null;
   receivedQuantity: string; remainingQuantity: string;
   sourceAllocations?: { originLineId: number; quantity: string; requestId: number | null; serialNumber: string | null }[];
 }
 export interface WorkflowDocumentRow {
+  purchaseVersion?: number;
+  purchaseEditReason?: string | null;
   settlement?: import('./execution.js').SettlementRow;
   invoiceManaged?: boolean;
   settlementMode?: 'LEGACY' | 'DETAIL';

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { canonicalLink, isShortLink, isWebLink, linkIssue, lineAmountUnits, moneyText, quantityText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@canglin/shared';
+import { canonicalLink, isShortLink, isWebLink, linkIssue, lineAmountUnits, moneyText, quantityText, quantityUnits, priceUnits, workflowPurchaseRegistrationSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestRow } from '@/api/workflow';
 import { suppliersApi, type SupplierRow } from '@/api';
 import { apiError } from '@/api/client';
@@ -35,16 +35,19 @@ const newSupplierName = ref('');
 const newSupplierOpen = ref(false);
 const creatingSupplier = ref(false);
 /** requestLink：申请里附的链接（OA 原件上的商城链接），链接框默认填它，换供应商清掉历史价时退回它 */
-const lines = ref<{ id: number; productId: number; itemName: string; specification: string; unit: string; maximum: string; selected: boolean; quantity: string; unitPrice: string; purchaseLink: string; requestLink: string; quotes: WorkflowPriceRow[]; quotesFailed: boolean; appliedFrom: number | null; appliedLink: string | null }[]>([]);
+const lines = ref<{ id: number; productId: number; itemName: string; specification: string; unit: string; maximum: string; selected: boolean; quantity: string; unitPrice: string; supplierId: string; purchaseLink: string; requestLink: string; quotes: WorkflowPriceRow[]; quotesFailed: boolean; appliedFrom: number | null; appliedLink: string | null }[]>([]);
 type Line = (typeof lines.value)[number];
-const snapshot = () => JSON.stringify({ form, lines: lines.value.map((line) => ({ id: line.id, selected: line.selected, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink })), newSupplierName: newSupplierName.value });
+const snapshot = () => JSON.stringify({ form, lines: lines.value.map((line) => ({ id: line.id, selected: line.selected, quantity: line.quantity, unitPrice: line.unitPrice, supplierId: line.supplierId, purchaseLink: line.purchaseLink })), newSupplierName: newSupplierName.value });
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 const supplierOptions = computed(() => suppliers.value.map((supplier) => ({ label: supplier.name, value: String(supplier.id) })));
+const lineSupplierOptions = computed(() => [{ label: `沿用本次供应商${form.supplierId ? `（${suppliers.value.find(row => row.id === Number(form.supplierId))?.name ?? ''}）` : '（请先选择）'}`, value: '__default__' }, ...supplierOptions.value]);
+const effectiveSupplier = (line: Line) => line.supplierId || form.supplierId;
 /** 行级错误的顺序与列一致：本次数量在前、成交单价在后 */
 function skipped(line: Line) { try { return quantityUnits(line.quantity) === 0n; } catch { return false; } }
 function surplus(line: Line) { try { const extra = quantityUnits(line.quantity) - quantityUnits(line.maximum); return extra > 0n ? quantityText(extra) : '0'; } catch { return '0'; } }
 const purchasing = computed(() => lines.value.filter(line => line.selected && !skipped(line)));
-const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => line.selected && !skipped(line) ? [`quantity.${line.id}`, `price.${line.id}`, `link.${line.id}`] : []);
+const supplierCount = computed(() => new Set(purchasing.value.map(effectiveSupplier).filter(Boolean)).size);
+const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => line.selected && !skipped(line) ? [`supplier.${line.id}`, `quantity.${line.id}`, `price.${line.id}`, `link.${line.id}`] : []);
 watch(() => props.open, async (open, _previous, onCleanup) => {
   let current = true;
   onCleanup(() => { current = false; });
@@ -55,7 +58,7 @@ watch(() => props.open, async (open, _previous, onCleanup) => {
     return {
       id: line.id, productId: line.productId, itemName: line.itemName, specification: line.specification, unit: line.unit,
       maximum: line.pendingPurchaseQuantity, selected: true, quantity: line.pendingPurchaseQuantity,
-      unitPrice: '', purchaseLink: requestLink, requestLink, quotes: [], quotesFailed: false, appliedFrom: null, appliedLink: null,
+      unitPrice: '', supplierId: '', purchaseLink: requestLink, requestLink, quotes: [], quotesFailed: false, appliedFrom: null, appliedLink: null,
     };
   });
   newSupplierName.value = '';
@@ -93,19 +96,25 @@ async function loadSuppliers(): Promise<void> {
 
 watch(() => form.supplierId, (value) => {
   clearedPrices.value = 0;
-  if (!value) return;
   for (const line of lines.value) {
-    if (line.appliedFrom == null || line.appliedFrom === Number(value)) continue;
-    line.unitPrice = '';
-    if (line.purchaseLink === line.appliedLink) line.purchaseLink = line.requestLink;
-    line.appliedFrom = null;
-    line.appliedLink = null;
-    clearedPrices.value++;
+    if (!line.supplierId) clearOtherQuote(line, value);
   }
 });
+function clearOtherQuote(line: Line, supplierId: string) {
+  if (line.appliedFrom == null || line.appliedFrom === Number(supplierId)) return;
+  line.unitPrice = '';
+  if (line.purchaseLink === line.appliedLink) line.purchaseLink = line.requestLink;
+  line.appliedFrom = null; line.appliedLink = null; clearedPrices.value++;
+}
+function selectLineSupplier(line: Line, value: string) {
+  line.supplierId = value === '__default__' ? '' : value;
+  clearedPrices.value = 0; clearOtherQuote(line, effectiveSupplier(line));
+  delete errors.value[`supplier.${line.id}`];
+}
 function applyQuote(line: Line, quote: WorkflowPriceRow) {
-  if (form.supplierId && Number(form.supplierId) !== quote.supplierId) return;
-  form.supplierId = String(quote.supplierId);
+  const supplierId = effectiveSupplier(line);
+  if (supplierId && Number(supplierId) !== quote.supplierId) return;
+  if (!supplierId) form.supplierId = String(quote.supplierId);
   line.unitPrice = quote.unitPrice;
   const link = quote.purchaseLink ? canonicalLink(quote.purchaseLink) : null;
   if (link) line.purchaseLink = link;
@@ -154,10 +163,11 @@ async function save() {
   // 上一次的提交失败先清掉：否则页脚的旧 alert 会和这次的行级错误同时出现
   failure.value = '';
   const invalid: Record<string, string> = {};
-  if (!form.supplierId) invalid.supplierId = '请选择或新增本次成交的供应商';
   const selected = purchasing.value;
+  if (!form.supplierId && selected.some(line => !line.supplierId)) invalid.supplierId = '请选择本次供应商，或为各明细单独选择供应商';
   if (!selected.length) invalid.lines = '请至少选择一条明细并填写大于 0 的采购数量';
   for (const line of selected) {
+    if (!effectiveSupplier(line)) invalid[`supplier.${line.id}`] = '请选择本行供应商';
     const quantity = quantityError(line.quantity);
     const price = priceError(line.unitPrice);
     if (quantity) invalid[`quantity.${line.id}`] = quantity;
@@ -165,11 +175,20 @@ async function save() {
     const link = linkIssue(line.purchaseLink);
     if (link) invalid[`link.${line.id}`] = link;
   }
-  const parsed = workflowPurchaseSchema.safeParse({ ...form, settlementMode: 'DETAIL', supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, ...(surplus(line) !== '0' ? { overPurchaseQuantity: surplus(line) } : {}), unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
+  const parsed = workflowPurchaseRegistrationSchema.safeParse({ date: form.date, note: form.note, settlementMode: 'DETAIL', lines: selected.map((line) => ({ requestLineId: line.id, supplierId: effectiveSupplier(line), quantity: line.quantity, ...(surplus(line) !== '0' ? { overPurchaseQuantity: surplus(line) } : {}), unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
   if (!parsed.success) { failure.value = issueText(parsed.error); return; }
-  const result = await submit(() => workflowApi.purchase(parsed.data));
+  const result = await submit(async () => {
+    const { lines: rows, ...header } = parsed.data;
+    if (new Set(rows.map(line => line.supplierId)).size === 1)
+      return workflowApi.purchase({ ...header, supplierId: rows[0].supplierId, lines: rows.map(line => ({
+        requestLineId: line.requestLineId, quantity: line.quantity, unitPrice: line.unitPrice,
+        ...(line.overPurchaseQuantity ? { overPurchaseQuantity: line.overPurchaseQuantity } : {}),
+        ...(line.purchaseLink ? { purchaseLink: line.purchaseLink } : {}),
+      })) });
+    return (await workflowApi.registerPurchases(parsed.data)).documents[0];
+  });
   if (result === undefined) return;
   emit('update:open', false);
   emit('recorded', result);
@@ -187,11 +206,12 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
 </script>
 
 <template>
-  <Dialog :open="open" title="登记本次采购" :description="`${request.serialNumber} · 同一明细可分次向不同供应商采购`" width="880px" :dirty="dirty && !saving" :persistent="saving || creatingSupplier" @update:open="emit('update:open', $event)">
+  <Dialog :open="open" title="登记本次采购" :description="`${request.serialNumber} · 可按明细选择不同供应商，一次登记分别留存`" width="880px" :dirty="dirty && !saving" :persistent="saving || creatingSupplier" @update:open="emit('update:open', $event)">
     <div class="grid gap-4 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
       <Input v-model="form.date" label="采购日期" type="date" required :disabled="saving" />
       <div class="min-w-0">
-        <Select v-model="form.supplierId" label="本次供应商" required :options="supplierOptions" :disabled="saving || loadingSuppliers" :error="errors.supplierId" :placeholder="loadingSuppliers ? '正在加载供应商…' : '选择本次成交供应商'" />
+        <Select v-model="form.supplierId" label="本次供应商" :options="supplierOptions" :disabled="saving || loadingSuppliers" :error="errors.supplierId" :placeholder="loadingSuppliers ? '正在加载供应商…' : '选择默认供应商，或在明细中分别选择'" />
+        <p class="mt-1.5 text-meta">默认用于本次明细；每行也可单独选择其他供应商。</p>
         <Notice v-if="supplierError" tone="red" variant="inline" size="sm" role="alert" class="mt-1.5">
           {{ supplierError }}
           <template #actions><Button variant="link" class="text-xs" :loading="loadingSuppliers" @click="loadSuppliers">重试</Button></template>
@@ -249,13 +269,17 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
         </tr>
         <tr v-if="line.selected" :class="EXTRA_ROW">
           <td colspan="3" class="sm:pt-0 sm:pb-3">
+            <div v-if="!skipped(line)" class="mb-2 flex flex-wrap items-center gap-2 sm:pl-5.5">
+              <span class="text-meta">本行供应商</span>
+              <Select :model-value="line.supplierId || '__default__'" :options="lineSupplierOptions" :label="`${line.itemName} 供应商`" size="sm" :disabled="saving || loadingSuppliers" :error="errors[`supplier.${line.id}`]" class="min-w-0 flex-1 [&>span]:sr-only" @update:model-value="selectLineSupplier(line, $event)" />
+            </div>
             <p v-if="skipped(line)" class="text-meta sm:pl-5.5">本次不采购，无需填写单价，下次可继续下单。</p>
             <p v-else-if="loadingQuotes" class="text-meta sm:pl-5.5">正在查询历史成交价…</p>
             <p v-else-if="line.quotesFailed" class="text-meta sm:pl-5.5">历史成交价暂不可用，可直接填写本次实际单价。</p>
             <p v-else-if="!line.quotes.length" class="text-meta sm:pl-5.5">暂无同品名、规格及单位的历史成交。</p>
             <div v-else class="flex flex-wrap items-center gap-1.5 sm:pl-5.5">
               <span class="mr-0.5 text-meta">历史成交</span>
-              <button v-for="quote in line.quotes" :key="quote.purchaseLineId" type="button" :class="QUOTE_PILL" :disabled="saving || !!form.supplierId && Number(form.supplierId) !== quote.supplierId" :title="`历史成交 ${quote.date}；核对本次实际价格后再登记`" @click="applyQuote(line, quote)">
+              <button v-for="quote in line.quotes" :key="quote.purchaseLineId" type="button" :class="QUOTE_PILL" :disabled="saving || !!effectiveSupplier(line) && Number(effectiveSupplier(line)) !== quote.supplierId" :title="`历史成交 ${quote.date}；核对本次实际价格后再登记`" @click="applyQuote(line, quote)">
                 {{ quote.supplierName }} · {{ unitPriceLabel(quote.unitPrice, line.unit) }}<span class="num text-faint">{{ quote.date }}</span>
               </button>
             </div>
@@ -280,6 +304,7 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
       <div class="mr-auto min-w-0 self-center max-sm:w-full">
         <Notice v-if="failure" tone="red" variant="inline" role="alert" class="mb-1">{{ failure }}</Notice>
         <p class="text-[13px] text-muted">{{ total.missing ? '已填价合计' : '本次成交合计' }} <b class="num font-semibold text-ink">{{ moneyLabel(total.amount) }}</b><span v-if="total.missing" class="ml-2 text-xs text-amber">{{ total.missing }} 条价格待填</span></p>
+        <p v-if="supplierCount > 1" class="mt-1 text-xs text-blue">将按 {{ supplierCount }} 家供应商分别生成采购记录，一次提交。</p>
       </div>
       <Button variant="ghost" :disabled="saving || creatingSupplier" class="max-sm:h-11" @click="close">取消</Button>
       <Button variant="primary" :loading="saving" :disabled="creatingSupplier || loadingSuppliers" class="max-sm:h-11 max-sm:flex-1" @click="save">登记已下单</Button>
