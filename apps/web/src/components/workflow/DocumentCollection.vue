@@ -23,7 +23,7 @@ const props = withDefaults(defineProps<{ requestId?: number; kind?: WorkflowDocu
   requestId: undefined, kind: undefined, initialKind: undefined,
   title: '业务记录', description: '采购、到货、物品去向和纠错分别留存；撤销的记录仍可查询',
 });
-const emit = defineEmits<{ purchaseEdit: [document: WorkflowDocumentRow]; receipt: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number]; link: [line: WorkflowDocumentLineRow, document: WorkflowDocumentRow] }>();
+const emit = defineEmits<{ purchaseEdit: [document: WorkflowDocumentRow]; receipt: [document: WorkflowDocumentRow]; receiptEdit: [document: WorkflowDocumentRow]; command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; void: [document: WorkflowDocumentRow]; metadata: [document: WorkflowDocumentRow]; attachments: [document: WorkflowDocumentRow]; source: [lineId: number]; link: [line: WorkflowDocumentLineRow, document: WorkflowDocumentRow] }>();
 const titleId = useId();
 const filters = reactive({ kind: (props.initialKind || '') as WorkflowDocumentKind | '', page: 1 });
 const pageSize = 15;
@@ -60,7 +60,7 @@ defineExpose({ refresh: load });
       </EmptyState>
       <EmptyState v-else-if="!data?.items.length" icon="layers" title="没有业务记录" description="发生采购、到货或发放后，会在这里按记录展示" />
       <div v-else class="divide-y divide-line">
-        <DocumentCard v-for="document in data?.items || []" :key="document.id" :document="document" row @purchase-edit="emit('purchaseEdit', $event)" @receipt="emit('receipt', $event)" @command="(action, choices, context) => emit('command', action, choices, context)" @void="emit('void', $event)" @metadata="emit('metadata', $event)" @attachments="emit('attachments', $event)" @source="emit('source', $event)" @link="(line, document) => emit('link', line, document)" />
+        <DocumentCard v-for="document in data?.items || []" :key="document.id" :document="document" row @purchase-edit="emit('purchaseEdit', $event)" @receipt="emit('receipt', $event)" @receipt-edit="emit('receiptEdit', $event)" @command="(action, choices, context) => emit('command', action, choices, context)" @void="emit('void', $event)" @metadata="emit('metadata', $event)" @attachments="emit('attachments', $event)" @source="emit('source', $event)" @link="(line, document) => emit('link', line, document)" />
       </div>
       <template v-if="data" #footer><Pagination :page="filters.page" :page-size="pageSize" :total="data.total" @change="goPage" /></template>
     </Panel>

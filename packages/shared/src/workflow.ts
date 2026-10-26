@@ -160,6 +160,16 @@ export const workflowReceiptSchema = z.object({
 });
 export type WorkflowReceiptInput = z.infer<typeof workflowReceiptSchema>;
 
+/** 更正原到货总量；保留到货日期和来源，本次差额按更正日期追加流水。 */
+export const workflowReceiptUpdateSchema = z.object({
+  version: z.number().int().nonnegative(),
+  date: workflowDateSchema,
+  reason: z.string().trim().min(1, '请填写更正原因').max(500),
+  note: noteSchema,
+  lines: z.array(z.object({ id: idSchema, quantity: workflowQuantitySchema })).min(1).max(200),
+});
+export type WorkflowReceiptUpdateInput = z.infer<typeof workflowReceiptUpdateSchema>;
+
 export const workflowQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   requestId: idSchema.optional(),
@@ -288,12 +298,17 @@ export interface WorkflowDocumentLineRow {
   overPurchaseQuantity?: string;
   /** 修改采购时，同一申请明细可重新分配的需求总量（含本单原来占用的数量）。 */
   purchaseAvailableQuantity?: string;
+  /** 已入库、直发或退货等已处理总量，更正后的到货量不能低于此值。 */
+  receiptMinQuantity?: string;
+  /** 同一采购明细在本到货单中可重新分配的总量，含采购尚待到货量。 */
+  receiptPurchaseCapacity?: string;
   purchaseReductionAmount: string | null;
   recipient: string | null; location: WorkflowLocation | null; reason: string | null;
   receivedQuantity: string; remainingQuantity: string;
   sourceAllocations?: { originLineId: number; quantity: string; requestId: number | null; serialNumber: string | null }[];
 }
 export interface WorkflowDocumentRow {
+  receiptVersion?: number;
   purchaseVersion?: number;
   purchaseEditReason?: string | null;
   settlement?: import('./execution.js').SettlementRow;
@@ -319,6 +334,7 @@ export interface WorkflowStockRow {
   receivingQuantity: string; stockQuantity: string; sources: WorkflowStockSourceRow[];
 }
 export interface WorkflowStockEntryRow {
+  correctionReason?: string;
   id: number; documentId: number; documentKind: WorkflowDocumentKind; date: string;
   businessLineId: number; originLineId: number; productId: number;
   itemName: string; specification: string; unit: string; location: WorkflowLocation;

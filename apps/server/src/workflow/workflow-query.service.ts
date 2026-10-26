@@ -106,6 +106,7 @@ export class WorkflowQueryService {
     ]);
     return documents.map((document) => { const settlement = settlements.find(s => s.documentId === document.id), invoiceManaged = document.settlementMode === 'DETAIL' || dependencies.invoices.has(document.id); return ({
       ...(document.kind === 'PURCHASE' ? { purchaseVersion: document.settlementVersion, purchaseEditReason: purchaseEditReason(document, dependencies) } : {}),
+      ...(document.kind === 'RECEIPT' ? { receiptVersion: document.settlementVersion } : {}),
       ...(document.stocktake ? { stocktakeId: document.stocktake.id } : {}),
       id: document.id, kind: document.kind as WorkflowDocumentKind, date: document.date,
       status: document.status as 'POSTED' | 'VOIDED', supplierId: document.supplierId, supplierName: document.supplierName,
@@ -122,6 +123,10 @@ export class WorkflowQueryService {
         ...snapshot(line), quantity: quantityText(line.quantityUnits),
         ...(document.kind === 'PURCHASE' && line.overPurchaseUnits > 0n ? { overPurchaseQuantity: quantityText(line.quantityUnits - line.cancelledUnits - purchaseRequestQuantity(line)) } : {}),
         ...(document.kind === 'PURCHASE' && line.requestLine ? { purchaseAvailableQuantity: quantityText(line.requestLine.quantityUnits - line.requestLine.cancelledUnits - line.requestLine.orderedUnits + sum(document.lines.filter(entry => entry.requestLineId === line.requestLineId).map(entry => purchaseRequestQuantity(entry)))) } : {}),
+        ...(document.kind === 'RECEIPT' && line.sourceLine ? {
+          receiptMinQuantity: quantityText(line.quantityUnits - sum(balances.filter(balance => balance.originLineId === line.id).map(balance => balance.quantityUnits))),
+          receiptPurchaseCapacity: quantityText(line.sourceLine.quantityUnits - line.sourceLine.cancelledUnits - line.sourceLine.receivedUnits + sum(document.lines.filter(entry => entry.sourceLineId === line.sourceLineId).map(entry => entry.quantityUnits))),
+        } : {}),
         unitPrice: line.unitPriceUnits === null ? null : priceText(line.unitPriceUnits),
         amount: line.amountUnits === null ? null : moneyText(line.amountUnits),
         purchaseReductionAmount: line.purchaseReductionAmountUnits === null ? null : moneyText(line.purchaseReductionAmountUnits),
@@ -298,6 +303,7 @@ export class WorkflowQueryService {
         date: entry.date, businessLineId: entry.businessLineId, originLineId: entry.originLineId,
         ...snapshot(entry.businessLine), location: entry.location as WorkflowLocation, quantity: quantityText(entry.quantityUnits),
         reversalOfId: entry.reversalOfId, createdAt: entry.createdAt.toISOString(),
+        ...(entry.correctionReason ? { correctionReason: entry.correctionReason } : {}),
       }));
       return { items, total, page: query.page, pageSize: query.pageSize };
     });

@@ -1,0 +1,50 @@
+import { expect, test, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+
+async function post(page: Page, path: string, data: object) {
+  const response = await page.request.post(`/api/${path}`, { data, headers: { 'Idempotency-Key': randomUUID() } });
+  expect(response.ok(), await response.text()).toBeTruthy(); return response.json();
+}
+for (const width of [1440, 390]) test(`到货更正 ${width}px：已入库后改实收量，核对进度、流水与继续入库`, async ({ page }) => {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+  const password = 'browser-test-password'; await page.request.post('/api/auth/setup', { data: { password } }); await page.request.post('/api/auth/login', { data: { password } });
+  const suffix = randomUUID().slice(0, 8), name = `纠错纸-${suffix}`, date = '2026-10-26';
+  const supplier = await post(page, 'suppliers', { name: `纠错供应商-${suffix}` });
+  const request = await post(page, 'workflow/requests', { autoSerial: true, department: '行政', handler: '小周', requestDate: date, lines: [{ itemName: name, unit: '盒', quantity: '10' }] });
+  const purchase = await post(page, 'workflow/purchases', { date, supplierId: supplier.id, lines: [{ requestLineId: request.lines[0].id, quantity: '10', unitPrice: '10' }] });
+  const receipt = await post(page, 'workflow/receipts', { date, lines: [{ purchaseLineId: purchase.lines[0].id, quantity: '10' }] });
+  await post(page, 'workflow/stock-in', { date, lines: [{ receiptLineId: receipt.lines[0].id, quantity: '3' }] });
+  await page.goto(`/requests/${request.id}`);
+  const card = page.locator(`article[data-document-id="${receipt.id}"]`);
+  await card.getByRole('button', { name: '修改到货数量', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: '修改到货数量', exact: true });
+  const quantity = dialog.getByLabel(`${name} 更正后到货总量（盒）`, { exact: true });
+  await expect(quantity).toHaveValue('10');
+  await quantity.fill('2'); await dialog.getByLabel('更正原因', { exact: true }).fill('核对实物：原登记10盒，实到8盒');
+  await dialog.getByRole('button', { name: '保存到货更正', exact: true }).click();
+  await expect(dialog.getByText('不能少于已处理的 3 盒，请先撤销对应处理记录', { exact: true })).toBeVisible();
+  await quantity.fill('8');
+  await expect(dialog.getByText('不能少于已处理的 3 盒，请先撤销对应处理记录', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(/更正后待处理 5 盒/)).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath(`receipt-edit-${width}.png`), fullPage: true });
+  await dialog.getByRole('button', { name: '保存到货更正', exact: true }).click(); await expect(dialog).toHaveCount(0);
+  const progress = page.locator(`tr[data-request-line="${request.lines[0].id}"]`);
+  await expect(progress.locator('td[data-label="已到货"]')).toHaveText('8 盒');
+  await expect(progress.locator('td[data-label="待处理"]')).toHaveText('5 盒');
+  await expect(progress.locator('td[data-label="当前库存"]')).toHaveText('3 盒');
+  await expect(progress.locator('td[data-label="尚待办理"]')).toContainText('待到货 2 盒');
+  await expect(card).toContainText('8 盒');
+  await card.getByRole('button', { name: '登记入库', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: '登记入库', exact: true });
+  await dialog.getByLabel(`${name} 本次数量（盒）`, { exact: true }).fill('5');
+  await dialog.getByRole('button', { name: '确认登记入库', exact: true }).click(); await expect(dialog).toHaveCount(0);
+  await expect(progress.locator('td[data-label="待处理"]')).toHaveText('0 盒');
+  await expect(progress.locator('td[data-label="当前库存"]')).toHaveText('8 盒');
+  await expect(card.getByRole('button', { name: '修改到货数量', exact: true })).toBeVisible();
+  await page.goto('/stock?tab=entries');
+  const correction = page.locator('tbody tr').filter({ hasText: name }).filter({ hasText: '到货数量更正' });
+  await expect(correction).toContainText('-2 盒');
+  await expect(correction).toContainText('核对实物：原登记10盒，实到8盒');
+  await expect(page.locator('tbody tr').filter({ hasText: name }).filter({ hasText: '+10 盒' })).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});

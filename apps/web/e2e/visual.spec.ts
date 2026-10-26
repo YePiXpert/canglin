@@ -16,7 +16,7 @@ const BASE = 'http://127.0.0.1:5174';
 const password = 'browser-test-password';
 const NOW = new Date('2026-10-14T10:00:00+08:00');
 
-interface Seed { r1: number; r2: number; r3: number; r4: number; taskId: string; countId: number; draftId: number; batchId: number; invoiceId: number; actionId: number; productId: number; purchaseId: number }
+interface Seed { r1: number; r2: number; r3: number; r4: number; taskId: string; countId: number; draftId: number; batchId: number; invoiceId: number; actionId: number; productId: number; purchaseId: number; receiptId: number }
 let seed: Seed | null = null;
 
 async function post(request: APIRequestContext, url: string, data: object) {
@@ -110,7 +110,7 @@ test.beforeAll(async ({ playwright }) => {
   await post(request, '/api/execution/financial-records', { kind: 'PAYMENT', date: '2026-10-07', supplierId: supA.id, payer: 'EMPLOYEE', employee: '李雯', amount: '200', note: '部分垫付，尾款到货后支付', allocations: [{ documentId: p5.id, amount: '200', version: 0 }] });
   const inv = await post(request, '/api/execution/invoices', { supplierId: supA.id, number: '261014000000001', date: '2026-10-14', amount: '280', note: '收纳盒票据，待核对原件' });
   const action = await post(request, '/api/execution/drafts', { title: '收纳盒第一批到货', action: { kind: 'RECEIPT', data: { date: '2026-10-14', lines: [{ purchaseLineId: p5.lines[0].id, quantity: '4' }], note: '手机登记，现场核对后确认' } } });
-  seed = { countId: count.id, draftId: supply.id, r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId, batchId: batch.id, invoiceId: inv.id, actionId: action.id, productId: r1.lines[0].productId, purchaseId: p5.id };
+  seed = { countId: count.id, draftId: supply.id, r1: r1.id, r2: r2.id, r3: r3.id, r4: r4.id, taskId, batchId: batch.id, invoiceId: inv.id, actionId: action.id, productId: r1.lines[0].productId, purchaseId: p5.id, receiptId: rc1.id };
   await request.dispose();
 });
 
@@ -248,6 +248,24 @@ for (const variant of VARIANTS) {
       await dialog.getByLabel('订书机 本次到货数量（个）', { exact: true }).fill('2');
       await expect(dialog.getByLabel('墨盒 本次到货数量（盒）', { exact: true })).toHaveValue('0');
       await shot(page, `${variant.name}-dialog-receipt-partial`);
+    });
+
+    test('修改到货数量弹窗', async ({ page }) => {
+      test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
+      await page.clock.setFixedTime(NOW);
+      if (variant.dark) await page.addInitScript(() => { localStorage.setItem('canglin-theme', 'dark'); });
+      expect((await page.request.post('/api/auth/login', { data: { password } })).ok()).toBeTruthy();
+      await page.goto(`/requests/${seed!.r1}`); await settle(page);
+      await page.locator(`article[data-document-id="${seed!.receiptId}"]`).getByRole('button', { name: '修改到货数量', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '修改到货数量', exact: true });
+      await dialog.getByLabel('A4 复印纸 更正后到货总量（箱）', { exact: true }).fill('5');
+      await dialog.getByLabel('更正原因', { exact: true }).fill('实收5箱，原登记6箱');
+      await dialog.getByLabel('更正日期', { exact: true }).scrollIntoViewIfNeeded();
+      await shot(page, `${variant.name}-dialog-receipt-edit`);
+      await dialog.getByLabel('A4 复印纸 更正后到货总量（箱）', { exact: true }).fill('3');
+      await dialog.getByRole('button', { name: '保存到货更正', exact: true }).click();
+      await dialog.getByText('不能少于已处理的 4 箱，请先撤销对应处理记录', { exact: true }).scrollIntoViewIfNeeded();
+      await shot(page, `${variant.name}-dialog-receipt-edit-error`);
     });
 
     test('修改采购弹窗', async ({ page }) => {

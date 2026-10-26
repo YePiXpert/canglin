@@ -3,7 +3,7 @@ import { Prisma, type BusinessLine } from '@prisma/client';
 import {
   MAX_FIXED_UNITS, autoSerialPrefix, lineAmountUnits, moneyText, priceText, priceUnits, quantityText, quantityUnits,
   workflowRequestCreateSchema, workflowRequestUpdateSchema, type WorkflowRequestCreateInput, type WorkflowRequestUpdateInput, type WorkflowPurchaseInput,
-  type WorkflowReceiptInput, type WorkflowRequestRow, type WorkflowLocation, type WorkflowDocumentKind,
+  type WorkflowReceiptInput, type WorkflowReceiptUpdateInput, type WorkflowRequestRow, type WorkflowLocation, type WorkflowDocumentKind,
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput,
@@ -285,7 +285,7 @@ export class WorkflowService {
     return line;
   }
 
-  private async stockChange(tx: Tx, data: { productId: number; originLineId: number; businessLineId: number; location: WorkflowLocation; quantity: bigint; date: string; reversalOfId?: number }) {
+  private async stockChange(tx: Tx, data: { productId: number; originLineId: number; businessLineId: number; location: WorkflowLocation; quantity: bigint; date: string; reversalOfId?: number; correctionReason?: string | null }) {
     bounded(data.quantity, '数量');
     const origin = await tx.businessLine.findUnique({ where: { id: data.originLineId }, include: { document: true } });
     if (!origin || origin.productId !== data.productId || !['RECEIPT', 'ADJUSTMENT'].includes(origin.document.kind))
@@ -307,7 +307,7 @@ export class WorkflowService {
     if (data.location === 'STOCK') await tx.catalogProduct.update({ where: { id: data.productId }, data: { stockVersion: { increment: 1 } } });
     return tx.stockEntry.create({ data: {
       productId: data.productId, originLineId: data.originLineId, businessLineId: data.businessLineId,
-      location: data.location, quantityUnits: data.quantity, date: data.date, reversalOfId: data.reversalOfId,
+      location: data.location, quantityUnits: data.quantity, date: data.date, reversalOfId: data.reversalOfId, correctionReason: data.correctionReason,
     } });
   }
 
@@ -410,6 +410,42 @@ export class WorkflowService {
 
   async receive(input: WorkflowReceiptInput, key: string, ip?: string) {
     return this.write('receipt', input, key, ip, tx => this.receiveTx(tx, input));
+  }
+
+  async updateReceipt(id: number, input: WorkflowReceiptUpdateInput, key: string, ip?: string) {
+    return this.write('receipt_update', { id, ...input }, key, ip, async (tx, audit) => {
+      const document = await tx.businessDocument.findUnique({ where: { id }, include: documentInclude });
+      if (!document || document.kind !== 'RECEIPT') throw new NotFoundException('到货记录不存在');
+      if (document.status !== 'POSTED') throw new ConflictException('已撤销的到货不能修改');
+      if (document.settlementVersion !== input.version) throw new ConflictException('到货记录已变化，请关闭弹窗并刷新后重新核对');
+      this.afterSourceDate(input.date, document.date);
+      const edits = new Map(input.lines.map(line => [line.id, quantityUnits(line.quantity)]));
+      if (edits.size !== input.lines.length || edits.size !== document.lines.length || document.lines.some(line => !edits.has(line.id)))
+        throw new BadRequestException('请提交这次到货的全部原明细，不能增加、删除或替换明细');
+      const balances = await tx.stockBalance.findMany({ where: { originLineId: { in: document.lines.map(line => line.id) }, location: 'RECEIVING' } });
+      const purchaseDeltas = new Map<number, bigint>();
+      let total = 0n;
+      for (const line of document.lines) {
+        if (!line.sourceLineId) throw new ConflictException('到货来源缺失，请核对原业务记录');
+        const quantity = edits.get(line.id)!;
+        const remaining = sum(balances.filter(balance => balance.originLineId === line.id).map(balance => balance.quantityUnits));
+        const used = line.quantityUnits - remaining;
+        if (quantity < used) throw new ConflictException(`「${line.itemName}」已处理 ${quantityText(used)} ${line.unit}，不能改得更少；请先撤销对应入库、发放或退货记录`);
+        purchaseDeltas.set(line.sourceLineId, (purchaseDeltas.get(line.sourceLineId) ?? 0n) + quantity - line.quantityUnits);
+        total = bounded(total + bounded(lineAmountUnits(quantity, line.unitPriceUnits!)));
+      }
+      const updated = await tx.businessDocument.updateMany({ where: { id, status: 'POSTED', settlementVersion: input.version }, data: { note: input.note ?? null, totalAmountUnits: total, settlementVersion: { increment: 1 } } });
+      if (!updated.count) throw new ConflictException('到货记录已变化，请刷新后重新核对');
+      // 同一采购行可能分为多条到货明细：先合计差额，再一次核对采购尚待到货量。
+      for (const [purchaseId, delta] of purchaseDeltas) await this.changePurchaseCounters(tx, purchaseId, delta);
+      audit.previous = { date: document.date, note: document.note, totalAmount: moneyText(document.totalAmountUnits ?? 0n), version: document.settlementVersion, lines: document.lines.map(line => ({ id: line.id, quantity: quantityText(line.quantityUnits) })) };
+      for (const line of document.lines) {
+        const quantity = edits.get(line.id)!, delta = quantity - line.quantityUnits;
+        await tx.businessLine.update({ where: { id: line.id }, data: { quantityUnits: quantity, amountUnits: lineAmountUnits(quantity, line.unitPriceUnits!) } });
+        if (delta) await this.stockChange(tx, { productId: line.productId, originLineId: line.id, businessLineId: line.id, location: 'RECEIVING', quantity: delta, date: input.date, correctionReason: input.reason });
+      }
+      return this.query.documentTx(tx, id);
+    });
   }
 
   /** Caller owns the transaction, audit and idempotency receipt. */
@@ -635,7 +671,7 @@ export class WorkflowService {
       if (input.invoiceIssued !== undefined && await tx.invoiceAllocation.count({ where: { documentId: id, invoice: { status: { not: 'VOIDED' } } } })) throw new ConflictException('该采购已有票据匹配记录，请在发票池处理');
       if (document.status !== 'POSTED') throw new ConflictException('已撤销的记录不能修改');
       if (document.kind !== 'PURCHASE' && (input.paymentStatus !== undefined || input.invoiceIssued !== undefined)) throw new BadRequestException('付款和开票状态请在采购单上登记');
-      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(document.kind === 'PURCHASE' ? { settlementVersion: { increment: 1 } } : {}) } });
+      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(['PURCHASE', 'RECEIPT'].includes(document.kind) ? { settlementVersion: { increment: 1 } } : {}) } });
       return this.query.documentTx(tx, id);
     });
   }
@@ -686,7 +722,7 @@ export class WorkflowService {
           case 'REQUEST_CANCEL': await this.changeRequestCounters(tx, line.requestLineId!, 0n, -line.quantityUnits); break;
         }
         const entries = await tx.stockEntry.findMany({ where: { businessLineId: line.id, reversalOfId: null }, orderBy: { id: 'desc' } });
-        for (const entry of entries) await this.stockChange(tx, { productId: entry.productId, originLineId: entry.originLineId, businessLineId: line.id, location: entry.location as WorkflowLocation, quantity: -entry.quantityUnits, date: input.date, reversalOfId: entry.id });
+        for (const entry of entries) await this.stockChange(tx, { productId: entry.productId, originLineId: entry.originLineId, businessLineId: line.id, location: entry.location as WorkflowLocation, quantity: -entry.quantityUnits, date: input.date, reversalOfId: entry.id, correctionReason: entry.correctionReason });
       }
       await tx.businessDocument.update({ where: { id }, data: { status: 'VOIDED', voidReason: input.reason, voidDate: input.date, voidedAt: new Date() } });
       await tx.stocktake.updateMany({ where: { adjustmentDocumentId: id, status: 'POSTED' }, data: { status: 'VOIDED', voidedAt: new Date(), voidReason: input.reason, version: { increment: 1 } } });

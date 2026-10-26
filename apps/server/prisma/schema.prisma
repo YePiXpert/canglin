@@ -300,20 +300,21 @@ model StockBalance {
 }
 
 model StockEntry {
-  id             Int            @id @default(autoincrement())
-  productId      Int
-  product        CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
-  businessLineId Int
-  businessLine   BusinessLine   @relation("EntryBusinessLine", fields: [businessLineId], references: [id], onDelete: Restrict)
-  originLineId   Int
-  originLine     BusinessLine   @relation("EntryOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
-  location       String
-  quantityUnits  BigInt
-  date           String
-  reversalOfId   Int?           @unique
-  reversalOf     StockEntry?    @relation("StockEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversal       StockEntry?    @relation("StockEntryReversal")
-  createdAt      DateTime       @default(now())
+  id               Int            @id @default(autoincrement())
+  productId        Int
+  product          CatalogProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  businessLineId   Int
+  businessLine     BusinessLine   @relation("EntryBusinessLine", fields: [businessLineId], references: [id], onDelete: Restrict)
+  originLineId     Int
+  originLine       BusinessLine   @relation("EntryOrigin", fields: [originLineId], references: [id], onDelete: Restrict)
+  location         String
+  quantityUnits    BigInt
+  date             String
+  correctionReason String?
+  reversalOfId     Int?           @unique
+  reversalOf       StockEntry?    @relation("StockEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal         StockEntry?    @relation("StockEntryReversal")
+  createdAt        DateTime       @default(now())
 
   @@index([productId, date])
   @@index([originLineId, location])

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Header, Param, ParseIntPipe, Patch, Post, Query,
 import { z } from 'zod';
 import type { FastifyRequest } from 'fastify';
 import {
-  workflowRequestCreateSchema, workflowPurchaseSchema, workflowPurchaseRegistrationSchema, type WorkflowPurchaseRegistrationInput, workflowPurchaseUpdateSchema, type WorkflowPurchaseUpdateInput, workflowReceiptSchema, workflowQuerySchema,
+  workflowRequestCreateSchema, workflowPurchaseSchema, workflowPurchaseRegistrationSchema, type WorkflowPurchaseRegistrationInput, workflowPurchaseUpdateSchema, type WorkflowPurchaseUpdateInput, workflowReceiptSchema, workflowReceiptUpdateSchema, type WorkflowReceiptUpdateInput, workflowQuerySchema,
   workflowStockInSchema, workflowDistributionSchema, workflowSupplierReturnSchema,
   workflowEmployeeReturnSchema, workflowPurchaseCancelSchema, workflowRequestCancelSchema,
   workflowAdjustmentSchema, workflowVoidSchema, workflowMetadataSchema, workflowProductCreateSchema,
@@ -52,6 +52,7 @@ export class WorkflowController {
   @Post('purchases/register') registerPurchases(@Body(new ZodValidationPipe(workflowPurchaseRegistrationSchema)) body: WorkflowPurchaseRegistrationInput, @Req() req: FastifyRequest) { return this.workflow.registerPurchases(body, operationId(req), clientIp(req)); }
   @Patch('purchases/:id') updatePurchase(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowPurchaseUpdateSchema)) body: WorkflowPurchaseUpdateInput, @Req() req: FastifyRequest) { return this.workflow.updatePurchase(id, body, operationId(req), clientIp(req)); }
   @Post('receipts') receive(@Body(new ZodValidationPipe(workflowReceiptSchema)) body: WorkflowReceiptInput, @Req() req: FastifyRequest) { return this.workflow.receive(body, operationId(req), clientIp(req)); }
+  @Patch('receipts/:id') updateReceipt(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowReceiptUpdateSchema)) body: WorkflowReceiptUpdateInput, @Req() req: FastifyRequest) { return this.workflow.updateReceipt(id, body, operationId(req), clientIp(req)); }
   @Post('stock-in') stockIn(@Body(new ZodValidationPipe(workflowStockInSchema)) body: WorkflowStockInInput, @Req() req: FastifyRequest) { return this.workflow.stockIn(body, operationId(req), clientIp(req)); }
   @Post('distributions') distribute(@Body(new ZodValidationPipe(workflowDistributionSchema)) body: WorkflowDistributionInput, @Req() req: FastifyRequest) { return this.workflow.distribute(body, operationId(req), clientIp(req)); }
   @Post('supplier-returns') supplierReturn(@Body(new ZodValidationPipe(workflowSupplierReturnSchema)) body: WorkflowSupplierReturnInput, @Req() req: FastifyRequest) { return this.workflow.returnToSupplier(body, operationId(req), clientIp(req)); }

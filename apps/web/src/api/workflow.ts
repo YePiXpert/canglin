@@ -1,7 +1,7 @@
 import { http, mutate } from './client';
 import type {
   WorkflowDocumentKind, WorkflowDocumentRow, WorkflowOverview, WorkflowPage,
-  WorkflowPurchaseInput, WorkflowPurchaseUpdateInput, WorkflowPurchaseRegistrationInput, WorkflowPurchaseRegistrationResult, WorkflowQuery, WorkflowReceiptInput, WorkflowRequestCreateInput,
+  WorkflowPurchaseInput, WorkflowPurchaseUpdateInput, WorkflowPurchaseRegistrationInput, WorkflowPurchaseRegistrationResult, WorkflowQuery, WorkflowReceiptInput, WorkflowReceiptUpdateInput, WorkflowRequestCreateInput,
   WorkflowRequestRow, WorkflowStockEntryRow, WorkflowStockRow,
   WorkflowStockInInput, WorkflowDistributionInput, WorkflowSupplierReturnInput,
   WorkflowEmployeeReturnInput, WorkflowPurchaseCancelInput, WorkflowRequestCancelInput,
@@ -44,6 +44,7 @@ export const workflowApi = {
   registerPurchases: (body: WorkflowPurchaseRegistrationInput) => post<WorkflowPurchaseRegistrationResult>('/purchases/register', body),
   updatePurchase: (id: number, body: WorkflowPurchaseUpdateInput) => write<WorkflowDocumentRow>('patch', `/purchases/${id}`, body),
   receipt: (body: WorkflowReceiptInput) => post<WorkflowDocumentRow>('/receipts', body),
+  updateReceipt: (id: number, body: WorkflowReceiptUpdateInput) => write<WorkflowDocumentRow>('patch', `/receipts/${id}`, body),
   documents: (params: Partial<WorkflowQuery> & { kind?: WorkflowDocumentKind } = {}) =>
     http.get<WorkflowPage<WorkflowDocumentRow>>('/workflow/documents', { params }).then((r) => r.data),
   document: (id: number) => http.get<WorkflowDocumentRow>(`/workflow/documents/${id}`).then((r) => r.data),

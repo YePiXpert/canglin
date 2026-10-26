@@ -181,7 +181,7 @@ async function deleteRequest() {
       </section>
 
       <div class="mt-7 grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <DocumentCollection ref="documents" :request-id="request.id" @purchase-edit="actions?.editPurchase($event)" @receipt="actions?.receipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context, request?.department, request?.handler)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="editPurchaseLink" />
+        <DocumentCollection ref="documents" :request-id="request.id" @purchase-edit="actions?.editPurchase($event)" @receipt="actions?.receipt($event)" @receipt-edit="actions?.editReceipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context, request?.department, request?.handler)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="editPurchaseLink" />
         <aside class="space-y-7" aria-label="原件与付款">
           <section aria-labelledby="request-originals-title">
             <h2 id="request-originals-title" class="mb-2.5 text-[15px] leading-6 font-semibold text-ink">OA 原件与附件</h2>
