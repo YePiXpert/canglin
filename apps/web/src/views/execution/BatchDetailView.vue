@@ -327,9 +327,8 @@ onMounted(() => suppliers.load());
               </Badge>
             </div>
             <div class="mt-3 flex flex-wrap gap-4 text-sm">
-              <router-link :to="`/operations/mobile?documentId=${d.id}`" class="text-blue underline">扫码收货与处理</router-link>
+              <router-link :to="`/documents/${d.id}`" class="text-blue underline">到申请详情办理</router-link>
               <router-link :to="`/finance?documentId=${d.id}`" class="text-blue underline">付款与票据对账</router-link>
-              <router-link :to="`/operations/labels?documentId=${d.id}`" class="text-blue underline">打印采购单标签</router-link>
             </div>
           </article>
         </div>

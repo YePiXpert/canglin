@@ -62,7 +62,8 @@ git ls-files -z --cached --others --exclude-standard -- . ':!.claude' \
         args=(--project=visual)
         if [ -n "$TEST_GREP" ]; then args+=(--grep "$TEST_GREP"); fi
         if [ "$UPDATE" = 1 ]; then
-          pnpm exec playwright test "${args[@]}" --update-snapshots || status=$?
+          # Intentional UI updates must also replace changes below the comparison tolerance.
+          pnpm exec playwright test "${args[@]}" --update-snapshots=all || status=$?
           rm -rf /out/snapshots/* && cp -r e2e/visual.spec.ts-snapshots/. /out/snapshots/
         else
           pnpm exec playwright test "${args[@]}" || status=$?

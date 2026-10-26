@@ -178,7 +178,7 @@ onMounted(resource.load);
               <p class="font-medium">{{ r.itemName }} · {{ r.quantity }} {{ r.unit }}</p>
               <Badge tone="amber">闲置库存</Badge>
             </div>
-            <router-link :to="`/operations/mobile?productId=${r.productId}`" class="underline text-sm">
+            <router-link :to="`/stock?stock=all&productId=${r.productId}`" class="underline text-sm">
               查看物品与领用
             </router-link>
           </article>

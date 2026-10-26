@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 describe('ReceiptRegisterDialog', () => {
-  it('只列尚欠不为 0 的明细：复选框名是品名，数量默认填满尚欠，字段名带单位', () => {
+  it('只列尚欠不为 0 的明细，默认实收为0，避免直接确认就把整单收齐', () => {
     const wrapper = mountDialog();
     const rows = wrapper.findAll('tr[data-receipt-line]');
     expect(rows.map((row) => row.attributes('data-receipt-line'))).toEqual(['201', '203']);
@@ -76,9 +76,9 @@ describe('ReceiptRegisterDialog', () => {
     expect(rows[0].text()).toContain('A4 / 80g · 本批采购 6 盒 · 已到 2 盒');
     expect(rows[0].find('td[data-label="待到货"]').text()).toBe('4 盒');
     expect(lineCheckbox(wrapper, 'A4 复印纸').element).toHaveProperty('checked', true);
-    expect(field(wrapper, 'A4 复印纸 本次到货数量（盒）').element).toHaveProperty('value', '4');
+    expect(field(wrapper, 'A4 复印纸 本次到货数量（盒）').element).toHaveProperty('value', '0');
     expect(field(wrapper, 'A4 复印纸 本次到货数量（盒）').attributes('max')).toBe('4');
-    expect(field(wrapper, '中性笔 本次到货数量（支）').element).toHaveProperty('value', '3');
+    expect(field(wrapper, '中性笔 本次到货数量（支）').element).toHaveProperty('value', '0');
     expect(field(wrapper, '到货日期').element).toHaveProperty('value', TODAY);
   });
 
@@ -97,7 +97,7 @@ describe('ReceiptRegisterDialog', () => {
     await wrapper.find('input[type=checkbox][aria-label="全选"]').setValue(false);
     expect(wrapper.findAll('input[type=number]')).toHaveLength(0);
     await submit(wrapper);
-    expect(wrapper.find('[role=alert]').text()).toBe('请至少选择一条到货明细');
+    expect(wrapper.find('[role=alert]').text()).toBe('请填写至少一条大于 0 的本次实收数量');
     expect(mockedReceipt).not.toHaveBeenCalled();
   });
 
@@ -116,8 +116,29 @@ describe('ReceiptRegisterDialog', () => {
   it('接口失败时在页脚显示原因，弹窗保持打开', async () => {
     mockedReceipt.mockRejectedValueOnce(new Error('到货数量已变化，请刷新后重试'));
     const wrapper = mountDialog();
+    await field(wrapper, 'A4 复印纸 本次到货数量（盒）').setValue('2');
     await submit(wrapper);
     expect(wrapper.find('[role=alert]').text()).toBe('到货数量已变化，请刷新后重试');
     expect(wrapper.emitted('update:open')).toBeUndefined();
+  });
+
+  it('仅填本次收到的一行，其他勾选的0数量行不提交，全部0也不登记', async () => {
+    const wrapper = mountDialog();
+    await submit(wrapper);
+    expect(mockedReceipt).not.toHaveBeenCalled();
+    await field(wrapper, 'A4 复印纸 本次到货数量（盒）').setValue('1.5');
+    await submit(wrapper);
+    expect(mockedReceipt).toHaveBeenCalledWith({ date: TODAY, note: '', lines: [{ purchaseLineId: 201, quantity: '1.5' }] });
+  });
+
+  it('明确点击全部到齐才填入各自的剩余量，仍需确认后提交', async () => {
+    const wrapper = mountDialog();
+    await lineCheckbox(wrapper, '中性笔').setValue(false);
+    await wrapper.findAll('button').find(button => button.text() === '本次全部到齐')!.trigger('click');
+    expect(mockedReceipt).not.toHaveBeenCalled();
+    expect(field(wrapper, 'A4 复印纸 本次到货数量（盒）').element).toHaveProperty('value', '4');
+    expect(field(wrapper, '中性笔 本次到货数量（支）').element).toHaveProperty('value', '3');
+    await submit(wrapper);
+    expect(mockedReceipt).toHaveBeenCalledWith({ date: TODAY, note: '', lines: [{ purchaseLineId: 201, quantity: '4' }, { purchaseLineId: 203, quantity: '3' }] });
   });
 });

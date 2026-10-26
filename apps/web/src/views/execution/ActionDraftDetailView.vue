@@ -50,7 +50,7 @@ const source = (id: number) =>
     source: '请移除或重新添加有效来源',
     available: '0',
     unit: '',
-    url: '/operations/mobile',
+    url: '/requests',
   };
 
 function accept(r: ExecutionDraftRow) {
@@ -279,7 +279,7 @@ function describe(action: ExecutionPayload) {
         <template v-else>
           <div class="flex flex-wrap items-center gap-3">
             <Button @click="actions?.inspectDocument(resultId!)">查看业务单据 #{{ resultId }}</Button>
-            <router-link v-if="row.kind === 'RECEIPT'" :to="`/operations/mobile?documentId=${resultId}`" class="underline text-sm">
+            <router-link v-if="row.kind === 'RECEIPT'" :to="`/documents/${resultId}`" class="underline text-sm">
               继续入库或直发
             </router-link>
           </div>

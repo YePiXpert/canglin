@@ -186,7 +186,6 @@ for (const variant of VARIANTS) {
         ['invoices', '/finance/invoices'], ['invoice-detail', `/finance/invoices/${s.invoiceId}`],
         ['action-drafts', '/operations/drafts'], ['action-detail', `/operations/drafts/${s.actionId}`],
         ['exceptions', '/workbench/exceptions'], ['monthly-review', '/insights/monthly?month=2026-10'],
-        ['mobile-work', `/operations/mobile?documentId=${s.purchaseId}`], ['labels', `/operations/labels?productId=${s.productId}`],
       ]) { await page.goto(url); await shot(page, `${v}-${name}`); expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true); }
       await page.goto(`/finance?documentId=${s.purchaseId}`); await settle(page);
       await page.getByRole('button', { name: '登记付款', exact: true }).click();
@@ -234,6 +233,21 @@ for (const variant of VARIANTS) {
       await page.getByRole('button', { name: '人工录入申请', exact: true }).first().click();
       await expect(page.getByRole('dialog', { name: '人工录入申请' })).toBeVisible();
       await shot(page, `${v}-dialog-create`);
+    });
+
+    test('分批到货弹窗', async ({ page }) => {
+      test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
+      await page.clock.setFixedTime(NOW);
+      if (variant.dark) await page.addInitScript(() => { localStorage.setItem('canglin-theme', 'dark'); });
+      expect((await page.request.post('/api/auth/login', { data: { password } })).ok()).toBeTruthy();
+      await page.goto(`/requests/${seed!.r3}`); await settle(page);
+      await page.getByRole('button', { name: '登记到货', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
+      await expect(dialog.getByLabel('订书机 本次到货数量（个）', { exact: true })).toHaveValue('0');
+      await shot(page, `${variant.name}-dialog-receipt`);
+      await dialog.getByLabel('订书机 本次到货数量（个）', { exact: true }).fill('2');
+      await expect(dialog.getByLabel('墨盒 本次到货数量（盒）', { exact: true })).toHaveValue('0');
+      await shot(page, `${variant.name}-dialog-receipt-partial`);
     });
 
     test('修改采购弹窗', async ({ page }) => {

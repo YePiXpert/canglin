@@ -30,6 +30,8 @@ for (const width of [1440, 390]) test(`采购 ${width}px：可跳过0数量行�
   expect(result.lines[1]).toMatchObject({ orderedQuantity: '0', pendingPurchaseQuantity: '2' });
   const order = page.locator('article[data-document-id]').filter({ hasText: supplier.name }).filter({ has: page.getByRole('heading', { name: /^采购成交/ }) });
   await order.getByRole('button', { name: '登记到货', exact: true }).click(); dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
+  await expect(dialog.getByLabel(`${name} 本次到货数量（个）`, { exact: true })).toHaveValue('0');
+  await dialog.getByRole('button', { name: '本次全部到齐', exact: true }).click();
   await expect(dialog.getByLabel(`${name} 本次到货数量（个）`, { exact: true })).toHaveValue('10');
   await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click(); await expect(dialog).toHaveCount(0);
   const product = page.locator('article[data-product-id]').filter({ has: page.getByRole('heading', { name, exact: true }) });

@@ -34,6 +34,7 @@ for (const width of [1440, 390]) test(`多供应商 ${width}px：一张申请分
   await dialog.getByRole('button', { name: '保存采购修改', exact: true }).click(); await expect(dialog).toHaveCount(0);
   await expect(cardA).toContainText('450.00'); await expect(cardB).toContainText('60.00');
   await cardB.getByRole('button', { name: '登记到货', exact: true }).click(); dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
+  await dialog.getByRole('button', { name: '本次全部到齐', exact: true }).click();
   await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click(); await expect(dialog).toHaveCount(0);
   const progress = await (await page.request.get(`/api/workflow/requests/${request.id}`)).json();
   expect(progress.lines.map((line: { pendingPurchaseQuantity: string; pendingReceiptQuantity: string }) => [line.pendingPurchaseQuantity, line.pendingReceiptQuantity])).toEqual([['0', '10'], ['0', '0'], ['2', '0']]);

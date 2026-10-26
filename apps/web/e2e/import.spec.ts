@@ -208,6 +208,7 @@ for (const scenario of ['local', 'gpt', 'timeout']) {
     await purchase.getByRole('button', { name: '登记到货', exact: true }).click();
     dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
     await dialog.getByLabel('到货日期', { exact: true }).fill(businessDate);
+    await dialog.getByRole('button', { name: '本次全部到齐', exact: true }).click();
     await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click();
     await expect(dialog).toHaveCount(0);
     const card = page

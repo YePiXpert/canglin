@@ -24,7 +24,7 @@ import { useToastStore } from '@/stores/toast';
 import { STOCK_FILTERS, STOCK_FILTER_LABELS, filterStock, hasStock, stockCounts, stockFilterOf, type StockFilter } from '@/components/workflow/stockFilter';
 
 /** stock：库存物品页签的筛选（stockFilter.ts）：in = 有库存（默认）、empty = 已空、all = 全部物品；到货待处理页签不用它 */
-const defaults = { search: '', tab: 'products', stock: 'in', page: 1 };
+const defaults = { search: '', tab: 'products', stock: 'in', page: 1, productId: '' };
 const state = reactive({ ...defaults });
 useUrlState(state, defaults);
 const actions = ref<InstanceType<typeof WorkflowActions>>();
@@ -32,7 +32,9 @@ const documents = ref<InstanceType<typeof DocumentCollection>>();
 const creatingProduct = ref(false);
 /** 进行中的整页刷新次数（刷新按钮转圈）；登记成功后的刷新可能和手动刷新重叠，所以计数而不是布尔 */
 const refreshCount = ref(0);
-const { data: stock, loading, refreshing, error, load } = useWorkflowResource(() => workflowApi.stock({ search: state.search || undefined }));
+const productId = computed(() => /^[1-9]\d*$/.test(state.productId) && Number.isSafeInteger(Number(state.productId)) ? Number(state.productId) : undefined);
+const { data: stock, loading, refreshing, error, load } = useWorkflowResource(() => workflowApi.stock({ search: state.search || undefined, productId: productId.value }));
+watch(productId, () => { void load(); });
 const { data: entries, loading: entriesLoading, error: entriesError, load: loadEntries } = useWorkflowResource(() => workflowApi.entries({ page: state.page, pageSize: 20 }));
 
 const receivingTab = computed(() => state.tab === 'receiving');
@@ -90,6 +92,7 @@ async function productCreated(product: { itemName: string }) {
 
 <template>
   <div>
+    <p v-if="productId" class="mb-3 text-sm text-muted">正在查看物品 #{{ productId }} <Button variant="link" @click="state.productId = ''">查看全部物品</Button></p>
     <PageHeader title="库存与领用" description="库存、到货待处理、领用与归还记录；同名同规格但单位不同的，按两种物品分开记数">
       <Button icon-only aria-label="刷新库存" @click="refresh"><Icon name="refresh" :size="16" :class="refreshCount ? 'animate-spin' : ''" /></Button>
       <Button @click="creatingProduct = true"><Icon name="plus" :size="16" />新增库存物品</Button>

@@ -11,7 +11,6 @@ const links = [
   { to: '/procurement', match: '/procurement', label: '集中采购', icon: 'layers' },
   { to: '/finance', match: '/finance', exact: true, label: '资金对账', icon: 'ledger' },
   { to: '/finance/invoices', match: '/finance/invoices', label: '发票池', icon: 'receipt' },
-  { to: '/operations/mobile', match: '/operations/mobile', label: '扫码作业', icon: 'scan' },
   { to: '/operations/drafts', match: '/operations/drafts', label: '操作草稿', icon: 'clipboard' },
   { to: '/workbench/exceptions', match: '/workbench/exceptions', label: '异常中心', icon: 'alert-circle' },
   { to: '/insights/monthly', match: '/insights/monthly', label: '月度复盘', icon: 'report' },

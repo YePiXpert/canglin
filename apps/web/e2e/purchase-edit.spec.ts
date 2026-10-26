@@ -41,6 +41,7 @@ for (const width of [1440, 390]) test(`采购纠错 ${width}px：新建部门和
   const updated = await (await page.request.get(`/api/workflow/documents/${order.id}`)).json();
   expect(updated).toMatchObject({ totalAmount: '100.00', lines: [{ id: order.lines[0].id, quantity: '8', overPurchaseQuantity: '3' }] });
   await card.getByRole('button', { name: '登记到货', exact: true }).click(); dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
+  await dialog.getByRole('button', { name: '本次全部到齐', exact: true }).click();
   await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click(); await expect(dialog).toHaveCount(0);
   await expect(card.getByRole('button', { name: '修改采购', exact: true })).toBeDisabled();
   await expect(card).toContainText('已有到货、取消或退货登记');

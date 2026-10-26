@@ -24,7 +24,7 @@ defineExpose({ refresh: load });
 </script>
 
 <template>
-  <Panel title="执行与对账待办" description="异常提醒、手机草稿与集中采购批次" flush>
+  <Panel title="执行与对账待办" description="异常提醒、操作草稿与集中采购批次" flush>
     <div class="divide-y divide-line">
       <router-link
         v-for="r in [
@@ -47,8 +47,8 @@ defineExpose({ refresh: load });
       执行待办读取失败 <Button variant="link" @click="load">重试</Button>
     </p>
     <template #footer>
-      <router-link to="/operations/mobile" :class="buttonClass({ variant: 'link' })">
-        <Icon name="scan" :size="14" />开始手机扫码作业
+      <router-link to="/stock?tab=receiving" :class="buttonClass({ variant: 'link' })">
+        <Icon name="box" :size="14" />办理入库与发放
       </router-link>
       <router-link to="/finance" class="float-right" :class="buttonClass({ variant: 'link' })">
         资金对账 →

@@ -39,11 +39,9 @@ const staticItems = computed<CommandItem[]>(() => [
   { id: 'nav-requests', group: '申请与集中采购', title: '申请单', subtitle: '查看全部 OA 申请、逐行采购与到货进度', icon: 'ledger', run: () => void router.push('/requests') },
   { id: 'nav-procurement', group: '申请与集中采购', title: '集中采购工作台', subtitle: '汇总多张申请剩余需求，按供应商分拣下单', icon: 'layers', badge: '执行', run: () => void router.push('/procurement') },
   { id: 'nav-import', group: '申请与集中采购', title: '导入 OA 单', subtitle: '上传扫描件或照片，AI 识别并核对入账', icon: 'import', run: () => void router.push('/import') },
-  { id: 'nav-stock', group: '收货、扫码与库存', title: '库存与领用', subtitle: '当前库存、到货待处理、领用与出入库流水', icon: 'inventory', run: () => void router.push('/stock') },
-  { id: 'nav-mobile', group: '收货、扫码与库存', title: '手机扫码作业', subtitle: '连续扫描标签整理收货、入库与领用清单', icon: 'scan', badge: '现场', run: () => void router.push('/operations/mobile') },
-  { id: 'nav-drafts', group: '收货、扫码与库存', title: '操作草稿', subtitle: '核对并执行手机扫码草稿与 AI 建议草稿', icon: 'clipboard', run: () => void router.push('/operations/drafts') },
-  { id: 'nav-counts', group: '收货、扫码与库存', title: '库房盘点与补货', subtitle: '实盘核对库存差异与安全库存补货建议', icon: 'box', run: () => void router.push('/stock/counts') },
-  { id: 'nav-labels', group: '收货、扫码与库存', title: '打印物品与单据标签', subtitle: '生成带二维码的库位与单据标签', icon: 'file', run: () => void router.push('/operations/labels') },
+  { id: 'nav-stock', group: '收货与库存', title: '库存与领用', subtitle: '当前库存、到货待处理、领用与出入库流水', icon: 'inventory', run: () => void router.push('/stock') },
+  { id: 'nav-drafts', group: '收货与库存', title: '操作草稿', subtitle: '核对并执行已保存的操作与 AI 建议草稿', icon: 'clipboard', run: () => void router.push('/operations/drafts') },
+  { id: 'nav-counts', group: '收货与库存', title: '库房盘点与补货', subtitle: '实盘核对库存差异与安全库存补货建议', icon: 'box', run: () => void router.push('/stock/counts') },
   { id: 'nav-finance', group: '资金、发票与复盘', title: '资金对账', subtitle: '按实际金额记录付供应商、退款与员工垫付报销', icon: 'ledger', badge: '财务', run: () => void router.push('/finance') },
   { id: 'nav-invoices', group: '资金、发票与复盘', title: '发票池', subtitle: '核对发票原件与票面，支持一票多单、多票一单与冲减', icon: 'receipt', badge: '票据', run: () => void router.push('/finance/invoices') },
   { id: 'nav-monthly', group: '资金、发票与复盘', title: '月度复盘', subtitle: '同月对比净采购、实际现金流、供应商交付与净领用', icon: 'report', run: () => void router.push('/insights/monthly') },
@@ -62,18 +60,17 @@ const dynamicItems = computed<CommandItem[]>(() => {
   const prodMatch = /^P[-:]?([1-9]\d*)$/i.exec(raw);
   const docMatch = /^(?:D[-:]?|#)([1-9]\d*)$/i.exec(raw);
   const numMatch = /^([1-9]\d*)$/.exec(raw);
-  if (prodMatch) {
+  if (prodMatch && Number.isSafeInteger(Number(prodMatch[1]))) {
     const id = Number(prodMatch[1]);
     items.push(
-      { id: `go-prod-${id}`, group: '短码直达', title: `扫码领用物品 P-${id}`, subtitle: '打开手机扫码作业并加入该物品', icon: 'scan', badge: `P-${id}`, run: () => void router.push(`/operations/mobile?productId=${id}`) },
-      { id: `go-prod-label-${id}`, group: '短码直达', title: `打印物品标签 P-${id}`, subtitle: '生成该物品的二维码标签', icon: 'file', run: () => void router.push(`/operations/labels?productId=${id}`) },
+      { id: `go-prod-${id}`, group: '短码直达', title: `查看物品 P-${id} 库存与领用`, subtitle: '打开该物品的库存与来源', icon: 'inventory', badge: `P-${id}`, run: () => void router.push(`/stock?stock=all&productId=${id}`) },
     );
   }
-  if (docMatch || numMatch) {
+  if ((docMatch || numMatch) && Number.isSafeInteger(Number((docMatch ?? numMatch)![1]))) {
     const id = Number((docMatch ?? numMatch)![1]);
     items.push(
       { id: `go-doc-fin-${id}`, group: '单据直达', title: `查看采购 #${id} 资金与票据对账`, subtitle: '在资金对账中定位该采购单', icon: 'ledger', badge: `#${id}`, run: () => void router.push(`/finance?documentId=${id}`) },
-      { id: `go-doc-mob-${id}`, group: '单据直达', title: `扫码处理单据 D-${id}`, subtitle: '在手机作业中加载该采购单或到货单', icon: 'truck', run: () => void router.push(`/operations/mobile?documentId=${id}`) },
+      { id: `go-doc-${id}`, group: '单据直达', title: `打开业务单据 D-${id}`, subtitle: '到对应申请或库存页面办理', icon: 'truck', run: () => void router.push(`/documents/${id}`) },
     );
   }
   const encoded = encodeURIComponent(raw);

@@ -17,8 +17,10 @@ export const router = createRouter({
         { path: 'finance', component: () => import('@/views/execution/FinanceView.vue'), meta: { title: '资金对账' } },
         { path: 'finance/invoices', component: () => import('@/views/execution/InvoicesView.vue'), meta: { title: '发票池' } },
         { path: 'finance/invoices/:id', component: () => import('@/views/execution/InvoiceDetailView.vue'), meta: { title: '发票详情' } },
-        { path: 'operations/mobile', component: () => import('@/views/execution/MobileWorkView.vue'), meta: { title: '手机作业' } },
-        { path: 'operations/labels', component: () => import('@/views/execution/LabelsView.vue'), meta: { title: '打印标签' } },
+        { path: 'documents/:id', component: () => import('@/views/workflow/RecordRedirectView.vue'), meta: { title: '业务记录' } },
+        // 原扫码和标签书签转到对应申请或库存，操作归回原业务页面。
+        { path: 'operations/mobile', component: () => import('@/views/workflow/RecordRedirectView.vue'), meta: { title: '打开办理页面' } },
+        { path: 'operations/labels', component: () => import('@/views/workflow/RecordRedirectView.vue'), meta: { title: '打开办理页面' } },
         { path: 'operations/drafts', component: () => import('@/views/execution/ActionDraftsView.vue'), meta: { title: '操作草稿' } },
         { path: 'operations/drafts/:id', component: () => import('@/views/execution/ActionDraftDetailView.vue'), meta: { title: '核对操作草稿' } },
         { path: 'workbench/exceptions', component: () => import('@/views/execution/ExceptionsView.vue'), meta: { title: '异常中心' } },

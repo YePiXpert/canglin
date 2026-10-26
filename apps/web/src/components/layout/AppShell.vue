@@ -57,7 +57,6 @@ const tabItems: NavItem[] = [
 
 /** 「更多」抽屉里的导航：底部标签放不下的 */
 const moreItems: NavItem[] = [
-  { path: '/operations/mobile', title: '扫码作业', icon: 'scan' },
   { path: '/procurement', title: '集中采购', icon: 'layers' },
   { path: '/finance', title: '资金对账', icon: 'ledger' },
   { path: '/finance/invoices', title: '发票池', icon: 'receipt' },
@@ -198,7 +197,7 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
       </div>
     </header>
 
-    <!-- 手机顶栏：方印 + 词标，右侧快捷直达、扫码、AI 助手和主动作（「导入」，导入页里换成「申请」） -->
+    <!-- 手机顶栏：方印 + 词标，右侧快捷直达、AI 助手和主动作（「导入」，导入页里换成「申请」） -->
     <header class="lg:hidden flex h-13.5 shrink-0 items-center gap-2 border-b-2 border-double border-line-strong bg-canvas px-(--main-px)">
       <router-link to="/workbench" class="flex min-w-0 items-center gap-2 rounded-sm" aria-label="仓廪 工作台">
         <span :class="SEAL" class="size-7 text-[10px] shadow-xs" aria-hidden="true">仓廪</span>
@@ -217,13 +216,6 @@ const SEAL = 'flex shrink-0 items-center justify-center rounded-sm bg-accent fon
           <Icon name="search" :size="13" class="text-accent" />
           <span>直达</span>
         </button>
-        <router-link
-          to="/operations/mobile"
-          :class="buttonClass({ variant: 'ghost', iconOnly: true })"
-          aria-label="扫码作业"
-        >
-          <Icon name="scan" :size="18" />
-        </router-link>
         <button
           type="button"
           :class="buttonClass({ variant: 'ghost', iconOnly: true })"

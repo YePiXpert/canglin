@@ -30,8 +30,8 @@ onMounted(resource.load);
 
 <template>
   <div>
-    <PageHeader title="操作草稿" description="保存手机作业和 AI 建议，核对后再执行">
-      <router-link to="/operations/mobile" class="underline text-sm">开始手机作业</router-link>
+    <PageHeader title="操作草稿" description="核对 AI 建议与已保存的操作，确认后再执行">
+      <router-link to="/requests" class="underline text-sm">办理申请采购与到货</router-link>
     </PageHeader>
     <ExecutionLinks />
 
@@ -58,7 +58,7 @@ onMounted(resource.load);
         v-else-if="!resource.data.value?.items.length"
         icon="clipboard"
         title="当前没有匹配的草稿"
-        description="扫码作业和 AI 整理结果会保存在这里。"
+        description="AI 整理的建议和已保存的操作会显示在这里。"
       />
 
       <div v-else class="divide-y divide-line">

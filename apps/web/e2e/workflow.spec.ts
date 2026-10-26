@@ -119,6 +119,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await firstPurchase.getByRole('button', { name: '登记到货', exact: true }).click();
   dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
   await dialog.getByLabel('到货日期', { exact: true }).fill(businessDate);
+  await dialog.getByRole('button', { name: '本次全部到齐', exact: true }).click();
   await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click();
   await expect(progress(page, paper).locator('td[data-label="已到货"]')).toHaveText('6 盒');
   await expect(progress(page, paper).locator('td[data-label="尚待办理"]')).toContainText('待到货 4 盒');
@@ -131,6 +132,7 @@ test('按申请办理多供应商、分批到货、直发入库、领用撤销�
   await secondPurchase.getByRole('button', { name: '登记到货', exact: true }).click();
   dialog = page.getByRole('dialog', { name: '登记本次到货', exact: true });
   await dialog.getByLabel('到货日期', { exact: true }).fill(businessDate);
+  await dialog.getByRole('button', { name: '本次全部到齐', exact: true }).click();
   await dialog.getByRole('button', { name: '确认本次到货', exact: true }).click();
   await expect(progress(page, paper).locator('td[data-label="已到货"]')).toHaveText('10 盒');
   await direct(page, paper, '3', '李四');

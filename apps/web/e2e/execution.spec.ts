@@ -1,6 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import QRCode from 'qrcode';
 async function login(page: Page) { const password = 'browser-test-password'; await page.request.post('/api/auth/setup', { data: { password } }); await page.request.post('/api/auth/login', { data: { password } }); }
 async function write(page: Page, path: string, data: object, patch = false) { const r = await page.request[patch ? 'patch' : 'post'](`/api/${path}`, { data, headers: { 'Idempotency-Key': randomUUID() } }); expect(r.ok(), await r.text()).toBeTruthy(); return r.json(); }
 async function read(page: Page, path: string) { const r = await page.request.get(`/api/${path}`); expect(r.ok(), await r.text()).toBeTruthy(); return r.json(); }
@@ -8,23 +7,41 @@ const date = '2026-08-15';
 async function source(page: Page, name: string, quantity = '3') { const supplier = await write(page, 'suppliers', { name: `执行供应商-${randomUUID().slice(0,8)}` }); const request = await write(page, 'workflow/requests', { autoSerial: true, requestDate: date, department: '行政', handler: '小周', lines: [{ itemName: name, unit: '盒', quantity }] }); return { supplier, request }; }
 async function confirmDraft(page: Page) { await page.getByRole('button', { name: '核对并执行', exact: true }).click(); await page.getByRole('dialog', { name: '确认执行本次操作' }).getByRole('button', { name: '确认', exact: true }).click(); await expect(page.getByRole('region', { name: '执行结果', exact: true })).toBeVisible(); }
 
-test('摄像头不可用时读取二维码照片，标签打印保留二维码并隐藏导航', async ({ page }) => {
-  await login(page); const { request } = await source(page, `二维码-${randomUUID().slice(0,8)}`), id = request.lines[0].productId;
-  await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('denied', 'NotAllowedError'); }; });
-  await page.goto('/operations/mobile'); await page.getByRole('button', { name: '开启摄像头扫码' }).click();
-  await expect(page.getByText('摄像头暂时无法使用，可输入标签编号或上传二维码照片。')).toBeVisible();
-  const buffer = await QRCode.toBuffer(`${new URL(page.url()).origin}/operations/mobile?productId=${id}`, { width: 400 });
-  await page.getByLabel('识别二维码照片').setInputFiles({ name: 'label.png', mimeType: 'image/png', buffer });
-  await expect(page.getByLabel('本次数量（盒）', { exact: true })).toHaveCount(1);
-  await page.goto(`/operations/labels?productId=${id}`); await expect(page.locator('.label-card img')).toBeVisible();
-  await page.emulateMedia({ media: 'print' });
-  await expect(page.getByRole('navigation', { name: '主导航', exact: true })).toHaveCount(0);
-  for (const nav of await page.getByRole('navigation', { name: '主导航', exact: true, includeHidden: true }).all()) await expect(nav).not.toBeVisible();
-  await expect(page.locator('.label-card img')).toBeVisible();
+test('撤下扫码和标签入口，旧物品及单据书签转到库存和申请', async ({ page }) => {
+  await login(page);
+  const name = `兼容甲-${randomUUID().slice(0,8)}`, { supplier, request } = await source(page, name), id = request.lines[0].productId;
+  const other = await source(page, `兼容乙-${randomUUID().slice(0,8)}`);
+  const purchase = await write(page, 'workflow/purchases', { date, supplierId: supplier.id, lines: [{ requestLineId: request.lines[0].id, quantity: '3', unitPrice: '10' }] });
+  for (const path of [`/operations/mobile?documentId=${purchase.id}`, `/operations/labels?documentId=${purchase.id}`, `/documents/${purchase.id}`]) {
+    await page.goto(path); await expect(page).toHaveURL(new RegExp(`/requests/${request.id}$`));
+    await expect(page.getByRole('heading', { name: request.serialNumber, exact: true })).toBeVisible();
+  }
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+    await page.goto(`/operations/labels?productId=${id}`);
+    await expect(page).toHaveURL(url => url.pathname === '/stock' && url.searchParams.get('productId') === String(id));
+    await expect(page.locator('article[data-product-id]')).toHaveCount(1);
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(page.locator('a[href^="/operations/mobile"], a[href^="/operations/labels"]')).toHaveCount(0);
+    if (width === 390) {
+      await page.getByRole('button', { name: '更多', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '更多功能与工作台', exact: true })).toBeVisible();
+      await expect(page.getByText('扫码作业', { exact: true })).toHaveCount(0); await page.keyboard.press('Escape');
+    }
+    await page.keyboard.press('Control+k');
+    await page.getByRole('textbox', { name: '快捷跳转与检索', exact: true }).fill(`P-${id}`);
+    await page.getByText(`查看物品 P-${id} 库存与领用`, { exact: true }).click();
+    await expect(page.locator('article[data-product-id]')).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.getByRole('button', { name: '查看全部物品', exact: true }).click();
+  await expect(page.locator(`article[data-product-id="${other.request.lines[0].productId}"]`)).toBeVisible();
+  await page.goto('/operations/mobile'); await expect(page).toHaveURL(/\/requests$/);
+  await page.goto('/documents/99999999'); await expect(page.getByText('业务单据不存在', { exact: true })).toBeVisible();
 });
 
-test('集中采购：需求池建立批次、分供应商确认、手机到货和入库草稿', async ({ page }) => {
-  await login(page); const name = `扫码采购-${randomUUID().slice(0,8)}`, { supplier, request } = await source(page, name);
+test('集中采购：确认批次后从申请详情办理手机到货、入库和直发', async ({ page }) => {
+  await login(page); const name = `集中采购-${randomUUID().slice(0,8)}`, { supplier, request } = await source(page, name);
   await page.goto(`/procurement?search=${encodeURIComponent(name)}`);
   await page.getByRole('checkbox', { name: `选择 ${name}` }).check(); await page.getByRole('button', { name: '建立采购批次（1）' }).click();
   const dialog = page.getByRole('dialog', { name: '建立采购批次', exact: true }); await dialog.getByLabel('批次标题', { exact: true }).fill('执行流程验收'); await dialog.getByLabel('计划采购日期', { exact: true }).fill(date); await dialog.getByRole('button', { name: '建立草稿', exact: true }).click();
@@ -32,26 +49,32 @@ test('集中采购：需求池建立批次、分供应商确认、手机到货�
   await page.getByRole('combobox', { name: '供应商', exact: true }).click(); await page.getByRole('option', { name: supplier.name, exact: true }).click(); await page.getByLabel('成交单价（元）', { exact: true }).fill('10'); await page.getByRole('button', { name: '保存草稿', exact: true }).click();
   await expect(page.getByRole('button', { name: '确认已下单，登记采购' })).toBeEnabled(); await page.getByRole('button', { name: '确认已下单，登记采购' }).click(); await page.getByRole('dialog', { name: '确认实际下单结果' }).getByRole('button', { name: '确认', exact: true }).click();
   await expect(page.getByRole('region', { name: '已生成的采购单' })).toBeVisible(); const batch = await read(page, `execution/batches/${batchId}`); expect(batch.documents).toHaveLength(1);
-  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(`/operations/mobile?documentId=${batch.documents[0].id}`);
-  await page.getByLabel('本次数量（盒）', { exact: true }).fill('3'); await page.getByRole('button', { name: '保存并核对' }).click(); await expect(page).toHaveURL(/\/operations\/drafts\/\d+$/);
-  await expect(page.getByText(name, { exact: true })).toBeVisible(); await confirmDraft(page);
-  const draft = await read(page, `execution/drafts/${page.url().split('/').at(-1)}`); expect(draft.result.kind).toBe('RECEIPT');
-  await page.getByRole('link', { name: '继续入库或直发' }).click(); await expect(page.getByRole('combobox', { name: '作业类型' })).toContainText('到货入库');
-  await page.getByLabel('本次数量（盒）', { exact: true }).fill('2'); await page.getByRole('button', { name: '保存并核对' }).click(); await confirmDraft(page);
-  expect((await read(page, `workflow/stock?productId=${request.lines[0].productId}`))[0]).toMatchObject({ stockQuantity: '2', receivingQuantity: '1' });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.getByRole('link', { name: '到申请详情办理', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/requests/${request.id}$`));
+  await page.locator(`article[data-document-id="${batch.documents[0].id}"]`).getByRole('button', { name: '登记到货', exact: true }).click();
+  await page.getByRole('dialog', { name: '登记本次到货', exact: true }).getByRole('button', { name: '本次全部到齐', exact: true }).click();
+  await page.getByRole('dialog', { name: '登记本次到货', exact: true }).getByRole('button', { name: '确认本次到货', exact: true }).click();
+  const product = page.locator(`article[data-product-id="${request.lines[0].productId}"]`);
+  await product.getByRole('button', { name: '登记入库', exact: true }).click();
+  const stockIn = page.getByRole('dialog', { name: '登记入库', exact: true }); await stockIn.getByLabel(`${name} 本次数量（盒）`, { exact: true }).fill('2'); await stockIn.getByRole('button', { name: '确认登记入库', exact: true }).click(); await expect(stockIn).toHaveCount(0);
+  await product.getByRole('button', { name: '直接发放', exact: true }).click();
+  const direct = page.getByRole('dialog', { name: '直接发放', exact: true }); await direct.getByRole('button', { name: '确认直接发放', exact: true }).click(); await expect(direct).toHaveCount(0);
+  expect((await read(page, `workflow/stock?productId=${request.lines[0].productId}`))[0]).toMatchObject({ stockQuantity: '2', receivingQuantity: '0' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true); await page.screenshot({ path: test.info().outputPath('execution-mobile.png'), fullPage: true });
 });
 
-test('手机领用：重复扫码不重加、弱网保留数量、库存变化需重核', async ({ page }) => {
-  await login(page); const name = `手机领用-${randomUUID().slice(0,8)}`, { request } = await source(page, name); const id = request.lines[0].productId;
-  await write(page, 'workflow/adjustments', { productId: id, quantity: '5', date, reason: '期初' }); await page.setViewportSize({ width: 390, height: 844 }); await page.goto(`/operations/mobile?productId=${id}`);
-  await page.getByLabel('标签编号或本站标签链接').fill(`P-${id}`); await page.getByRole('button', { name: '加入', exact: true }).click(); await expect(page.getByLabel('本次数量（盒）', { exact: true })).toHaveCount(1);
-  await page.getByLabel('本次数量（盒）', { exact: true }).fill('2'); await page.getByLabel('领用部门', { exact: true }).fill('行政'); await page.getByLabel('本行领用人', { exact: true }).fill('小周');
-  await page.route('**/api/execution/drafts', route => route.abort()); await page.getByRole('button', { name: '保存并核对' }).click(); await expect(page.getByText('网络连接失败', { exact: true })).toBeVisible(); await expect(page.getByLabel('本次数量（盒）', { exact: true })).toHaveValue('2'); await page.unroute('**/api/execution/drafts');
-  await page.reload(); await expect(page.getByLabel('本次数量（盒）', { exact: true })).toHaveValue('2'); await page.getByRole('button', { name: '保存并核对' }).click(); await expect(page).toHaveURL(/\/operations\/drafts\/\d+$/);
-  await write(page, 'workflow/adjustments', { productId: id, quantity: '1', date, reason: '并发补录' }); await page.getByRole('button', { name: '刷新', exact: true }).click(); await expect(page.getByRole('button', { name: '核对并执行' })).toBeDisabled();
+test('已有人工操作草稿继续核对，来源直达申请，冲突后重核仍可执行', async ({ page }) => {
+  await login(page); const name = `历史草稿-${randomUUID().slice(0,8)}`, { supplier, request } = await source(page, name);
+  const purchase = await write(page, 'workflow/purchases', { date, supplierId: supplier.id, lines: [{ requestLineId: request.lines[0].id, quantity: '3', unitPrice: '10' }] });
+  const draft = await write(page, 'execution/drafts', { title: '历史人工到货草稿', action: { kind: 'RECEIPT', data: { date, lines: [{ purchaseLineId: purchase.lines[0].id, quantity: '2' }] } } });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(`/operations/drafts/${draft.id}`);
+  await page.getByRole('link', { name: '查看来源', exact: true }).click(); await expect(page).toHaveURL(new RegExp(`/requests/${request.id}$`));
+  await page.goto(`/operations/drafts/${draft.id}`);
+  await write(page, 'workflow/receipts', { date, lines: [{ purchaseLineId: purchase.lines[0].id, quantity: '1' }] });
+  await page.getByRole('button', { name: '刷新', exact: true }).click(); await expect(page.getByRole('button', { name: '核对并执行' })).toBeDisabled();
   await page.getByRole('button', { name: '重新核对依据', exact: true }).click(); await page.getByRole('dialog', { name: '重新核对业务依据' }).getByRole('button', { name: '确认', exact: true }).click(); await confirmDraft(page);
-  expect((await read(page, `workflow/stock?productId=${id}`))[0].stockQuantity).toBe('4');
+  await page.getByRole('link', { name: '继续入库或直发', exact: true }).click(); await expect(page).toHaveURL(new RegExp(`/requests/${request.id}$`));
+  expect((await read(page, `workflow/requests/${request.id}`)).lines[0].receivedQuantity).toBe('3');
 });
 
 test('历史期初：净垫付已为零，仍能核实员工应退报销款', async ({ page }) => {

@@ -28,7 +28,7 @@ export class ExceptionsService {
     const rows: ExceptionRow[] = [];
     const add = (key: string, type: string, title: string, detail: string, url: string) => rows.push({ key, type, title, detail, url, state: 'ACTIVE', version: 0, reason: '', untilDate: null });
     for (const r of followups) if (r.kind === 'ARRIVAL' && r.overdue) add(`ARRIVAL:${r.targetId}`, 'ARRIVAL', `${r.label} 到货逾期`, `约定 ${r.expectedDate}，尚待 ${r.quantity} ${r.unit}`, '/workbench/followups?status=OVERDUE');
-    for (const r of receiving) if (days(r.originLine.document.date, today) >= rules.receivingDays) add(`RECEIVING:${r.id}`, 'RECEIVING', `${r.product.name} 到货后待处理`, `已等待 ${days(r.originLine.document.date, today)} 天，余量 ${quantityText(r.quantityUnits)} ${r.product.unit}`, `/operations/mobile?documentId=${r.originLine.documentId}`);
+    for (const r of receiving) if (days(r.originLine.document.date, today) >= rules.receivingDays) add(`RECEIVING:${r.id}`, 'RECEIVING', `${r.product.name} 到货后待处理`, `已等待 ${days(r.originLine.document.date, today)} 天，余量 ${quantityText(r.quantityUnits)} ${r.product.unit}`, `/documents/${r.originLine.documentId}`);
     for (const r of suggestions) if (r.low && parseFixed(r.suggested, 6) > 0n) add(`SHORTAGE:${r.productId}`, 'SHORTAGE', `${r.itemName} 补货仍有缺口`, `当前库存 ${r.stock} ${r.unit}，扣除有效安排后建议补 ${r.suggested} ${r.unit}`, '/stock/replenishment');
     for (const r of settlements) {
       if (r.mode === 'LEGACY') add(`LEGACY:${r.documentId}`, 'LEGACY', `采购 #${r.documentId} 历史资金状态待核实`, '保留历史标记，实付金额与日期需核对后确认期初余额', `/finance?documentId=${r.documentId}`);
