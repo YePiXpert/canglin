@@ -613,3 +613,33 @@ test('单位按物品库自动填；采购链接精简后随导入入账，可�
   await expect(page.getByRole('button', { name: '确认全部内容并导入' })).toBeEnabled();
   await expect(qty).toHaveValue('6');
 });
+
+for (const width of [1440, 390]) test(`导入自动整理并复用物品 ${width}px，重复导入不增加档案或库存`, async ({ page, request }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await loginWithoutAi(page, request);
+  const name = '得力 SK628BROWSER 荧光笔', spec = '彩色；6支/盒';
+  const create = await page.request.post('/api/workflow/products', { headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { itemName: name, specification: spec, unit: '盒' } });
+  expect(create.ok()).toBeTruthy();
+  const productId = (await create.json()).productId;
+  const adjustment = await page.request.post('/api/workflow/adjustments', { headers: { 'Idempotency-Key': crypto.randomUUID() }, data: { date: businessDate, productId, quantity: '5', reason: '导入前库存' } });
+  expect(adjustment.ok()).toBeTruthy();
+  const before = (await (await page.request.get(`/api/workflow/stock?productId=${productId}`)).json())[0].stockQuantity;
+  const count = (await (await page.request.get('/api/workflow/products')).json()).length;
+  for (const round of [1, 2]) {
+    const marker = `catalog-normalize-${width}-${round}-${Date.now()}`;
+    await page.goto('/import');
+    await page.locator('input[type=file]').setInputFiles({ name: `${marker}.png`, mimeType: 'image/png', buffer: imageFile(marker) });
+    await expect(page.getByPlaceholder('品名（同名不同规格请明确区分）')).toHaveValue(name);
+    await expect(page.getByPlaceholder('规格（可空）')).toHaveValue(spec);
+    await page.getByPlaceholder('数量：待确认').fill('8');
+    await page.locator('input[type=date]').fill(businessDate);
+    await page.getByRole('button', { name: '确认全部内容并导入' }).click();
+    await expect(page.getByText(/已创建申请：1 条明细/)).toBeVisible();
+    await page.getByRole('button', { name: '继续办理申请', exact: true }).click();
+    await expect(page).toHaveURL(/\/requests\/\d+$/);
+    const row = await (await page.request.get('/api/workflow' + new URL(page.url()).pathname)).json();
+    expect(row.lines[0]).toMatchObject({ productId, itemName: name, specification: spec, quantity: '8' });
+  }
+  expect((await (await page.request.get('/api/workflow/products')).json()).length).toBe(count);
+  expect((await (await page.request.get(`/api/workflow/stock?productId=${productId}`)).json())[0].stockQuantity).toBe(before);
+});

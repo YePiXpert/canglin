@@ -5,9 +5,9 @@
  */
 import type { TemplateType } from '@canglin/shared';
 
-/** v4 / review-v3：商城标题按品名、规格拆分，明确排除页面布局杂字，原文继续保留。 */
-export const RECOGNITION_PROMPT_VERSION = 'recognition-v4';
-export const REVIEW_PROMPT_VERSION = 'review-v3';
+/** v5 / review-v4：品名与规格分开，目录建议须核对完整规格与单位。 */
+export const RECOGNITION_PROMPT_VERSION = 'recognition-v5';
+export const REVIEW_PROMPT_VERSION = 'review-v4';
 /** 识别模式附带的文本层上限（字符）；更长的页面截断，链接仍以图像与截断后的文本为准 */
 export const TEXT_LAYER_LIMIT = 6000;
 
@@ -18,6 +18,9 @@ const UNIT_RULE = `- unit：只在明确写出时填：单位列；备注列形�
 - unitGuess：unit 为 null 时，推测申请人最可能使用的计量单位，只写一个单位词（如"支""个""包""盒""箱""本""张""把""台""套"）。按品名、规格和包装写法判断：规格写了包装层级（如"5包/箱"）时从这几层里选；catalog 里有同一物品时用它的单位。实在判断不了填 null。unit 不为 null 时 unitGuess 为 null。`;
 const NOTE_RULE = `- 备注列中既不是链接也不能解释为单位的文字追加到 spec，并在 warnings 提示可能需要拆行。`;
 const EXAMPLES = `（名称单元格 → itemName | spec | unit | unitGuess）
+- "移动硬盘 忆捷 1T" → "忆捷 移动硬盘" | "1TB" | null | "个"
+- "怡宝 CESTBON 350ml 饮用水 纯净水" → "怡宝 纯净水" | "350ml" | null | "箱"
+- "得力 文件夹 63102 5个 A4 25mm大背宽 白色 (白色)" → "得力 63102 文件夹" | "A4；25mm 大背宽；白色；5个（原文标注）" | null | "个"，不把标题中的5个当成申请数量，不推断包装换算
 - "得力 7084 铅笔 2B 12支/盒 （单位：盒） 墨绿 没有阶梯价和同款商品时增加高度" → "得力 7084 铅笔" | "2B；12支/盒；墨绿" | "盒" | null
 - "A4打印纸(规格：80g)--（5包/箱）" → "A4打印纸" | "80g；5包/箱" | null | "箱"
 - "装订胶圈（蓝色、8mm)" → "装订胶圈" | "蓝色、8mm" | null | "盒"
@@ -70,7 +73,7 @@ ${NOTE_RULE}
 示例${EXAMPLES}`;
 
 /** 附带物品目录时追加在提示词末尾；调用记录的提示词版本随之带上 +catalog */
-export const CATALOG_NOTE = 'catalog 是系统已有物品。若某行与其中一条明显是同一物品（型号相同或名称仅措辞不同），把该条原样填入 catalogSuggestion，否则 null。不要因此改动 itemName 和 spec。';
+export const CATALOG_NOTE = 'catalog 是系统已有物品。仅当品牌、品类、型号、颜色、容量、包装及计量单位均一致，差异只是措辞或排版时，把该条原样填入 catalogSuggestion。型号相同但规格或单位不同不能视为同一物品；缺少关键规格或存在多种可能时填 null 并提示核对。不要据此补猜原件信息或改动 itemName、spec、quantity、unit。';
 
 /** 长截图分成多段图像时追加在识别提示词末尾；调用记录的提示词版本随之带上 +strips */
 export const STRIPS_NOTE = '本页按自上而下顺序分成 strips 段图像，是同一页的连续部分，行不重复，不要按段分别编号。';

@@ -118,7 +118,7 @@ describe('AI review of text-layer PDF pages', () => {
     expect(task.result).toMatchObject({ mode: 'AI_IMAGE', templateType: 'OFFICE_SUPPLY' });
     expect(task.result?.pages?.[0]).toMatchObject({ status: 'DONE', mode: 'AI_REVIEW' });
     expect(task.draft?.items.map((i) => [i.lineId, i.itemName, i.spec, i.quantity, i.purchaseLink])).toEqual([
-      ['p1-r1', 'A4打印纸', '80g；5包/箱', 10, 'https://www.cemall.com.cn/goods/1'],
+      ['p1-r1', '打印纸', '80g；5包/箱；A4', 10, 'https://www.cemall.com.cn/goods/1'],
       ['p1-r2', '光盘', null, 50, null],
     ]);
     expect(task.result?.items[0].source).toMatchObject({ method: 'AI', rawText: 'A4打印纸(规格：80g)--（5包/箱）', box: gridPage().result.items[0].source.box });
@@ -127,7 +127,7 @@ describe('AI review of text-layer PDF pages', () => {
       'AI 读到第 1 页第 1 行数量为 9，已保留文本层的 10',
       'AI 读到的第 1 页第 1 行链接与文本层不同，已保留文本层的链接',
     ]);
-    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v3' });
+    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v4' });
   });
 
   it('treats added or dropped rows as a contract error and keeps the text-layer rows', async () => {
@@ -137,7 +137,8 @@ describe('AI review of text-layer PDF pages', () => {
     const task = await settle(await upload('office.pdf'));
     expect(task.calls[0]).toMatchObject({ status: 'FAILED', mode: 'REVIEW', error: 'REVIEW_MISMATCH：AI 返回的行与文本层的物理行不一致' });
     expect(ocr.parse).not.toHaveBeenCalled();
-    expect(task.draft?.items.map((i) => i.itemName)).toEqual(['A4打印纸(规格：80g)--（5包/箱）', '光盘']);
+    expect(task.draft?.items.map((i) => i.itemName)).toEqual(['打印纸', '光盘']);
+    expect(task.result?.items[0].itemName).toBe('A4打印纸(规格：80g)--（5包/箱）');
     expect(task.result?.warnings).toContain('第 1 页 AI 未完成，已使用文本层重建的明细，请核对原件');
   });
 
@@ -165,10 +166,10 @@ describe('AI review of text-layer PDF pages', () => {
       expect(sent.messages[0].content).toContain('catalog 是系统已有物品');
       expect(JSON.parse(sent.messages[1].content).catalog).toEqual(expect.arrayContaining([
         { name: 'A4打印纸', spec: '80g', unit: '包' }, { name: '光盘', spec: null, unit: '张' }]));
-      expect(task.calls[0].promptVersion).toBe('review-v3+catalog');
+      expect(task.calls[0].promptVersion).toBe('review-v4+catalog');
       expect(task.aiResult[0].items.map((i) => i.catalogSuggestion)).toEqual([{ name: 'A4打印纸', spec: '80g', unit: '包' }, null]);
-      expect(task.draft?.items[0].itemName).toBe('A4打印纸');  // 来自 AI 的拆分，不是目录替换
-      expect(task.draft?.items[0].spec).toBe('80g；5包/箱');
+      expect(task.draft?.items[0].itemName).toBe('打印纸');  // 整理草稿，不采用规格不同的目录建议
+      expect(task.draft?.items[0].spec).toBe('80g；5包/箱；A4');
     } finally {
       await prisma.catalogProduct.deleteMany({ where: { id: { in: products.map((p) => p.id) } } });
     }
@@ -220,7 +221,7 @@ describe('AI review of text-layer PDF pages', () => {
     expect(sent.messages[0].content).toContain('你是采购申请单据的识别器');
     const message = JSON.parse(sent.messages[1].content);
     expect(message).toMatchObject({ page: 1, pageCount: 1, templateHint: 'OFFICE_SUPPLY', textLayer: gridPage().textLayer });
-    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v4' });
+    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v5' });
     expect(task.result?.items[0].purchaseLink).toBeNull();
     expect(task.aiResult[0].warnings).toContain('「原件物品1」的链接不在本页文本层中，已置空，请对照原件');
     cfg = { ...cfg, reviewTextPdf: undefined } as typeof cfg;
@@ -275,7 +276,7 @@ describe('AI primary original recognition', () => {
       expect(sent.messages[1].images).toEqual(['top', 'bottom'].map((s) => `data:image/png;base64,${Buffer.from(s).toString('base64')}`));
       expect(sent.messages[0].content).toContain('本页按自上而下顺序分成 strips 段图像');
       expect(JSON.parse(sent.messages[1].content).strips).toBe(2);
-      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v4+strips' });
+      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v5+strips' });
       ocr.pageStrips.mockRejectedValueOnce(new Error('strips failed'));
       await settle(await upload('long2.png'));
       expect(llm.chat.mock.calls[1][0].messages[1].images).toHaveLength(1);
@@ -533,4 +534,25 @@ describe('AI 推测单位（unitGuess）', () => {
     expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'RECOGNITION' });
     expect(task.result?.items.map((i) => i.unitGuess ?? null)).toEqual(['支', null, null, null]);
   });
+});
+
+for (const ai of [false, true]) it(`${ai ? 'AI' : '本地 OCR'} 初始草稿沿用已有物品，原始识别与人工草稿保留`, async () => {
+  enabled = ai;
+  ocr.inspect.mockResolvedValue({ pageCount: 1 });
+  const rawName = '得力（deli） SK628PIPE 荧光笔 6支/盒 彩色 单位:盒';
+  const master = await prisma.catalogProduct.create({ data: { name: '得力 SK628PIPE 荧光笔', specification: '彩色；6支/盒', unit: '盒' } });
+  try {
+    const item = { lineId: 'p1-r1', rawText: rawName, itemName: rawName, spec: null, quantity: 7, unit: '盒', unitPrice: null, amount: null, purchaseLink: null, catalogSuggestion: null };
+    ocr.parse.mockResolvedValue({ mode: 'IMAGE_OCR', items: [{ ...item, source: { page: 1, method: 'IMAGE_OCR', rawText: rawName } }], warnings: [], pages: [{ page: 1, status: 'DONE', mode: 'IMAGE_OCR' }] });
+    const aiPage = JSON.parse(response().content); aiPage.items = [item];
+    llm.chat.mockResolvedValue({ ...response(), content: JSON.stringify(aiPage) });
+    const task = await settle(await upload(`normalize-${ai}.png`));
+    expect(task.draft?.items[0]).toMatchObject({ itemName: master.name, spec: master.specification, quantity: 7, unit: '盒', source: { rawText: rawName } });
+    expect(task.result?.items[0].itemName).toBe(rawName);
+    await prisma.$transaction(tx => imports.validateConfirmation(tx, { taskId: task.id, version: task.version }));
+    const edited = { ...task.draft!, items: [{ ...task.draft!.items[0], itemName: '人工核对后的品名', spec: '明确的另一规格' }] };
+    await imports.saveDraft(task.id, task.version, edited);
+    await imports.retry(task.id, 'local');
+    expect((await settle(task.id)).draft?.items[0]).toMatchObject({ itemName: '人工核对后的品名', spec: '明确的另一规格' });
+  } finally { await prisma.catalogProduct.delete({ where: { id: master.id } }); }
 });

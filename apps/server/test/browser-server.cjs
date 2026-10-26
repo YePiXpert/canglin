@@ -35,7 +35,7 @@ const ocr = {
   page: async () => ({ bytes: Buffer.from(capabilityImage().split(',')[1], 'base64'), mime: 'image/png' }),
   // The synthetic originals have no text layer: AI pages use recognition mode.
   textLayer: async () => ({ result: { mode: 'PDF_TEXT', items: [], warnings: [] }, textLayer: null }),
-  parse: async () => ({
+  parse: async (_bytes, filename = '') => ({
     schemaVersion: 2,
     parserVersion: 'browser-fixture',
     pageCount: 1,
@@ -49,14 +49,14 @@ const ocr = {
     items: [
       {
         lineId: 'p1-r1',
-        itemName: `测试用品${sequence}`,
+        itemName: filename.startsWith('catalog-normalize-') ? '得力（deli） SK628BROWSER 荧光笔 6支/盒 彩色 单位:盒' : `测试用品${sequence}`,
         quantity: null,
         unit: '盒',
         unitPrice: 5,
         source: {
           page: 1,
           method: 'IMAGE_OCR',
-          rawText: '测试用品 数量8盒',
+          rawText: filename.startsWith('catalog-normalize-') ? '得力（deli） SK628BROWSER 荧光笔 6支/盒 彩色 单位:盒' : '测试用品 数量8盒',
           box: [
             [0, 0],
             [1, 0],

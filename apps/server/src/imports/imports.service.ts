@@ -16,6 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { ImportRecognitionService } from './import-recognition.service';
 import { EXTENSIONS, MIME, draftFrom, normalizeResult, type AiPage } from './import-result';
 import { reviewPages, type ReviewPage } from './import-review';
+import { organizeImportDraft } from './import-catalog';
 import { config } from '../config';
 import { AiConfigService } from '../ai/ai-config.service';
 import { maintenance, restoreEvents } from '../common/maintenance';
@@ -367,7 +368,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     const draft = row.draft
       ? importDraftSchema.parse(JSON.parse(row.draft))
       : result
-        ? draftFrom(result)
+        ? row.status === 'DONE' && !row.confirmedAt ? await organizeImportDraft(draftFrom(result), this.prisma) : draftFrom(result)
         : importDraftSchema.parse({ items: [] });
     const aiResult: AiPage[] = row.aiResult ? JSON.parse(row.aiResult) : [];
     return {

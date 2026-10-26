@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import { OcrClient } from './ocr.client';
 import { config } from '../config';
+import { organizeImportDraft } from './import-catalog';
 import { AiConfigService } from '../ai/ai-config.service';
 import { AiResponseError, LlmClient } from '../ai/llm.client';
 import { parsedItemSchema, type ParseResult } from '@canglin/shared';
@@ -173,6 +174,10 @@ export class ImportRecognitionService {
       update: { snapshot: JSON.stringify(result) },
     });
     await this.prisma.importTask.updateMany({
+      where: { id, generation, draft: null, confirmedAt: null },
+      data: { draft: JSON.stringify(await organizeImportDraft(draftFrom(result), this.prisma)) },
+    });
+    await this.prisma.importTask.updateMany({
       where: { id, generation, confirmedAt: null },
       data: {
         status: 'DONE',
@@ -180,10 +185,6 @@ export class ImportRecognitionService {
         finishedAt: new Date(),
         aiStatus: ['PENDING', 'RUNNING'].includes(row.aiStatus) ? 'DISABLED' : row.aiStatus,
       },
-    });
-    await this.prisma.importTask.updateMany({
-      where: { id, generation, draft: null, confirmedAt: null },
-      data: { draft: JSON.stringify(draftFrom(result)) },
     });
   }
   async runAi(id: string, generation: number, requested?: number[]) {
@@ -480,6 +481,10 @@ export class ImportRecognitionService {
       }
       finishResult(result);
       await this.prisma.importTask.updateMany({
+        where: { id, generation, draft: null, confirmedAt: null },
+        data: { draft: JSON.stringify(await organizeImportDraft(draftFrom(result), this.prisma)) },
+      });
+      await this.prisma.importTask.updateMany({
         where: { id, generation, confirmedAt: null },
         data: {
           status: 'DONE',
@@ -491,10 +496,6 @@ export class ImportRecognitionService {
               ? `部分 AI 页面未完成，已尝试本地 OCR，人工补录始终可用。${errors.join('；')}`
               : null,
         },
-      });
-      await this.prisma.importTask.updateMany({
-        where: { id, generation, draft: null, confirmedAt: null },
-        data: { draft: JSON.stringify(draftFrom(result)) },
       });
       if (await this.live(id, generation))
         await this.prisma.importRevision.upsert({
