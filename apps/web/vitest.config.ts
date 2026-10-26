@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import path from 'node:path';
 
 export default defineConfig({
+  define: { __BRAND_REVISION__: JSON.stringify('test') },
   plugins: [vue()],
   test: {
     environment: 'jsdom',

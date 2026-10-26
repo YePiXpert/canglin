@@ -8,6 +8,11 @@ for (const width of [1440, 390]) test(`供应商账期统一结算 ${width}px：
   await page.setViewportSize({ width, height: 960 });
   const password = 'browser-test-password'; await page.request.post('/api/auth/setup', { data: { password } });
   await page.goto('/login'); await page.locator('input[type=password]').fill(password); await page.getByRole('button', { name: /^登\s*录$/ }).click(); await expect(page).toHaveURL(/workbench/);
+  const brand = page.getByRole('link', { name: '仓廪 工作台', exact: true }).locator('img');
+  const brandSrc = (await brand.getAttribute('src'))!;
+  expect(brandSrc).toMatch(/^\/favicon\.svg\?v=[a-f0-9]{12}$/);
+  const brandResponse = await page.request.get(brandSrc);
+  expect(brandResponse.headers()['content-type']).toContain('image/svg+xml');
   const supplier = await write(page, 'suppliers', { name: `账期验收-${width}-${randomUUID().slice(0, 6)}` });
   const request = await write(page, 'workflow/requests', { autoSerial: true, requestDate: '2026-10-20', department: '行政', handler: '管理员', lines: ['3','7','2','4'].map((quantity, index) => ({ itemName: `账期物品-${index}-${randomUUID().slice(0,6)}`, unit: '盒', quantity })) });
   const purchases = [];
