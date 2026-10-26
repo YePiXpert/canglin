@@ -23,7 +23,7 @@ it('从上一版增量迁移保留旧申请、物品、外键与 CHECK，并加�
     await db.$disconnect();
     cpSync(path.join('prisma/migrations', next), path.join(migrations, next), { recursive: true }); migrate();
     expect(await db.procurementRequest.findUnique({ where: { id: 1 } })).toMatchObject({ serialNumber: 'OLD-001', purpose: 'GENERAL' });
-    expect(await db.catalogProduct.findUnique({ where: { id: 1 } })).toMatchObject({ name: '迁移纸', stockVersion: 0 });
+    expect(await db.catalogProduct.findUnique({ where: { id: 1 }, select: { name: true, stockVersion: true } })).toMatchObject({ name: '迁移纸', stockVersion: 0 });
     expect((await db.procurementLine.findUniqueOrThrow({ where: { id: 1 } })).quantityUnits).toBe(5000000n);
     expect(await db.$queryRawUnsafe(`PRAGMA foreign_key_check`)).toEqual([]);
     expect(await db.$queryRawUnsafe(`PRAGMA integrity_check`)).toEqual([{ integrity_check: 'ok' }]);

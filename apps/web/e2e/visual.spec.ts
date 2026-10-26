@@ -250,6 +250,27 @@ for (const variant of VARIANTS) {
       await shot(page, `${variant.name}-dialog-receipt-partial`);
     });
 
+    test('修改物品资料弹窗', async ({ page }) => {
+      test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
+      await page.clock.setFixedTime(NOW);
+      if (variant.dark) await page.addInitScript(() => { localStorage.setItem('canglin-theme', 'dark'); });
+      expect((await page.request.post('/api/auth/login', { data: { password } })).ok()).toBeTruthy();
+      await page.goto(`/stock?productId=${seed!.productId}`); await settle(page);
+      await page.getByRole('button', { name: 'A4 复印纸 的更多操作', exact: true }).click();
+      await page.getByRole('menuitem', { name: '修改物品资料', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '修改物品资料', exact: true });
+      await dialog.getByLabel('物品名称', { exact: true }).fill('齐心 A4 复印纸 5包/箱 （单位：箱）');
+      await dialog.getByLabel('规格', { exact: true }).fill('80g；500张/包');
+      await dialog.getByLabel('修改原因', { exact: true }).fill('品名简化，包装信息整理到规格');
+      await dialog.getByLabel('物品名称', { exact: true }).scrollIntoViewIfNeeded();
+      await shot(page, `${variant.name}-dialog-product-edit`);
+      await dialog.getByRole('button', { name: '采用整理建议', exact: true }).click();
+      await dialog.getByLabel('修改原因', { exact: true }).fill('');
+      await dialog.getByRole('button', { name: '保存物品资料', exact: true }).click();
+      await expect(dialog.getByText('请填写修改原因', { exact: true })).toBeVisible();
+      await shot(page, `${variant.name}-dialog-product-edit-error`);
+    });
+
     test('修改到货数量弹窗', async ({ page }) => {
       test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
       await page.clock.setFixedTime(NOW);

@@ -127,7 +127,7 @@ describe('AI review of text-layer PDF pages', () => {
       'AI 读到第 1 页第 1 行数量为 9，已保留文本层的 10',
       'AI 读到的第 1 页第 1 行链接与文本层不同，已保留文本层的链接',
     ]);
-    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v2' });
+    expect(task.calls[0]).toMatchObject({ status: 'DONE', mode: 'REVIEW', promptVersion: 'review-v3' });
   });
 
   it('treats added or dropped rows as a contract error and keeps the text-layer rows', async () => {
@@ -165,7 +165,7 @@ describe('AI review of text-layer PDF pages', () => {
       expect(sent.messages[0].content).toContain('catalog 是系统已有物品');
       expect(JSON.parse(sent.messages[1].content).catalog).toEqual(expect.arrayContaining([
         { name: 'A4打印纸', spec: '80g', unit: '包' }, { name: '光盘', spec: null, unit: '张' }]));
-      expect(task.calls[0].promptVersion).toBe('review-v2+catalog');
+      expect(task.calls[0].promptVersion).toBe('review-v3+catalog');
       expect(task.aiResult[0].items.map((i) => i.catalogSuggestion)).toEqual([{ name: 'A4打印纸', spec: '80g', unit: '包' }, null]);
       expect(task.draft?.items[0].itemName).toBe('A4打印纸');  // 来自 AI 的拆分，不是目录替换
       expect(task.draft?.items[0].spec).toBe('80g；5包/箱');
@@ -220,7 +220,7 @@ describe('AI review of text-layer PDF pages', () => {
     expect(sent.messages[0].content).toContain('你是采购申请单据的识别器');
     const message = JSON.parse(sent.messages[1].content);
     expect(message).toMatchObject({ page: 1, pageCount: 1, templateHint: 'OFFICE_SUPPLY', textLayer: gridPage().textLayer });
-    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v3' });
+    expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v4' });
     expect(task.result?.items[0].purchaseLink).toBeNull();
     expect(task.aiResult[0].warnings).toContain('「原件物品1」的链接不在本页文本层中，已置空，请对照原件');
     cfg = { ...cfg, reviewTextPdf: undefined } as typeof cfg;
@@ -275,7 +275,7 @@ describe('AI primary original recognition', () => {
       expect(sent.messages[1].images).toEqual(['top', 'bottom'].map((s) => `data:image/png;base64,${Buffer.from(s).toString('base64')}`));
       expect(sent.messages[0].content).toContain('本页按自上而下顺序分成 strips 段图像');
       expect(JSON.parse(sent.messages[1].content).strips).toBe(2);
-      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v3+strips' });
+      expect(task.calls[0]).toMatchObject({ mode: 'RECOGNITION', promptVersion: 'recognition-v4+strips' });
       ocr.pageStrips.mockRejectedValueOnce(new Error('strips failed'));
       await settle(await upload('long2.png'));
       expect(llm.chat.mock.calls[1][0].messages[1].images).toHaveLength(1);

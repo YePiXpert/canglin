@@ -154,6 +154,8 @@ model AiCall {
 // V3 workflow. CHECK constraints on enum-like columns live in the migrations (Prisma cannot model them).
 // Scaled integers: quantities 6 decimals, unit prices 4, line amounts CNY fen.
 model CatalogProduct {
+  catalogVersion     Int                      @default(0)
+  aliases            CatalogProductAlias[]
   stockVersion       Int                      @default(0)
   stocktakeLines     StocktakeLine[]
   stockPolicy        StockPolicy?
@@ -169,6 +171,19 @@ model CatalogProduct {
   entries            StockEntry[]
 
   @@unique([name, specification, unit])
+}
+
+model CatalogProductAlias {
+  id            Int            @id @default(autoincrement())
+  productId     Int
+  product       CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name          String
+  specification String         @default("")
+  unit          String
+  createdAt     DateTime       @default(now())
+
+  @@unique([name, specification, unit])
+  @@index([productId])
 }
 
 model ProcurementRequest {

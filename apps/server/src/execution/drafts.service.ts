@@ -24,7 +24,7 @@ export class DraftsService {
     if (action.kind === 'RECEIPT') return hash(await tx.businessLine.findMany({ where: { id: { in: action.data.lines.map(l => l.purchaseLineId) } }, include: { document: { select: { status: true, date: true } } }, orderBy: { id: 'asc' } }));
     if (action.kind === 'DISTRIBUTION' || action.kind === 'STOCK_IN') {
       if (action.kind === 'STOCK_IN' || action.data.source === 'DIRECT') return hash(await tx.businessLine.findMany({ where: { id: { in: action.data.lines.flatMap(l => l.receiptLineId ? [l.receiptLineId] : []) } }, include: { document: { select: { status: true, date: true } }, balances: { orderBy: { id: 'asc' } } }, orderBy: { id: 'asc' } }));
-      return hash(await tx.catalogProduct.findMany({ where: { id: { in: action.data.lines.flatMap(l => l.productId ? [l.productId] : []) } }, select: { id: true, stockVersion: true }, orderBy: { id: 'asc' } }));
+      return hash(await tx.catalogProduct.findMany({ where: { id: { in: action.data.lines.flatMap(l => l.productId ? [l.productId] : []) } }, select: { id: true, stockVersion: true, catalogVersion: true }, orderBy: { id: 'asc' } }));
     }
     return hash({ invoice: await tx.invoiceRecord.findUnique({ where: { id: action.data.invoiceId }, include: { allocations: { orderBy: { documentId: 'asc' } } } }), settlements: await settlementsTx(tx, { id: { in: action.data.allocations.map(a => a.documentId) } }) });
   }

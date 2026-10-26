@@ -72,6 +72,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: 'amber' | 'red' | 'gr
   WORKFLOW_REQUEST: { label: '人工录入申请', tone: 'gray', group: '申请' },
   WORKFLOW_PURCHASE_UPDATE: { label: '修改采购记录', tone: 'gray', group: '采购' },
   WORKFLOW_RECEIPT_UPDATE: { label: '修改到货数量', tone: 'gray', group: '采购' },
+  WORKFLOW_PRODUCT_UPDATE: { label: '修改物品资料', tone: 'gray', group: '库存' },
   WORKFLOW_PURCHASE_REGISTRATION: { label: '按供应商登记采购', tone: 'gray', group: '采购' },
   REQUEST_IMPORT_CONFIRM: { label: '导入生成申请', tone: 'gray', group: '申请' },
   WORKFLOW_REQUEST_CANCEL: { label: '取消未采购量', tone: 'gray', group: '申请' },

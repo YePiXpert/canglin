@@ -7,6 +7,7 @@ import type {
   WorkflowEmployeeReturnInput, WorkflowPurchaseCancelInput, WorkflowRequestCancelInput,
   WorkflowAdjustmentInput, WorkflowVoidInput, WorkflowMetadataInput, WorkflowProductCreateInput,
   WorkflowPriceRow, WorkflowProductRow, WorkflowLinkUpdateInput, WorkflowRequestUpdateInput, WorkflowDirectory,
+  WorkflowProductUpdateInput, WorkflowProductDetailsRow,
   PaymentQuery, PaymentRow, PaymentSummary, PaymentBatchInput, PaymentBatchResult,
 } from '@canglin/shared';
 
@@ -40,6 +41,8 @@ export const workflowApi = {
   updatePurchaseLineLink: (id: number, body: WorkflowLinkUpdateInput) => write<WorkflowDocumentRow>('patch', `/purchase-lines/${id}/link`, body),
   /** 物品库（品名 + 规格 + 单位） */
   products: () => http.get<WorkflowProductRow[]>('/workflow/products').then((r) => r.data),
+  product: (id: number) => http.get<WorkflowProductDetailsRow>(`/workflow/products/${id}`).then(r => r.data),
+  updateProduct: (id: number, body: WorkflowProductUpdateInput) => write<WorkflowProductDetailsRow>('patch', `/products/${id}`, body),
   purchase: (body: WorkflowPurchaseInput) => post<WorkflowDocumentRow>('/purchases', body),
   registerPurchases: (body: WorkflowPurchaseRegistrationInput) => post<WorkflowPurchaseRegistrationResult>('/purchases/register', body),
   updatePurchase: (id: number, body: WorkflowPurchaseUpdateInput) => write<WorkflowDocumentRow>('patch', `/purchases/${id}`, body),

@@ -5,19 +5,20 @@
  */
 import type { TemplateType } from '@canglin/shared';
 
-/** v3 / review-v2：每行加 unitGuess（原件没写单位时的推测单位），链接列认「商城链接」「购买链接」等表头 */
-export const RECOGNITION_PROMPT_VERSION = 'recognition-v3';
-export const REVIEW_PROMPT_VERSION = 'review-v2';
+/** v4 / review-v3：商城标题按品名、规格拆分，明确排除页面布局杂字，原文继续保留。 */
+export const RECOGNITION_PROMPT_VERSION = 'recognition-v4';
+export const REVIEW_PROMPT_VERSION = 'review-v3';
 /** 识别模式附带的文本层上限（字符）；更长的页面截断，链接仍以图像与截断后的文本为准 */
 export const TEXT_LAYER_LIMIT = 6000;
 
 /** 品名、规格、单位的拆分规则：两种模式共用 */
-const ITEM_RULES = `- itemName：物品名称主体，不含括号内规格、数量、单位、价格、链接、序号。
+const ITEM_RULES = `- itemName：简明的品牌、物品名称和必要型号，不堆叠商城同义营销词；颜色、包装、尺寸、单位标记移到各自字段。“没有阶梯价和同款商品时增加高度”等商城页面布局提示不是品名或规格，不写入这两项；rawText 仍保留原文。
 - spec：规格、型号、颜色、尺寸、包装等限定。来源依次是名称里的括号或"规格："之后的内容、规格型号列、主要技术指标列、生产厂家列；多个来源用"；"连接并去重；"无""-"视为空；没有则 null。`;
 const UNIT_RULE = `- unit：只在明确写出时填：单位列；备注列形如"50张""一个""5盒"且数字等于数量时取单位；名称中"(单位：包)"取"包"。其他情况 null，不要猜。
 - unitGuess：unit 为 null 时，推测申请人最可能使用的计量单位，只写一个单位词（如"支""个""包""盒""箱""本""张""把""台""套"）。按品名、规格和包装写法判断：规格写了包装层级（如"5包/箱"）时从这几层里选；catalog 里有同一物品时用它的单位。实在判断不了填 null。unit 不为 null 时 unitGuess 为 null。`;
 const NOTE_RULE = `- 备注列中既不是链接也不能解释为单位的文字追加到 spec，并在 warnings 提示可能需要拆行。`;
 const EXAMPLES = `（名称单元格 → itemName | spec | unit | unitGuess）
+- "得力 7084 铅笔 2B 12支/盒 （单位：盒） 墨绿 没有阶梯价和同款商品时增加高度" → "得力 7084 铅笔" | "2B；12支/盒；墨绿" | "盒" | null
 - "A4打印纸(规格：80g)--（5包/箱）" → "A4打印纸" | "80g；5包/箱" | null | "箱"
 - "装订胶圈（蓝色、8mm)" → "装订胶圈" | "蓝色、8mm" | null | "盒"
 - "订书钉(规格：24/6)（10盒/条）" → "订书钉" | "24/6；10盒/条" | null | "盒"

@@ -6,6 +6,7 @@ import {
   workflowStockInSchema, workflowDistributionSchema, workflowSupplierReturnSchema,
   workflowEmployeeReturnSchema, workflowPurchaseCancelSchema, workflowRequestCancelSchema,
   workflowAdjustmentSchema, workflowVoidSchema, workflowMetadataSchema, workflowProductCreateSchema,
+  workflowProductUpdateSchema, type WorkflowProductUpdateInput,
   workflowLinkUpdateSchema, workflowRequestUpdateSchema, type WorkflowLinkUpdateInput, type WorkflowRequestUpdateInput,
   type WorkflowRequestCreateInput, type WorkflowPurchaseInput, type WorkflowReceiptInput, type WorkflowQuery,
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
@@ -39,6 +40,8 @@ export class WorkflowController {
   @Get('documents/:id') document(@Param('id', ParseIntPipe) id: number) { return this.queries.document(id); }
   @Get('lines/:id/document') lineDocument(@Param('id', ParseIntPipe) id: number) { return this.queries.lineDocument(id); }
   @Get('products') products() { return this.queries.products(); }
+  @Get('products/:id') product(@Param('id', ParseIntPipe) id: number) { return this.queries.product(id); }
+  @Patch('products/:id') updateProduct(@Param('id', ParseIntPipe) id: number, @Body(new ZodValidationPipe(workflowProductUpdateSchema)) body: WorkflowProductUpdateInput, @Req() req: FastifyRequest) { return this.workflow.updateProduct(id, body, operationId(req), clientIp(req)); }
   @Get('directory') directory() { return this.queries.directory(); }
   @Get('stock') stock(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.stock(query); }
   @Get('entries') entries(@Query(new ZodValidationPipe(workflowQuerySchema)) query: WorkflowQuery) { return this.queries.entries(query); }

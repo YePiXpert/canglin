@@ -18,6 +18,9 @@ import { buttonClass } from '@/components/ui/button';
 import StockProductCard from '@/components/workflow/StockProductCard.vue';
 import StockEntriesTable from '@/components/workflow/StockEntriesTable.vue';
 import ProductCreateDialog from '@/components/workflow/ProductCreateDialog.vue';
+import ProductEditDialog from '@/components/workflow/ProductEditDialog.vue';
+import type { WorkflowProductDetailsRow } from '@canglin/shared';
+import { apiError } from '@/api/client';
 import DocumentCollection from '@/components/workflow/DocumentCollection.vue';
 import WorkflowActions from '@/components/workflow/WorkflowActions.vue';
 import { useToastStore } from '@/stores/toast';
@@ -30,6 +33,7 @@ useUrlState(state, defaults);
 const actions = ref<InstanceType<typeof WorkflowActions>>();
 const documents = ref<InstanceType<typeof DocumentCollection>>();
 const creatingProduct = ref(false);
+const editingProduct = ref(false), editTarget = ref<WorkflowProductDetailsRow | null>(null);
 /** 进行中的整页刷新次数（刷新按钮转圈）；登记成功后的刷新可能和手动刷新重叠，所以计数而不是布尔 */
 const refreshCount = ref(0);
 const productId = computed(() => /^[1-9]\d*$/.test(state.productId) && Number.isSafeInteger(Number(state.productId)) ? Number(state.productId) : undefined);
@@ -81,6 +85,11 @@ function setStockFilter(value: string) { state.stock = stockFilterOf(value); }
 function clearSearch() { state.search = ''; void load(); }
 /** 新增的物品还没有库存：切到「全部」并按品名搜出来，接着点「盘点调整」录入现有数量 */
 const toast = useToastStore();
+async function editProduct(id: number) {
+  try { editTarget.value = await workflowApi.product(id); editingProduct.value = true; }
+  catch (cause) { toast.error(apiError(cause)); }
+}
+async function productSaved() { await refresh(); toast.success('物品资料已保存，旧名称仍可搜索'); }
 async function productCreated(product: { itemName: string }) {
   state.tab = 'products';
   state.stock = 'all';
@@ -152,7 +161,7 @@ async function productCreated(product: { itemName: string }) {
             <span>来源</span>
             <span class="text-right">操作</span>
           </div>
-          <StockProductCard v-for="product in shownProducts" :key="product.productId" :product="product" :receiving="receivingTab" layout="row" @command="(action, choices, context) => actions?.command(action, choices, context)" @adjust="actions?.adjust($event)" @source="actions?.inspectLine($event)" />
+          <StockProductCard v-for="product in shownProducts" :key="product.productId" :product="product" :receiving="receivingTab" layout="row" @command="(action, choices, context) => actions?.command(action, choices, context)" @adjust="actions?.adjust($event)" @edit="editProduct" @source="actions?.inspectLine($event)" />
         </div>
       </div>
       <template v-if="!loading && !error && products.length > BATCH" #footer>
@@ -165,6 +174,7 @@ async function productCreated(product: { itemName: string }) {
     <DocumentCollection v-else-if="state.tab === 'distributions'" ref="documents" initial-kind="DISTRIBUTION" title="领用与归还" description="默认列出领用发放（直接发放与库存领用）；员工归还等其他记录在右侧换类型查看" @purchase-edit="actions?.editPurchase($event)" @receipt="actions?.receipt($event)" @receipt-edit="actions?.editReceipt($event)" @command="(action, choices, context) => actions?.command(action, choices, context)" @void="actions?.voidDocument($event)" @metadata="actions?.metadata($event)" @attachments="actions?.attachments($event)" @source="actions?.inspectLine($event)" @link="(line, document) => actions?.editLink({ kind: 'purchase', lineId: line.id, itemName: line.itemName, specification: line.specification, purchaseLink: line.purchaseLink, context: `采购成交 #${document.id}` })" />
     <StockEntriesTable v-else-if="state.tab === 'entries'" :entries="entries" :loading="entriesLoading" :error="entriesError" :page="state.page" @retry="loadEntries" @page="page" @inspect-document="actions?.inspectDocument($event)" @inspect-line="actions?.inspectLine($event)" />
     <ProductCreateDialog v-model:open="creatingProduct" @created="productCreated" />
+    <ProductEditDialog v-if="editTarget" v-model:open="editingProduct" :product="editTarget" @saved="productSaved" />
     <WorkflowActions ref="actions" @recorded="refresh" @attachments-changed="refresh" @link-changed="refresh" />
   </div>
 </template>

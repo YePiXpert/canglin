@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiSearchService } from '../ai/ai-search.service';
 import { documentInclude, purchaseRequestQuantity, requestInclude, snapshot, sum, type DocumentRecord, type RequestRecord, type Tx } from './workflow-records';
 import { purchaseEditDependencies, purchaseEditReason } from './purchase-edit';
+import { productDetails } from './catalog';
 
 /** 链接按规范地址返回：存量里带跟踪参数的商城链接（回填的申请链接、早先登记的采购链接）不改写数据也能直接用 */
 const link = (value: string | null) => (value ? canonicalLink(value) : null);
@@ -23,6 +24,7 @@ export class WorkflowQueryService {
 
   async request(id: number) { return this.prisma.$transaction((tx) => this.requestTx(tx, id)); }
   async document(id: number) { return this.prisma.$transaction((tx) => this.documentTx(tx, id)); }
+  product(id: number) { return this.prisma.$transaction(tx => productDetails(tx, id)); }
   async lineDocument(id: number) {
     return this.prisma.$transaction(async (tx) => {
       const line = await tx.businessLine.findUnique({ where: { id } });
@@ -264,7 +266,7 @@ export class WorkflowQueryService {
   async stock(query?: Partial<WorkflowQuery>): Promise<WorkflowStockRow[]> {
     const names = await this.nameTerms(query?.search);
     return this.prisma.$transaction(async (tx) => {
-      const products = await tx.catalogProduct.findMany({ where: { id: query?.productId, ...(query?.search ? { OR: [...names.map((name) => ({ name: { contains: name } })), { specification: { contains: query.search } }] } : {}) }, orderBy: { name: 'asc' }, include: { balances: { include: { originLine: { include: { document: true, requestLine: { include: { request: true } }, sourceLine: { include: { document: true } } } } } } } });
+      const products = await tx.catalogProduct.findMany({ where: { id: query?.productId, ...(query?.search ? { OR: [...names.map((name) => ({ name: { contains: name } })), { specification: { contains: query.search } }, { aliases: { some: { OR: [{ name: { contains: query.search } }, { specification: { contains: query.search } }] } } }] } : {}) }, orderBy: { name: 'asc' }, include: { balances: { include: { originLine: { include: { document: true, requestLine: { include: { request: true } }, sourceLine: { include: { document: true } } } } } } } });
       return products.map((product) => {
         const origins = [...new Set(product.balances.map((balance) => balance.originLineId))];
         return {

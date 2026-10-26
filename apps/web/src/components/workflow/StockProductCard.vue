@@ -7,6 +7,7 @@ import type { QuantityChoice, QuantityCommand } from './QuantityCommandDialog.vu
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Icon from '@/components/ui/Icon.vue';
+import Menu from '@/components/ui/Menu.vue';
 import { buttonClass, type ButtonVariant } from '@/components/ui/button';
 import { quantityLabel, unitPriceLabel } from './presentation';
 import { stockIssueChoices, stockSourceChoices } from './commandChoices';
@@ -22,7 +23,7 @@ import { stockIssueChoices, stockSourceChoices } from './commandChoices';
  * - 首格的展开按钮（可访问名称「{品名} 的来源批次」）列出来源批次：供应商 · 单价、库存、待处理、来源明细 / 到货明细 / 申请。
  */
 const props = withDefaults(defineProps<{ product: WorkflowStockRow; receiving?: boolean; layout?: 'card' | 'row' }>(), { layout: 'card' });
-const emit = defineEmits<{ command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; adjust: [product: WorkflowStockRow]; source: [lineId: number] }>();
+const emit = defineEmits<{ command: [action: QuantityCommand, choices: QuantityChoice[], context: string]; adjust: [product: WorkflowStockRow]; edit: [productId: number]; source: [lineId: number] }>();
 function command(action: QuantityCommand, choices: QuantityChoice[]) { emit('command', action, choices, props.product.itemName); }
 
 const open = ref(false);
@@ -114,8 +115,9 @@ const SOURCE_GRID = 'sm:grid-cols-[minmax(0,1.2fr)_5.5rem_5.5rem_minmax(0,1.4fr)
         <span class="shrink-0 text-xs text-faint sm:sr-only">来源 </span>
         <span class="min-w-0 break-words text-right text-meta sm:block sm:truncate sm:text-left" :title="summary">{{ summary }}</span>
       </p>
-      <div v-if="actions.length" class="col-span-full mt-1.5 flex flex-wrap justify-end gap-1.5 border-t border-line pt-3 sm:col-span-1 sm:mt-0 sm:border-t-0 sm:pt-0">
+      <div class="col-span-full mt-1.5 flex flex-wrap justify-end gap-1.5 border-t border-line pt-3 sm:col-span-1 sm:mt-0 sm:border-t-0 sm:pt-0">
         <Button v-for="action in actions" :key="action.label" size="sm" :variant="action.variant" class="max-sm:h-9 max-sm:px-3" @click="action.run">{{ action.label }}</Button>
+        <Menu :trigger-label="`${product.itemName} 的更多操作`" :items="[{ label: '修改物品资料', onSelect: () => emit('edit', product.productId) }]" />
       </div>
     </header>
 

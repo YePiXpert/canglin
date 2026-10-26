@@ -190,6 +190,11 @@ export const workflowQuerySchema = z.object({
 export type WorkflowQuery = z.infer<typeof workflowQuerySchema>;
 
 export const workflowProductCreateSchema = requestLineSchema.pick({ itemName: true, specification: true, unit: true });
+export const workflowProductUpdateSchema = workflowProductCreateSchema.omit({ unit: true }).extend({
+  version: z.number().int().nonnegative(),
+  reason: z.string().trim().min(1, '请填写修改原因').max(500),
+}).strict();
+export type WorkflowProductUpdateInput = z.infer<typeof workflowProductUpdateSchema>;
 export type WorkflowProductCreateInput = z.infer<typeof workflowProductCreateSchema>;
 export const workflowStockInSchema = z.object({
   date: workflowDateSchema, note: noteSchema,
@@ -279,6 +284,7 @@ export interface WorkflowRequestRow {
 }
 /** 物品库的一条（导入时沿用单位、给候选） */
 export interface WorkflowProductRow { id: number; name: string; specification: string; unit: string }
+export interface WorkflowProductDetailsRow extends WorkflowProductRow { version: number; aliases: { name: string; specification: string }[] }
 /**
  * 部门与人员的候选（docs/manual-entry-2026-10.md P1）：从已有申请的部门 / 经办人与未撤销发放单的领用部门 / 领用人汇总，
  * 最近一次使用的在前、其次按次数。people 按「人 + 部门」分开（同名的人在两个部门各一条）；department 可能为空串（发放时没填部门）。

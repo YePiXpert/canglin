@@ -7,7 +7,7 @@ import {
   type WorkflowStockInInput, type WorkflowDistributionInput, type WorkflowSupplierReturnInput,
   type WorkflowEmployeeReturnInput, type WorkflowPurchaseCancelInput, type WorkflowRequestCancelInput,
   type WorkflowAdjustmentInput, type WorkflowVoidInput, type WorkflowMetadataInput,
-  type WorkflowProductCreateInput, type WorkflowLinkUpdateInput, type WorkflowPurchaseUpdateInput, type WorkflowPurchaseRegistrationInput,
+  type WorkflowProductCreateInput, type WorkflowProductUpdateInput, type WorkflowLinkUpdateInput, type WorkflowPurchaseUpdateInput, type WorkflowPurchaseRegistrationInput,
   type PaymentBatchInput, type PaymentBatchResult,
 } from '@canglin/shared';
 import fs from 'node:fs';
@@ -19,6 +19,7 @@ import { WorkflowQueryService } from './workflow-query.service';
 import { documentInclude, purchaseRequestQuantity, snapshot, sum, type Tx } from './workflow-records';
 import { purchaseEditDependencies, purchaseEditReason } from './purchase-edit';
 import { settlementsTx } from '../execution/settlement-query';
+import { productDetails, resolveProduct } from './catalog';
 
 type SourceLine = Prisma.BusinessLineGetPayload<{ include: { document: true; sourceLine: { include: { document: true } } } }>;
 
@@ -239,16 +240,34 @@ export class WorkflowService {
   }
 
   private ensureProduct(tx: Tx, input: WorkflowProductCreateInput) {
-    return tx.catalogProduct.upsert({
-      where: { name_specification_unit: { name: input.itemName, specification: input.specification, unit: input.unit } },
-      create: { name: input.itemName, specification: input.specification, unit: input.unit }, update: {},
-    });
+    return resolveProduct(tx, input);
   }
 
   async createProduct(input: WorkflowProductCreateInput, key: string, ip?: string) {
     return this.write('product', input, key, ip, async (tx) => {
       const product = await this.ensureProduct(tx, input);
       return { productId: product.id, itemName: product.name, specification: product.specification, unit: product.unit };
+    });
+  }
+
+  async updateProduct(id: number, input: WorkflowProductUpdateInput, key: string, ip?: string) {
+    return this.write('product_update', { id, ...input }, key, ip, async (tx, audit) => {
+      const product = await tx.catalogProduct.findUnique({ where: { id } });
+      if (!product) throw new NotFoundException('物品不存在');
+      if (product.catalogVersion !== input.version) throw new ConflictException('物品资料已变化，请关闭弹窗并刷新后重新核对');
+      if (product.name === input.itemName && product.specification === input.specification) {
+        audit[SKIP_AUDIT] = true; return productDetails(tx, id);
+      }
+      const identity = { name: input.itemName, specification: input.specification, unit: product.unit };
+      const existing = await tx.catalogProduct.findUnique({ where: { name_specification_unit: identity } });
+      const alias = await tx.catalogProductAlias.findUnique({ where: { name_specification_unit: identity } });
+      if ((existing && existing.id !== id) || (alias && alias.productId !== id)) throw new ConflictException('已有其他物品使用这个品名、规格和单位（含旧名称），请核对后填写；修改资料不会合并库存');
+      audit.previous = { name: product.name, specification: product.specification, unit: product.unit, version: product.catalogVersion };
+      const oldIdentity = { name: product.name, specification: product.specification, unit: product.unit };
+      await tx.catalogProductAlias.upsert({ where: { name_specification_unit: oldIdentity }, create: { productId: id, ...oldIdentity }, update: {} });
+      const updated = await tx.catalogProduct.updateMany({ where: { id, catalogVersion: input.version }, data: { name: input.itemName, specification: input.specification, catalogVersion: { increment: 1 } } });
+      if (!updated.count) throw new ConflictException('物品资料已变化，请重新核对');
+      return productDetails(tx, id);
     });
   }
 

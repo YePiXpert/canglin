@@ -3,6 +3,7 @@ import {
   importDraftSchema,
   parseResultSchema,
   templateTypeSchema,
+  cleanProductNoise,
   type ImportDraft,
   type ParseResult,
 } from '@canglin/shared';
@@ -222,6 +223,15 @@ export function checkLinks(parsed: z.infer<typeof aiPageSchema>, textLayer: stri
 }
 /** 收尾（原地修改）：明细按页码排序、警告去重，并按各页模式汇总整份结果的 mode */
 export function finishResult(result: ParseResult) {
+  for (const item of result.items) {
+    const cleaned = cleanProductNoise(item.itemName);
+    if (cleaned && cleaned !== item.itemName) {
+      if (item.source) item.source.rawText ??= item.itemName;
+      else item.source = { page: 1, method: result.mode, rawText: item.itemName };
+      item.itemName = cleaned;
+      result.warnings.push(`「${cleaned}」已去除商城页面的布局提示文字，请核对品名与规格`);
+    }
+  }
   result.items.sort((a, b) => (a.source?.page ?? 0) - (b.source?.page ?? 0));
   // 单页结果各自提示缺失的单据头；整份结果里已由其他页补上的字段不再提示
   const found = new Set(
