@@ -7,6 +7,7 @@ import Icon from '@/components/ui/Icon.vue';
 import Menu from '@/components/ui/Menu.vue';
 import { buttonClass } from '@/components/ui/button';
 import type { MenuItem } from '@/components/ui/types';
+import { quantityLabel } from './presentation';
 import { lineQuantities, lineTitle, nextStep, progressChips } from './requestSummary';
 
 /**
@@ -47,14 +48,33 @@ const menuItems = computed<MenuItem[]>(() => [
     <!-- 表格里是剩余宽度（表格 table-fixed）、单行截断（悬停看全名）；卡片里整行显示、长品名折行 -->
     <td class="max-sm:-order-1">
       <template v-if="first">
-        <p class="sm:truncate" :title="lineTitle(first)">
-          <span class="text-ink">{{ first.itemName }}</span><span v-if="first.specification" class="ml-1.5 text-xs text-muted">{{ first.specification }}</span>
-        </p>
-        <!-- 「等 N 项」不参与截断：品名再长也看得到后面还有几项 -->
-        <p v-if="rest.length" class="text-muted sm:flex sm:items-baseline" :title="rest.map(lineTitle).join('\n')">
-          <span class="sm:min-w-0 sm:truncate"><span>{{ rest[0].itemName }}</span><span v-if="rest[0].specification" class="ml-1.5 text-xs">{{ rest[0].specification }}</span></span><span v-if="rest.length > 1" class="ml-1.5 text-meta sm:shrink-0">等 {{ rest.length }} 项</span>
-        </p>
-        <p v-else class="text-meta sm:truncate" :title="lineQuantities(first)">{{ lineQuantities(first) }}</p>
+        <!-- 多条明细：每条都是独立物品（墨色主字 + 序号角标 + 申请数量），避免第 2 条看起来像第 1 条的备注说明 -->
+        <div v-if="rest.length" class="space-y-1.5">
+          <p class="flex items-baseline gap-1.5" :title="lineTitle(first)">
+            <span class="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-surface-2 px-1 font-mono text-[11px] font-medium text-muted">1</span>
+            <span class="min-w-0 sm:truncate">
+              <span class="text-ink">{{ first.itemName }}</span><span v-if="first.specification" class="ml-1.5 text-xs text-muted">{{ first.specification }}</span>
+            </span>
+            <span class="ml-auto shrink-0 pl-2 text-xs text-muted num">× {{ quantityLabel(first.quantity, first.unit) }}</span>
+          </p>
+          <p class="flex items-baseline gap-1.5" :title="rest.map(lineTitle).join('\n')">
+            <span class="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-surface-2 px-1 font-mono text-[11px] font-medium text-muted">2</span>
+            <span class="min-w-0 sm:truncate">
+              <span class="text-ink">{{ rest[0].itemName }}</span><span v-if="rest[0].specification" class="ml-1.5 text-xs text-muted">{{ rest[0].specification }}</span>
+            </span>
+            <span class="ml-auto shrink-0 pl-2 text-xs text-muted num">
+              × {{ quantityLabel(rest[0].quantity, rest[0].unit) }}
+              <span v-if="rest.length > 1" class="ml-1.5 rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium text-muted">等 {{ rest.length }} 项</span>
+            </span>
+          </p>
+        </div>
+        <!-- 单条明细：第 1 行物品名，第 2 行带左侧竖线缩进展示数量流转进度 -->
+        <template v-else>
+          <p class="sm:truncate" :title="lineTitle(first)">
+            <span class="text-ink">{{ first.itemName }}</span><span v-if="first.specification" class="ml-1.5 text-xs text-muted">{{ first.specification }}</span>
+          </p>
+          <p class="mt-1 border-l-2 border-line-strong pl-2 text-meta num sm:truncate" :title="lineQuantities(first)">{{ lineQuantities(first) }}</p>
+        </template>
       </template>
     </td>
     <td>
