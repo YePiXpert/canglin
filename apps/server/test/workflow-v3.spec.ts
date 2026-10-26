@@ -55,6 +55,60 @@ async function assertReconciled(productId: number) {
 }
 
 describe('V3 申请、分次采购与收货', () => {
+  it('申请5件实际采购10件，多购5件随实收可入库，整链撤销恢复原申请', async () => {
+    const row = await request('5');
+    const body = { date: '2026-09-02', supplierId: supplierA, lines: [{ requestLineId: row.lines[0].id, quantity: '10', overPurchaseQuantity: '5', unitPrice: '50' }] };
+    const key = randomUUID(), response = await write('/purchases', body, key);
+    expect(response.statusCode, response.body).toBe(201);
+    const order = response.json<WorkflowDocumentRow>();
+    expect((await write('/purchases', body, key)).json()).toEqual(order);
+    expect(order).toMatchObject({ totalAmount: '500.00', lines: [{ quantity: '10', overPurchaseQuantity: '5' }] });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ quantity: '5', orderedQuantity: '10', overPurchasedQuantity: '5', pendingPurchaseQuantity: '0' });
+    expect((await prisma.procurementLine.findUniqueOrThrow({ where: { id: row.lines[0].id } })).orderedUnits).toBe(5000000n);
+    const arrived = await receipt(order);
+    const issued = await command('/distributions', { date: '2026-09-04', source: 'DIRECT', lines: [{ receiptLineId: arrived.lines[0].id, quantity: '5', recipient: '经办人' }] });
+    const stored = await command('/stock-in', { date: '2026-09-04', lines: [{ receiptLineId: arrived.lines[0].id, quantity: '5' }] });
+    expect(await balance(row.lines[0].productId)).toMatchObject({ stockQuantity: '5', receivingQuantity: '0' });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ quantity: '5', pendingPurchaseQuantity: '0', stages: ['COMPLETED'] });
+    for (const doc of [stored, issued, arrived, order]) await command(`/documents/${doc.id}/void`, { date: '2026-09-05', reason: '撤销本次误录' });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ quantity: '5', orderedQuantity: '0', pendingPurchaseQuantity: '5' });
+    await assertReconciled(row.lines[0].productId);
+  });
+
+  it('取消采购先扣多购部分，退到申请所需数量以内才重开待采购；撤销可恢复', async () => {
+    const row = await request('5');
+    const order = await command('/purchases', { date: '2026-09-02', supplierId: supplierA, lines: [{ requestLineId: row.lines[0].id, quantity: '10', overPurchaseQuantity: '5', unitPrice: '1' }] });
+    const cancel = (quantity: string) => command('/purchase-cancellations', { date: '2026-09-03', reason: '取消剩余', lines: [{ purchaseLineId: order.lines[0].id, quantity }] });
+    const first = await cancel('2');
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '8', overPurchasedQuantity: '3', pendingPurchaseQuantity: '0' });
+    const second = await cancel('4');
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '4', pendingPurchaseQuantity: '1' });
+    for (const doc of [second, first]) await command(`/documents/${doc.id}/void`, { date: '2026-09-04', reason: '恢复订单' });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '10', overPurchasedQuantity: '5', pendingPurchaseQuantity: '0' });
+  });
+
+  it('多购实物退款和撤销退款正确恢复需求与库存，换货继续保留采购', async () => {
+    const row = await request('5');
+    const order = await command('/purchases', { date: '2026-09-02', supplierId: supplierA, lines: [{ requestLineId: row.lines[0].id, quantity: '10', overPurchaseQuantity: '5', unitPrice: '3' }] });
+    const arrived = await receipt(order);
+    await command('/stock-in', { date: '2026-09-04', lines: [{ receiptLineId: arrived.lines[0].id, quantity: '10' }] });
+    const returned = await command('/supplier-returns', { date: '2026-09-05', reason: '退款退货', returnMode: 'REFUND', lines: [{ receiptLineId: arrived.lines[0].id, quantity: '6', location: 'STOCK' }] });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '4', pendingPurchaseQuantity: '1', stockQuantity: '4' });
+    await command(`/documents/${returned.id}/void`, { date: '2026-09-06', reason: '撤销退货' });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '10', overPurchasedQuantity: '5', pendingPurchaseQuantity: '0', stockQuantity: '10' });
+    await command('/supplier-returns', { date: '2026-09-06', reason: '换货补发', returnMode: 'REPLACEMENT', lines: [{ receiptLineId: arrived.lines[0].id, quantity: '2', location: 'STOCK' }] });
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '10', overPurchasedQuantity: '5', pendingPurchaseQuantity: '0', pendingReceiptQuantity: '2' });
+    await assertReconciled(row.lines[0].productId);
+  });
+
+  it('不按旧页面的多购量悄悄追加备货，来源变化整单不提交', async () => {
+    const row = await request('5');
+    await purchase(row, '2');
+    const old = await write('/purchases', { date: '2026-09-02', supplierId: supplierA, lines: [{ requestLineId: row.lines[0].id, quantity: '10', overPurchaseQuantity: '5', unitPrice: '1' }] });
+    expect(old.statusCode).toBe(409);
+    expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '2', pendingPurchaseQuantity: '3' });
+    expect((await write('/purchases', { date: '2026-09-02', supplierId: supplierA, lines: [{ requestLineId: row.lines[0].id, quantity: '1', overPurchaseQuantity: '2', unitPrice: '1' }] })).statusCode).toBe(400);
+  });
   it('保留同名物理行，并以品名/规格/单位区分物品身份', async () => {
     const name = randomUUID();
     const row = await request('1', [

@@ -64,6 +64,7 @@ const remainingLabel = computed(() => (posted.value ? ({ PURCHASE: '尚待到货
         </div>
         <div class="shrink-0 text-right">
           <p class="num font-semibold text-ink">{{ quantityLabel(line.quantity, line.unit) }}</p>
+          <p v-if="line.overPurchaseQuantity && line.overPurchaseQuantity !== '0'" class="mt-1 text-meta">含多购备货 {{ quantityLabel(line.overPurchaseQuantity, line.unit) }}</p>
           <p v-if="remainingLabel" class="text-meta num">{{ remainingLabel }} {{ quantityLabel(line.remainingQuantity, line.unit) }}</p>
         </div>
       </li>

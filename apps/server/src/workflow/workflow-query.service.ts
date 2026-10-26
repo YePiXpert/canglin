@@ -10,7 +10,7 @@ import {
 } from '@canglin/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiSearchService } from '../ai/ai-search.service';
-import { documentInclude, requestInclude, snapshot, sum, type DocumentRecord, type RequestRecord, type Tx } from './workflow-records';
+import { documentInclude, purchaseRequestQuantity, requestInclude, snapshot, sum, type DocumentRecord, type RequestRecord, type Tx } from './workflow-records';
 
 /** 链接按规范地址返回：存量里带跟踪参数的商城链接（回填的申请链接、早先登记的采购链接）不改写数据也能直接用 */
 const link = (value: string | null) => (value ? canonicalLink(value) : null);
@@ -56,6 +56,9 @@ export class WorkflowQueryService {
         const ownLines = lines.filter((entry) => entry.requestLineId === line.id);
         const ownBalances = balances.filter((balance) => balance.originLine.requestLineId === line.id);
         const ownEntries = entries.filter((entry) => entry.originLine.requestLineId === line.id);
+        const purchases = ownLines.filter(entry => entry.document.kind === 'PURCHASE');
+        const ordered = sum(purchases.map(entry => entry.quantityUnits - entry.cancelledUnits));
+        const overPurchased = ordered - sum(purchases.map(entry => purchaseRequestQuantity(entry)));
         const received = sum(ownLines.filter((entry) => entry.document.kind === 'RECEIPT').map((entry) => entry.quantityUnits - entry.cancelledUnits));
         const pendingReceipt = sum(ownLines.filter((entry) => entry.document.kind === 'PURCHASE').map((entry) => entry.quantityUnits - entry.cancelledUnits - entry.receivedUnits));
         const pendingPurchase = line.quantityUnits - line.cancelledUnits - line.orderedUnits;
@@ -71,7 +74,8 @@ export class WorkflowQueryService {
           id: line.id, requestId: request.id, lineNumber: line.lineNumber, ...snapshot(line),
           quantity: quantityText(line.quantityUnits), note: line.note, purchaseLink: link(line.purchaseLink),
           cancelledQuantity: quantityText(line.cancelledUnits),
-          orderedQuantity: quantityText(line.orderedUnits), receivedQuantity: quantityText(received),
+          orderedQuantity: quantityText(line.orderedUnits + overPurchased), receivedQuantity: quantityText(received),
+          ...(overPurchased > 0n ? { overPurchasedQuantity: quantityText(overPurchased) } : {}),
           pendingPurchaseQuantity: quantityText(pendingPurchase), pendingReceiptQuantity: quantityText(pendingReceipt),
           pendingAllocationQuantity: quantityText(pendingAllocation), stockQuantity: quantityText(stock),
           directQuantity: quantityText(kindQty('DISTRIBUTION', 'RECEIVING', -1n)),
@@ -114,6 +118,7 @@ export class WorkflowQueryService {
         id: line.id, documentId: document.id, requestLineId: line.requestLineId, sourceLineId: line.sourceLineId,
         requestId: line.requestLine?.requestId ?? null, serialNumber: line.requestLine?.request.serialNumber ?? null,
         ...snapshot(line), quantity: quantityText(line.quantityUnits),
+        ...(document.kind === 'PURCHASE' && line.overPurchaseUnits > 0n ? { overPurchaseQuantity: quantityText(line.quantityUnits - line.cancelledUnits - purchaseRequestQuantity(line)) } : {}),
         unitPrice: line.unitPriceUnits === null ? null : priceText(line.unitPriceUnits),
         amount: line.amountUnits === null ? null : moneyText(line.amountUnits),
         purchaseReductionAmount: line.purchaseReductionAmountUnits === null ? null : moneyText(line.purchaseReductionAmountUnits),

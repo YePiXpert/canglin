@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { canonicalLink, isShortLink, isWebLink, linkIssue, lineAmountUnits, moneyText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@canglin/shared';
+import { canonicalLink, isShortLink, isWebLink, linkIssue, lineAmountUnits, moneyText, quantityText, quantityUnits, priceUnits, workflowPurchaseSchema, type WorkflowPriceRow } from '@canglin/shared';
 import { workflowApi, type WorkflowDocumentRow, type WorkflowRequestRow } from '@/api/workflow';
 import { suppliersApi, type SupplierRow } from '@/api';
 import { apiError } from '@/api/client';
@@ -41,7 +41,10 @@ const snapshot = () => JSON.stringify({ form, lines: lines.value.map((line) => (
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(snapshot);
 const supplierOptions = computed(() => suppliers.value.map((supplier) => ({ label: supplier.name, value: String(supplier.id) })));
 /** 行级错误的顺序与列一致：本次数量在前、成交单价在后 */
-const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => [`quantity.${line.id}`, `price.${line.id}`, `link.${line.id}`]);
+function skipped(line: Line) { try { return quantityUnits(line.quantity) === 0n; } catch { return false; } }
+function surplus(line: Line) { try { const extra = quantityUnits(line.quantity) - quantityUnits(line.maximum); return extra > 0n ? quantityText(extra) : '0'; } catch { return '0'; } }
+const purchasing = computed(() => lines.value.filter(line => line.selected && !skipped(line)));
+const { selectedCount, rowErrors, selectAll } = useRegisterLines(lines, errors, (line) => line.selected && !skipped(line) ? [`quantity.${line.id}`, `price.${line.id}`, `link.${line.id}`] : []);
 watch(() => props.open, async (open, _previous, onCleanup) => {
   let current = true;
   onCleanup(() => { current = false; });
@@ -119,7 +122,7 @@ function tidyLink(line: Line) {
 const lineAmounts = computed(() => new Map(lines.value.map((line) => [line.id, draftLineAmount(line.quantity, line.unitPrice)])));
 const total = computed(() => {
   let amount = 0n, missing = 0;
-  for (const line of lines.value.filter((line) => line.selected)) {
+  for (const line of purchasing.value) {
     try {
       if (!line.unitPrice.trim() || !line.quantity.trim()) { missing++; continue; }
       amount += lineAmountUnits(quantityUnits(line.quantity), priceUnits(line.unitPrice));
@@ -152,17 +155,17 @@ async function save() {
   failure.value = '';
   const invalid: Record<string, string> = {};
   if (!form.supplierId) invalid.supplierId = '请选择或新增本次成交的供应商';
-  const selected = lines.value.filter((line) => line.selected);
-  if (!selected.length) invalid.lines = '请至少选择一条采购明细';
+  const selected = purchasing.value;
+  if (!selected.length) invalid.lines = '请至少选择一条明细并填写大于 0 的采购数量';
   for (const line of selected) {
-    const quantity = quantityError(line.quantity, line.maximum);
+    const quantity = quantityError(line.quantity);
     const price = priceError(line.unitPrice);
     if (quantity) invalid[`quantity.${line.id}`] = quantity;
     if (price) invalid[`price.${line.id}`] = price;
     const link = linkIssue(line.purchaseLink);
     if (link) invalid[`link.${line.id}`] = link;
   }
-  const parsed = workflowPurchaseSchema.safeParse({ ...form, settlementMode: 'DETAIL', supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
+  const parsed = workflowPurchaseSchema.safeParse({ ...form, settlementMode: 'DETAIL', supplierId: form.supplierId, lines: selected.map((line) => ({ requestLineId: line.id, quantity: line.quantity, ...(surplus(line) !== '0' ? { overPurchaseQuantity: surplus(line) } : {}), unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || undefined })) });
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
   if (!parsed.success) { failure.value = issueText(parsed.error); return; }
@@ -202,6 +205,7 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
       </div>
     </div>
     <Notice v-if="clearedPrices" tone="amber" variant="inline" size="sm" :icon="false" class="mt-3">已清空 {{ clearedPrices }} 条来自其他供应商的历史成交价，请填写本次实际单价。</Notice>
+    <p class="mt-4 text-meta">可分次采购；数量填 0 或取消勾选表示本次不买，多购部分按实际到货后可入库备货。</p>
     <RegisterLineTable class="mt-5" :selected="selectedCount" :total="lines.length" :disabled="saving" :row-errors="rowErrors" :error="errors.lines" @select-all="selectAll">
       <template #head>
         <th scope="col" class="w-24 text-right">待采购</th>
@@ -218,21 +222,25 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
           </td>
           <td data-label="待采购" class="num text-right" :class="line.selected ? '' : 'text-faint'">{{ quantityLabel(line.maximum, line.unit) }}</td>
           <td data-label="本次数量" class="sm:py-2">
-            <div v-if="line.selected" class="flex items-center gap-1.5 max-sm:w-44">
-              <Input v-model="line.quantity" size="sm" hide-label :label="`${line.itemName} 本次采购数量（${line.unit}）`" type="number" min="0" :max="line.maximum" step="0.000001" required :error="errors[`quantity.${line.id}`]" :disabled="saving" class="min-w-0 flex-1 [&_input]:text-right" />
+            <div v-if="line.selected">
+              <div class="flex items-center gap-1.5 max-sm:w-44">
+              <Input v-model="line.quantity" size="sm" hide-label :label="`${line.itemName} 本次采购数量（${line.unit}）`" type="number" min="0" step="0.000001" required :error="skipped(line) ? undefined : errors[`quantity.${line.id}`]" :disabled="saving" class="min-w-0 flex-1 [&_input]:text-right" />
               <span class="shrink-0 text-meta">{{ line.unit }}</span>
+              </div>
+              <p v-if="skipped(line)" class="mt-1 text-xs text-muted">本次不采购</p>
+              <p v-else-if="surplus(line) !== '0'" class="mt-1 text-xs text-blue">多购备货 {{ quantityLabel(surplus(line), line.unit) }}</p>
             </div>
             <span v-else class="text-faint">—</span>
           </td>
           <td data-label="成交单价" class="sm:py-2">
             <div v-if="line.selected" class="flex items-center gap-1.5 max-sm:w-44">
-              <Input v-model="line.unitPrice" size="sm" hide-label :label="`${line.itemName} 成交单价（元/${line.unit}）`" type="number" min="0" step="0.0001" required :error="errors[`price.${line.id}`]" :disabled="saving" class="min-w-0 flex-1 [&_input]:text-right" @update:model-value="line.appliedFrom = null" />
+              <Input v-model="line.unitPrice" size="sm" hide-label :label="`${line.itemName} 成交单价（元/${line.unit}）`" type="number" min="0" step="0.0001" :required="!skipped(line)" :error="skipped(line) ? undefined : errors[`price.${line.id}`]" :disabled="saving || skipped(line)" class="min-w-0 flex-1 [&_input]:text-right" @update:model-value="line.appliedFrom = null" />
               <span class="shrink-0 text-meta">元/{{ line.unit }}</span>
             </div>
             <span v-else class="text-faint">—</span>
           </td>
           <td data-label="本行金额" class="num text-right">
-            <template v-if="line.selected">
+            <template v-if="line.selected && !skipped(line)">
               <span v-if="lineAmounts.get(line.id) != null" class="font-medium text-ink">{{ moneyLabel(lineAmounts.get(line.id)!) }}</span>
               <span v-else class="text-meta">待填单价</span>
             </template>
@@ -241,7 +249,8 @@ const QUOTE_PILL = 'inline-flex h-6 items-center gap-1 rounded-full border borde
         </tr>
         <tr v-if="line.selected" :class="EXTRA_ROW">
           <td colspan="3" class="sm:pt-0 sm:pb-3">
-            <p v-if="loadingQuotes" class="text-meta sm:pl-5.5">正在查询历史成交价…</p>
+            <p v-if="skipped(line)" class="text-meta sm:pl-5.5">本次不采购，无需填写单价，下次可继续下单。</p>
+            <p v-else-if="loadingQuotes" class="text-meta sm:pl-5.5">正在查询历史成交价…</p>
             <p v-else-if="line.quotesFailed" class="text-meta sm:pl-5.5">历史成交价暂不可用，可直接填写本次实际单价。</p>
             <p v-else-if="!line.quotes.length" class="text-meta sm:pl-5.5">暂无同品名、规格及单位的历史成交。</p>
             <div v-else class="flex flex-wrap items-center gap-1.5 sm:pl-5.5">

@@ -5,6 +5,7 @@
 #
 #   apps/web/scripts/visual.sh            与基线比较；失败时差异图在 apps/web/test-results/visual/
 #   apps/web/scripts/visual.sh --update   有意改了 UI 后重建变化了的基线，之后人工看一遍差异再提交
+#   apps/web/scripts/visual.sh --grep=采购弹窗  只运行匹配标题的用例，可与 --update 合用
 #
 # 需要 docker。镜像版本取自 pnpm-lock.yaml 里的 @playwright/test，升级 Playwright 时 CI 的镜像标签一起改；
 # 本地派生镜像的标签带 Dockerfile 内容的哈希，改了字体包会自动重建。
@@ -14,10 +15,12 @@
 set -euo pipefail
 
 UPDATE=0
+TEST_GREP=''
 for arg in "$@"; do
   case "$arg" in
     --update) UPDATE=1 ;;
-    *) echo "未知参数：$arg（支持 --update）" >&2; exit 1 ;;
+    --grep=*) TEST_GREP=${arg#--grep=} ;;
+    *) echo "未知参数：$arg（支持 --update、--grep=用例标题）" >&2; exit 1 ;;
   esac
 done
 
@@ -46,7 +49,7 @@ git ls-files -z --cached --others --exclude-standard -- . ':!.claude' \
       -v canglin-visual-pnpm:/pnpm-store \
       -v "$SNAPSHOTS":/out/snapshots \
       -v "$RESULTS":/out/results \
-      -e UPDATE="$UPDATE" -e CI=1 -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+      -e UPDATE="$UPDATE" -e TEST_GREP="$TEST_GREP" -e CI=1 -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
       "$IMAGE" bash -euo pipefail -c '
         mkdir -p /work && tar -xf - -C /work && cd /work
         npm install -g "$(node -p "require(\"./package.json\").packageManager")" >/dev/null
@@ -56,11 +59,13 @@ git ls-files -z --cached --others --exclude-standard -- . ':!.claude' \
         pnpm --filter @canglin/server build >/dev/null
         cd apps/web
         status=0
+        args=(--project=visual)
+        if [ -n "$TEST_GREP" ]; then args+=(--grep "$TEST_GREP"); fi
         if [ "$UPDATE" = 1 ]; then
-          pnpm exec playwright test --project=visual --update-snapshots || status=$?
+          pnpm exec playwright test "${args[@]}" --update-snapshots || status=$?
           rm -rf /out/snapshots/* && cp -r e2e/visual.spec.ts-snapshots/. /out/snapshots/
         else
-          pnpm exec playwright test --project=visual || status=$?
+          pnpm exec playwright test "${args[@]}" || status=$?
         fi
         cp -r test-results/. /out/results/ 2>/dev/null || true
         chown -R "$HOST_UID:$HOST_GID" /out/snapshots /out/results

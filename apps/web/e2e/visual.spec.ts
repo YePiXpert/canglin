@@ -235,5 +235,21 @@ for (const variant of VARIANTS) {
       await expect(page.getByRole('dialog', { name: '人工录入申请' })).toBeVisible();
       await shot(page, `${v}-dialog-create`);
     });
+
+    test('零散与多购采购弹窗', async ({ page }) => {
+      test.skip(!seed, '需要全新的数据库：用 test:visual 单独运行');
+      await page.clock.setFixedTime(NOW);
+      if (variant.dark) await page.addInitScript(() => { localStorage.setItem('canglin-theme', 'dark'); });
+      expect((await page.request.post('/api/auth/login', { data: { password } })).ok()).toBeTruthy();
+      await page.goto(`/requests/${seed!.r2}`); await settle(page);
+      await page.getByRole('button', { name: '登记采购', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '登记本次采购' })).toBeVisible();
+      await shot(page, `${variant.name}-dialog-purchase`);
+      await page.getByLabel('显示器 本次采购数量（台）', { exact: true }).fill('4');
+      await page.getByLabel('机械键盘 本次采购数量（把）', { exact: true }).fill('0');
+      await expect(page.getByText('多购备货 2 台', { exact: true })).toBeVisible();
+      await expect(page.getByLabel('机械键盘 成交单价（元/把）', { exact: true })).toBeDisabled();
+      await shot(page, `${variant.name}-dialog-purchase-surplus`);
+    });
   });
 }

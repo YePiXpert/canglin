@@ -16,7 +16,7 @@ import { config } from '../config';
 import { PrismaService } from '../prisma/prisma.service';
 import { operation } from '../common/operation';
 import { WorkflowQueryService } from './workflow-query.service';
-import { snapshot, sum, type Tx } from './workflow-records';
+import { purchaseRequestQuantity, snapshot, sum, type Tx } from './workflow-records';
 import { settlementsTx } from '../execution/settlement-query';
 
 type SourceLine = Prisma.BusinessLineGetPayload<{ include: { document: true; sourceLine: { include: { document: true } } } }>;
@@ -268,7 +268,11 @@ export class WorkflowService {
     if (received + cancelled > line.quantityUnits) throw new ConflictException(`「${line.itemName}」超过了这批采购还没到的数量（${quantityText(line.quantityUnits - line.cancelledUnits - line.receivedUnits)} ${line.unit}）`);
     const result = await tx.businessLine.updateMany({ where: { id, receivedUnits: line.receivedUnits, cancelledUnits: line.cancelledUnits }, data: { receivedUnits: received, cancelledUnits: cancelled } });
     if (!result.count) throw new ConflictException('采购明细已发生变化，请重新载入');
-    if (cancelledDelta !== 0n) await tx.businessDocument.update({ where: { id: line.documentId }, data: { settlementVersion: { increment: 1 } } });
+    if (cancelledDelta !== 0n) {
+      const requestDelta = purchaseRequestQuantity(line, cancelled) - purchaseRequestQuantity(line);
+      if (requestDelta) await this.changeRequestCounters(tx, line.requestLineId!, requestDelta);
+      await tx.businessDocument.update({ where: { id: line.documentId }, data: { settlementVersion: { increment: 1 } } });
+    }
     return line;
   }
 
@@ -330,13 +334,19 @@ export class WorkflowService {
       let total = 0n;
       for (const inputLine of input.lines) {
         const quantity = quantityUnits(inputLine.quantity), price = priceUnits(inputLine.unitPrice);
-        const line = await this.changeRequestCounters(tx, inputLine.requestLineId, quantity);
+        const source = await tx.procurementLine.findUnique({ where: { id: inputLine.requestLineId } });
+        if (!source) throw new NotFoundException('申请明细不存在');
+        const remaining = source.quantityUnits - source.cancelledUnits - source.orderedUnits;
+        const extra = quantityUnits(inputLine.overPurchaseQuantity ?? '0');
+        const expectedExtra = quantity > remaining ? quantity - remaining : 0n;
+        if (extra !== expectedExtra) throw new ConflictException('待采购数量已变化或多购数量未核对，请刷新后确认本次采购与备货数量');
+        const line = await this.changeRequestCounters(tx, inputLine.requestLineId, quantity - extra);
         const request = await tx.procurementRequest.findUniqueOrThrow({ where: { id: line.requestId } });
         this.afterSourceDate(input.date, request.requestDate);
         const amount = bounded(lineAmountUnits(quantity, price));
         total = bounded(total + amount);
         await tx.businessLine.create({ data: {
-          documentId: document.id, requestLineId: line.id, ...snapshot(line), quantityUnits: quantity,
+          documentId: document.id, requestLineId: line.id, ...snapshot(line), quantityUnits: quantity, overPurchaseUnits: extra,
           unitPriceUnits: price, amountUnits: amount, purchaseLink: inputLine.purchaseLink ?? null,
         } });
       }
@@ -441,7 +451,6 @@ export class WorkflowService {
         await this.stockChange(tx, { productId: receipt.productId, originLineId: receipt.id, businessLineId: line.id, location: inputLine.location, quantity: -quantity, date: input.date });
         await tx.businessLine.update({ where: { id: receipt.id }, data: { cancelledUnits: { increment: quantity } } });
         await this.changePurchaseCounters(tx, purchase.id, -quantity, input.returnMode === 'REFUND' ? quantity : 0n);
-        if (input.returnMode === 'REFUND') await this.changeRequestCounters(tx, purchase.requestLineId!, -quantity);
         total = bounded(total + amount);
       }
       const supplier = await tx.supplier.findUniqueOrThrow({ where: { id: supplierId! } });
@@ -486,7 +495,6 @@ export class WorkflowService {
         const source = await this.changePurchaseCounters(tx, inputLine.purchaseLineId, 0n, quantity);
         this.afterSourceDate(input.date, source.document.date);
         const amount = this.reductionAmount(source, quantity);
-        await this.changeRequestCounters(tx, source.requestLineId!, -quantity);
         await tx.businessLine.create({ data: { documentId: document.id, sourceLineId: source.id, requestLineId: source.requestLineId, ...snapshot(source), quantityUnits: quantity, unitPriceUnits: source.unitPriceUnits, amountUnits: amount, purchaseReductionAmountUnits: amount, reason: input.reason } });
         total = bounded(total + amount);
       }
@@ -608,19 +616,17 @@ export class WorkflowService {
           if (later) throw new ConflictException('后续取消或退货已分配金额尾差，请按相反顺序撤销');
         }
         switch (document.kind) {
-          case 'PURCHASE': await this.changeRequestCounters(tx, line.requestLineId!, -(line.quantityUnits - line.cancelledUnits)); break;
+          case 'PURCHASE': await this.changeRequestCounters(tx, line.requestLineId!, -purchaseRequestQuantity(line)); break;
           case 'RECEIPT': await this.changePurchaseCounters(tx, line.sourceLineId!, -line.quantityUnits); break;
           case 'SUPPLIER_RETURN': {
             const receipt = await this.sourceLine(tx, line.sourceLineId!, 'RECEIPT');
             await tx.businessLine.update({ where: { id: receipt.id }, data: { cancelledUnits: { decrement: line.quantityUnits } } });
-            const purchase = await this.changePurchaseCounters(tx, receipt.sourceLineId!, line.quantityUnits, document.returnMode === 'REFUND' ? -line.quantityUnits : 0n);
-            if (document.returnMode === 'REFUND') await this.changeRequestCounters(tx, purchase.requestLineId!, line.quantityUnits);
+            await this.changePurchaseCounters(tx, receipt.sourceLineId!, line.quantityUnits, document.returnMode === 'REFUND' ? -line.quantityUnits : 0n);
             break;
           }
           case 'EMPLOYEE_RETURN': await tx.businessLine.update({ where: { id: line.sourceLineId! }, data: { cancelledUnits: { decrement: line.quantityUnits } } }); break;
           case 'PURCHASE_CANCEL': {
-            const purchase = await this.changePurchaseCounters(tx, line.sourceLineId!, 0n, -line.quantityUnits);
-            await this.changeRequestCounters(tx, purchase.requestLineId!, line.quantityUnits);
+            await this.changePurchaseCounters(tx, line.sourceLineId!, 0n, -line.quantityUnits);
             break;
           }
           case 'REQUEST_CANCEL': await this.changeRequestCounters(tx, line.requestLineId!, 0n, -line.quantityUnits); break;

@@ -9,6 +9,12 @@ export type DocumentRecord = Prisma.BusinessDocumentGetPayload<{ include: typeof
 export type Tx = Prisma.TransactionClient;
 
 export function sum(values: bigint[]): bigint { return values.reduce((total, value) => total + value, 0n); }
+/** Returns/cancellations consume surplus first, then reopen the original request demand. */
+export function purchaseRequestQuantity(line: Pick<BusinessLine, 'quantityUnits' | 'cancelledUnits' | 'overPurchaseUnits'>, cancelled = line.cancelledUnits): bigint {
+  const requested = line.quantityUnits - line.overPurchaseUnits;
+  const active = line.quantityUnits - cancelled;
+  return active < requested ? active : requested;
+}
 export function snapshot(line: Pick<BusinessLine | ProcurementLine, 'productId' | 'itemName' | 'specification' | 'unit'>) {
   return { productId: line.productId, itemName: line.itemName, specification: line.specification, unit: line.unit };
 }

@@ -266,6 +266,8 @@ model BusinessLine {
   specification                String            @default("")
   unit                         String
   quantityUnits                BigInt
+  // Actual purchase quantity exceeding the request commitment; other document kinds use zero.
+  overPurchaseUnits            BigInt            @default(0)
   unitPriceUnits               BigInt?
   amountUnits                  BigInt?
   purchaseReductionAmountUnits BigInt?

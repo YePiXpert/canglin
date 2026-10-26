@@ -69,6 +69,7 @@ const pinned = 'sm:sticky sm:left-0 sm:z-1 sm:@max-[940px]:shadow-[inset_-1px_0_
           </td>
           <td v-for="column in columns" :key="column.key" :data-label="column.label" class="text-right num" :class="column.optional && line[column.key] === '0' ? 'max-sm:hidden' : ''"><span :class="column.key === 'pendingAllocationQuantity' && line[column.key] !== '0' ? 'font-semibold text-blue' : ''">{{ quantityLabel(line[column.key], line.unit) }}</span></td>
           <td v-if="!compact" data-label="尚待办理" class="text-[13px] text-muted">
+            <p v-if="line.overPurchasedQuantity && line.overPurchasedQuantity !== '0'" class="text-blue">多购备货 {{ quantityLabel(line.overPurchasedQuantity, line.unit) }}</p>
             <p v-if="line.pendingPurchaseQuantity !== '0'">待采购 {{ quantityLabel(line.pendingPurchaseQuantity, line.unit) }}</p>
             <p v-if="line.pendingReceiptQuantity !== '0'">待到货 {{ quantityLabel(line.pendingReceiptQuantity, line.unit) }}</p>
             <p v-if="line.cancelledQuantity !== '0'">取消 {{ quantityLabel(line.cancelledQuantity, line.unit) }}</p>

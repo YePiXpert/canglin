@@ -105,7 +105,7 @@ describe('PurchaseRegisterDialog', () => {
     expect(lineCheckbox(wrapper, '验收纸').element).toHaveProperty('checked', true);
     expect(wrapper.find('td[data-label="待采购"]').text()).toBe('10 盒');
     expect(field(wrapper, '验收纸 本次采购数量（盒）').element).toHaveProperty('value', '10');
-    expect(field(wrapper, '验收纸 本次采购数量（盒）').attributes('max')).toBe('10');
+    expect(field(wrapper, '验收纸 本次采购数量（盒）').attributes('max')).toBeUndefined();
     expect(field(wrapper, '验收纸 成交单价（元/盒）').exists()).toBe(true);
     expect(field(wrapper, '验收纸 采购链接').exists()).toBe(true);
     expect(field(wrapper, '验收笔 成交单价（元/支）').exists()).toBe(true);
@@ -195,6 +195,45 @@ describe('PurchaseRegisterDialog', () => {
     });
     expect(wrapper.emitted('update:open')).toEqual([[false]]);
     expect(wrapper.emitted('recorded')).toEqual([[RESULT]]);
+  });
+
+  it('数量为0的勾选行本次不采购，不要求填单价，也不计入金额和提交', async () => {
+    const wrapper = await mountDialog();
+    await pill(wrapper, '甲供应商').trigger('click');
+    await field(wrapper, '验收笔 本次采购数量（支）').setValue('0');
+    expect(field(wrapper, '验收笔 成交单价（元/支）').attributes('disabled')).toBeDefined();
+    expect(wrapper.text()).toContain('本次不采购，无需填写单价，下次可继续下单。');
+    expect(wrapper.text()).not.toContain('条价格待填');
+    await submit(wrapper);
+    expect(api.purchase.mock.calls[0][0].lines).toEqual([{ requestLineId: 11, quantity: '10', unitPrice: '20', purchaseLink: 'https://shop.example/a4' }]);
+  });
+
+  it('多购数量明确作为备货提交，申请数量不随输入修改', async () => {
+    const wrapper = await mountDialog();
+    await pill(wrapper, '甲供应商').trigger('click');
+    await field(wrapper, '验收纸 本次采购数量（盒）').setValue('15');
+    await field(wrapper, '验收笔 本次采购数量（支）').setValue('0');
+    expect(wrapper.text()).toContain('多购备货 5 盒');
+    expect(wrapper.text()).toContain('本次成交合计 ¥300.00');
+    await submit(wrapper);
+    expect(api.purchase.mock.calls[0][0].lines).toEqual([{ requestLineId: 11, quantity: '15', overPurchaseQuantity: '5', unitPrice: '20', purchaseLink: 'https://shop.example/a4' }]);
+    expect(request.lines[0].quantity).toBe('10');
+  });
+
+  it('全部填0时不提交；已出现的单价错误在改为不采购后不再阻挡其他行', async () => {
+    const wrapper = await mountDialog();
+    await pill(wrapper, '甲供应商').trigger('click');
+    await submit(wrapper);
+    expect(api.purchase).not.toHaveBeenCalled();
+    await field(wrapper, '验收笔 本次采购数量（支）').setValue('0.000000');
+    expect(wrapper.find('[role=alert]').exists()).toBe(false);
+    await field(wrapper, '验收纸 本次采购数量（盒）').setValue('0');
+    await submit(wrapper);
+    expect(api.purchase).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('请至少选择一条明细并填写大于 0 的采购数量');
+    await field(wrapper, '验收纸 本次采购数量（盒）').setValue('2');
+    await submit(wrapper);
+    expect(api.purchase.mock.calls[0][0].lines).toHaveLength(1);
   });
 
   it('新增供应商：保存后自动选为本次供应商', async () => {

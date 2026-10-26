@@ -108,9 +108,11 @@ export const workflowPurchaseSchema = z.object({
   lines: z.array(z.object({
     requestLineId: idSchema,
     quantity: workflowQuantitySchema,
+    /** 本次超出待采购量的备货数量；不占用申请数量，实际收货后再入库。 */
+    overPurchaseQuantity: workflowQuantitySchema.optional(),
     unitPrice: workflowPriceSchema,
     purchaseLink: linkSchema.optional(),
-  })).min(1).max(200),
+  }).refine(line => !line.overPurchaseQuantity || quantityUnits(line.overPurchaseQuantity) <= quantityUnits(line.quantity), '多购数量不能超过本次采购数量')).min(1).max(200),
 });
 export type WorkflowPurchaseInput = z.infer<typeof workflowPurchaseSchema>;
 
@@ -216,6 +218,8 @@ export interface WorkflowRequestLineRow {
   /** 申请里附的采购链接（已精简）；没有为 null */
   purchaseLink: string | null;
   cancelledQuantity: string; orderedQuantity: string; receivedQuantity: string;
+  /** 有效采购中超出申请需求的部分，尚未收货时不计入库存。 */
+  overPurchasedQuantity?: string;
   pendingPurchaseQuantity: string; pendingReceiptQuantity: string; pendingAllocationQuantity: string;
   directQuantity: string; stockedQuantity: string; issuedQuantity: string; stockQuantity: string;
   supplierReturnedQuantity: string; employeeReturnedQuantity: string;
@@ -250,6 +254,8 @@ export interface WorkflowDocumentLineRow {
   requestId: number | null; serialNumber: string | null;
   productId: number; itemName: string; specification: string; unit: string;
   quantity: string; unitPrice: string | null; amount: string | null; purchaseLink: string | null;
+  /** 本采购行当前仍有效的多购部分。 */
+  overPurchaseQuantity?: string;
   purchaseReductionAmount: string | null;
   recipient: string | null; location: WorkflowLocation | null; reason: string | null;
   receivedQuantity: string; remainingQuantity: string;
