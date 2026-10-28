@@ -91,6 +91,12 @@ describe('导入整理与物品复用', () => {
     expect(request.lines[0]).toMatchObject({ productId: product.id, unit: 'kg', quantityUnits: 2000000n });
   });
 
+  it('整理时读不到物品目录也保留识别草稿，识别本身不因此失败', async () => {
+    const draft = importDraftSchema.parse({ items: [{ itemName: '得力 7084 铅笔 2B 12支/盒', quantity: 1, unit: '盒', source: { page: 1, method: 'PDF_TEXT', rawText: '得力 7084 铅笔 2B 12支/盒' } }] });
+    const unavailable = { catalogProduct: { findMany: () => Promise.reject(new Error('数据库暂时不可用')) } } as unknown as PrismaService;
+    expect(await organizeImportDraft(draft, unavailable)).toEqual(draft);
+  });
+
   it('无法唯一确定已有档案时整单回退，不留下前面行的新物品', async () => {
     await prisma.catalogProduct.createMany({ data: [{ name: '冲突笔', specification: '黑色；12支/盒', unit: '盒' }, { name: '冲突笔', specification: '12支/盒；黑色', unit: '盒' }] });
     const body = await source([{ itemName: '本次应回退新物品', unit: '个', quantity: 1 }, { itemName: '冲突笔', spec: '黑色，12 支每盒', unit: '盒', quantity: 1 }]);

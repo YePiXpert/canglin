@@ -33,6 +33,7 @@ describe('集中采购事务', () => {
     expect(await write(`/execution/batches/${batch.id}/confirm`, payload, 'POST', key)).toEqual(posted);
     expect((await read<WorkflowRequestRow>(`/workflow/requests/${a.id}`)).lines[0].pendingPurchaseQuantity).toBe('0');
     expect((await settlement(posted.documents[0].id)).mode).toBe('DETAIL');
+    expect(await read<WorkflowDocumentRow>(`/workflow/documents/${posted.documents[0].id}`)).toMatchObject({ procurementBatchId: batch.id, purchaseEditReason: null });
   });
   it('另一入口先采购后，批次确认全部回滚，包括已处理的第一个供应商', async () => {
     const a = await request('2'), b = await request('2');

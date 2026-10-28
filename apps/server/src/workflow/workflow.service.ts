@@ -233,8 +233,8 @@ export class WorkflowService {
       if (!line || line.document.kind !== 'PURCHASE') throw new NotFoundException('采购明细不存在');
       if (line.document.status !== 'POSTED') throw new ConflictException('已撤销的采购不能修改');
       audit.previous = line.purchaseLink;
+      // 链接不影响对账版本；「修改采购」只提交改过的链接，不会覆盖这里的修改。
       await tx.businessLine.update({ where: { id }, data: { purchaseLink: input.purchaseLink } });
-      await tx.businessDocument.update({ where: { id: line.documentId }, data: { settlementVersion: { increment: 1 } } });
       return this.query.documentTx(tx, line.documentId);
     });
   }
@@ -291,6 +291,12 @@ export class WorkflowService {
     if (!result.count) throw new ConflictException('采购明细已发生变化，请重新载入');
     if (cancelledDelta !== 0n) {
       const requestDelta = purchaseRequestQuantity(line, cancelled) - purchaseRequestQuantity(line);
+      if (requestDelta > 0n) {
+        // 撤销取消或退款要把数量还给原申请。期间已另行采购或取消了申请余量时先撤销那些记录，不让采购超出申请。
+        const request = await tx.procurementLine.findUniqueOrThrow({ where: { id: line.requestLineId! } });
+        const open = request.quantityUnits - request.cancelledUnits - request.orderedUnits;
+        if (open < requestDelta) throw new ConflictException(`「${line.itemName}」撤销后要恢复 ${quantityText(requestDelta)} ${line.unit}采购需求，但原申请${open > 0n ? `只剩 ${quantityText(open)} ${line.unit}待采购` : '已没有待采购数量'}：期间已另行采购或取消了申请余量。请先撤销那些记录，再撤销本次取消或退款`);
+      }
       if (requestDelta) await this.changeRequestCounters(tx, line.requestLineId!, requestDelta);
       await tx.businessDocument.update({ where: { id: line.documentId }, data: { settlementVersion: { increment: 1 } } });
     }
@@ -370,13 +376,16 @@ export class WorkflowService {
         throw new BadRequestException('请提交这张采购单的全部原明细，不能增加、删除或替换明细');
       const supplier = await tx.supplier.findUnique({ where: { id: input.supplierId } });
       if (!supplier) throw new NotFoundException('供应商不存在');
-      const updated = await tx.businessDocument.updateMany({ where: { id, status: 'POSTED', settlementVersion: input.version }, data: { date: input.date, supplierId: supplier.id, supplierName: supplier.name, note: input.note ?? null, settlementVersion: { increment: 1 } } });
+      // 备注与链接不参与对账版本：没提交的项保留原值，不覆盖别处的修改。
+      const updated = await tx.businessDocument.updateMany({ where: { id, status: 'POSTED', settlementVersion: input.version }, data: { date: input.date, supplierId: supplier.id, supplierName: supplier.name, ...(input.note !== undefined ? { note: input.note } : {}), settlementVersion: { increment: 1 } } });
       if (!updated.count) throw new ConflictException('采购记录已变化，请刷新后重新核对');
       audit.previous = {
         date: document.date, supplierId: document.supplierId, supplierName: document.supplierName, note: document.note,
         totalAmount: moneyText(document.totalAmountUnits ?? 0n), version: document.settlementVersion,
         lines: document.lines.map(line => ({ id: line.id, quantity: quantityText(line.quantityUnits), overPurchaseQuantity: quantityText(line.overPurchaseUnits), unitPrice: priceText(line.unitPriceUnits!), purchaseLink: line.purchaseLink })),
       };
+      // 集中采购批次确认后只留作原安排对照，修改本单不回写批次。
+      if (document.procurementBatchId) audit.procurementBatchId = document.procurementBatchId;
       // 先归还本单占用的申请需求，再按原明细编号重新分配；任何冲突整单回滚。
       for (const line of document.lines) await this.changeRequestCounters(tx, line.requestLineId!, -purchaseRequestQuantity(line));
       let total = 0n;
@@ -392,7 +401,7 @@ export class WorkflowService {
         await this.changeRequestCounters(tx, source.id, quantity - extra);
         const amount = bounded(lineAmountUnits(quantity, price));
         total = bounded(total + amount);
-        await tx.businessLine.update({ where: { id: line.id }, data: { quantityUnits: quantity, overPurchaseUnits: extra, unitPriceUnits: price, amountUnits: amount, purchaseLink: edit.purchaseLink ?? null } });
+        await tx.businessLine.update({ where: { id: line.id }, data: { quantityUnits: quantity, overPurchaseUnits: extra, unitPriceUnits: price, amountUnits: amount, ...(edit.purchaseLink !== undefined ? { purchaseLink: edit.purchaseLink } : {}) } });
       }
       await tx.businessDocument.update({ where: { id }, data: { totalAmountUnits: total } });
       return this.query.documentTx(tx, id);
@@ -690,7 +699,9 @@ export class WorkflowService {
       if (input.invoiceIssued !== undefined && await tx.invoiceAllocation.count({ where: { documentId: id, invoice: { status: { not: 'VOIDED' } } } })) throw new ConflictException('该采购已有票据匹配记录，请在发票池处理');
       if (document.status !== 'POSTED') throw new ConflictException('已撤销的记录不能修改');
       if (document.kind !== 'PURCHASE' && (input.paymentStatus !== undefined || input.invoiceIssued !== undefined)) throw new BadRequestException('付款和开票状态请在采购单上登记');
-      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(['PURCHASE', 'RECEIPT'].includes(document.kind) ? { settlementVersion: { increment: 1 } } : {}) } });
+      // 采购的对账版本只随付款、开票标记变化，改备注不打断对账；到货的版本同时保护「修改到货数量」弹窗里的备注。
+      const touched = document.kind === 'RECEIPT' || input.paymentStatus !== undefined || input.invoiceIssued !== undefined;
+      await tx.businessDocument.update({ where: { id }, data: { ...input, ...(touched ? { settlementVersion: { increment: 1 } } : {}) } });
       return this.query.documentTx(tx, id);
     });
   }

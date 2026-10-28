@@ -62,7 +62,7 @@ async function refreshAttachments() {
   } catch (cause) { toast.error(apiError(cause)); }
 }
 function closeAll() { purchaseOpen.value = purchaseEditOpen.value = receiptOpen.value = receiptEditOpen.value = commandOpen.value = voidOpen.value = metadataOpen.value = adjustmentOpen.value = attachmentsOpen.value = inspectionOpen.value = linkOpen.value = false; }
-function recorded(document: WorkflowDocumentRow) { toast.success('业务登记已保存'); emit('recorded', document); }
+function recorded(document: WorkflowDocumentRow, message = '业务登记已保存') { toast.success(message); emit('recorded', document); }
 defineExpose({ purchase, editPurchase, receipt, editReceipt, command, voidDocument, metadata, adjust, attachments, inspectDocument, inspectLine, editLink, closeAll });
 </script>
 

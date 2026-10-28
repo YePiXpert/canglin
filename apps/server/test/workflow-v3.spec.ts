@@ -228,11 +228,13 @@ describe('V3 去向、退回与纠错', () => {
     await assertReconciled(f.productId);
   });
 
-  it('退款释放的需求被重新采购后，不能直接撤销退款造成超采购', async () => {
+  it('退款释放的需求被重新采购后，不能直接撤销退款造成超采购，并说明先撤销哪些记录', async () => {
     const f = await fixture('2');
     const returned = await command('/supplier-returns', { date: '2026-09-04', reason: '退款重买', returnMode: 'REFUND', lines: [{ receiptLineId: f.source, quantity: '1', location: 'RECEIVING' }] });
     await command('/purchases', { date: '2026-09-05', supplierId: supplierB, lines: [{ requestLineId: f.row.lines[0].id, quantity: '1', unitPrice: '20' }] });
-    expect((await write(`/documents/${returned.id}/void`, { date: '2026-09-06', reason: '已重新采购' })).statusCode).toBe(409);
+    const response = await write(`/documents/${returned.id}/void`, { date: '2026-09-06', reason: '已重新采购' });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().message).toContain('撤销后要恢复 1 支采购需求，但原申请已没有待采购数量');
     expect((await get<WorkflowRequestRow>(`/requests/${f.row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '2', receivedQuantity: '1' });
     expect((await balance(f.productId)).receivingQuantity).toBe('1');
     await assertReconciled(f.productId);
@@ -314,7 +316,8 @@ describe('V3 去向、退回与纠错', () => {
     const cancelled = await command('/purchase-cancellations', { date: '2026-09-04', reason: '不再采购', lines: [{ purchaseLineId: order.lines[0].id, quantity: '2' }] });
     const stopped = await command('/request-cancellations', { date: '2026-09-05', reason: '申请余量结束', lines: [{ requestLineId: row.lines[0].id, quantity: '3' }] });
     expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '2', cancelledQuantity: '3', pendingPurchaseQuantity: '0' });
-    expect((await write(`/documents/${cancelled.id}/void`, { date: '2026-09-06', reason: '需求仍已取消' })).statusCode).toBe(409);
+    const blocked = await write(`/documents/${cancelled.id}/void`, { date: '2026-09-06', reason: '需求仍已取消' });
+    expect(blocked.statusCode).toBe(409); expect(blocked.json().message).toContain('请先撤销那些记录');
     await command(`/documents/${stopped.id}/void`, { date: '2026-09-06', reason: '继续执行' });
     await command(`/documents/${cancelled.id}/void`, { date: '2026-09-07', reason: '继续收货' });
     expect((await get<WorkflowRequestRow>(`/requests/${row.id}`)).lines[0]).toMatchObject({ orderedQuantity: '4', cancelledQuantity: '0', pendingReceiptQuantity: '2' });

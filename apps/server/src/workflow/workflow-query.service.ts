@@ -110,6 +110,7 @@ export class WorkflowQueryService {
       ...(document.kind === 'PURCHASE' ? { purchaseVersion: document.settlementVersion, purchaseEditReason: purchaseEditReason(document, dependencies) } : {}),
       ...(document.kind === 'RECEIPT' ? { receiptVersion: document.settlementVersion } : {}),
       ...(document.stocktake ? { stocktakeId: document.stocktake.id } : {}),
+      ...(document.procurementBatchId ? { procurementBatchId: document.procurementBatchId } : {}),
       id: document.id, kind: document.kind as WorkflowDocumentKind, date: document.date,
       status: document.status as 'POSTED' | 'VOIDED', supplierId: document.supplierId, supplierName: document.supplierName,
       department: document.department, source: document.source as 'DIRECT' | 'STOCK' | null,

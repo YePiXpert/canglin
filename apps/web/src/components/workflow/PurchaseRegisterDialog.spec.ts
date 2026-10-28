@@ -263,7 +263,7 @@ describe('PurchaseRegisterDialog', () => {
       { supplierId: 7, requestLineId: 11, quantity: '10', unitPrice: '12' },
       { supplierId: 8, requestLineId: 12, quantity: '5', unitPrice: '3' },
     ] });
-    expect(wrapper.emitted('recorded')).toEqual([[RESULT]]);
+    expect(wrapper.emitted('recorded')).toEqual([[RESULT, '已按供应商分别登记 2 张采购单']]);
   });
 
   it('改默认供应商不影响单独选定行；本行更换供应商时只清理来自其他供应商的历史价格', async () => {

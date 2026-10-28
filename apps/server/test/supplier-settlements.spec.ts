@@ -37,6 +37,8 @@ describe('供应商按账期统一结算', () => {
     expect(payment).toMatchObject({ payer: 'COMPANY', amount: '160.00', settlementFrom: '2026-10-01', settlementTo: '2026-10-31', reference: '2026年10月统一结算' });
     expect(payment.allocations).toHaveLength(2);
     expect((await raw('/execution/supplier-settlements', { ...payload, reference: '2026年10月统一结算' }, key)).json()).toEqual(payment);
+    // 结算记录只列统一结算，此前单笔登记的 20 元付款留在旧账
+    expect((await read<WorkflowPage<FinancialRow>>(`/execution/supplier-settlements?supplierId=${supplierId}`)).items.map(record => record.id)).toEqual([payment.id]);
     expect(await row(a.id)).toMatchObject({ payable: '0.00', netPaid: '100.00' }); expect(await row(b.id)).toMatchObject({ payable: '0.00', netPaid: '80.00' });
     expect(await prisma.stockEntry.findMany()).toEqual(entries); expect(await prisma.stockBalance.findMany()).toEqual(balances); expect(await prisma.businessLine.findMany()).toEqual(lines);
     expect(await prisma.auditLog.count({ where: { action: 'WORKFLOW_SUPPLIER_SETTLEMENT', detail: { contains: key } } })).toBe(1);

@@ -127,14 +127,19 @@ describe('采购登记后的原位纠错', () => {
     expect((await edit(latest, body(latest, { supplierId: otherSupplierId }))).supplierId).toBe(otherSupplierId);
   });
 
-  it('采购链接或备注被别处修改后，旧弹窗不能覆盖；历史付款标记同样受保护', async () => {
+  it('别处改链接或备注不打断对账；旧弹窗只提交改过的项，不覆盖别处修改；历史付款标记仍受保护', async () => {
     const { document } = await fixture(['5'], 'LEGACY');
     await write(`/workflow/purchase-lines/${document.lines[0].id}/link`, { purchaseLink: 'https://shop.example/new' }, 'PATCH');
-    expect((await raw(`/workflow/purchases/${document.id}`, body(document), 'PATCH')).statusCode).toBe(409);
-    let latest = await current(document.id);
     await write(`/workflow/documents/${document.id}/metadata`, { note: '另一个页面的新备注' }, 'PATCH');
-    expect((await raw(`/workflow/purchases/${document.id}`, body(latest), 'PATCH')).statusCode).toBe(409);
-    latest = await write<WorkflowDocumentRow>(`/workflow/documents/${document.id}/metadata`, { paymentStatus: 'PAID' }, 'PATCH');
+    expect((await current(document.id)).purchaseVersion).toBe(document.purchaseVersion);
+    const stale = body(document, { date: '2026-10-27' });
+    delete stale.note; for (const line of stale.lines) delete line.purchaseLink;
+    const updated = await edit(document, stale);
+    expect(updated).toMatchObject({ date: '2026-10-27', note: '另一个页面的新备注' });
+    expect(updated.lines[0].purchaseLink).toBe('https://shop.example/new');
+    const cleared = await edit(updated, body(updated, { note: '', lines: [{ ...body(updated).lines[0]!, purchaseLink: null }] }));
+    expect(cleared.note ?? '').toBe(''); expect(cleared.lines[0].purchaseLink).toBeNull();
+    const latest = await write<WorkflowDocumentRow>(`/workflow/documents/${document.id}/metadata`, { paymentStatus: 'PAID' }, 'PATCH');
     expect(latest.purchaseEditReason).toContain('已标记');
     expect((await raw(`/workflow/purchases/${document.id}`, body(latest), 'PATCH')).statusCode).toBe(409);
   });

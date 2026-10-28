@@ -484,6 +484,8 @@ model ProcurementBatchLine {
 model FinancialRecord {
   settlementFrom         String?
   settlementTo           String?
+  // Registered through supplier settlement; single payments stay in the legacy ledger.
+  supplierSettlement     Boolean               @default(false)
   id                     Int                   @id @default(autoincrement())
   kind                   String // PAYMENT | REFUND | REIMBURSEMENT | REIMBURSEMENT_RETURN | OPENING
   status                 String                @default("POSTED")

@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import { importProductIdentity, importProductSignature, organizeImportedProduct, type ImportDraft, type WorkflowProductCreateInput } from '@canglin/shared';
 import type { Tx } from '../workflow/workflow-records';
 
@@ -28,17 +28,25 @@ export function matchImportedProduct(input: WorkflowProductCreateInput, catalog:
     ?? catalog.normalized.get(importProductIdentity(input.itemName, input.specification, input.unit)) ?? [];
 }
 
-/** Initial drafts are organized before display. Recognition evidence remains intact. */
+const logger = new Logger('ImportCatalog');
+
+/** Initial drafts are organized before display. Recognition evidence remains intact.
+ *  Organizing is only a convenience: on failure the recognized draft is kept, so recognition itself still succeeds. */
 export async function organizeImportDraft(draft: ImportDraft, db: Pick<Tx, 'catalogProduct'>): Promise<ImportDraft> {
-  const catalog = await importCatalog(db);
-  return { ...draft, items: draft.items.map(item => {
-    const input = { itemName: item.itemName, specification: item.spec ?? '', unit: item.unit ?? '' };
-    const matches = input.unit ? matchImportedProduct(input, catalog) : [];
-    const matched = matches.length === 1 ? matches[0] : null;
-    const organized = matched ? { itemName: matched.name, specification: matched.specification } : organizeImportedProduct(input.itemName, input.specification, input.unit);
-    return { ...item, itemName: organized.itemName, spec: organized.specification || null,
-      ...(item.source ? { source: { ...item.source, rawText: item.source.rawText ?? item.itemName } } : {}) };
-  }) };
+  try {
+    const catalog = await importCatalog(db);
+    return { ...draft, items: draft.items.map(item => {
+      const input = { itemName: item.itemName, specification: item.spec ?? '', unit: item.unit ?? '' };
+      const matches = input.unit ? matchImportedProduct(input, catalog) : [];
+      const matched = matches.length === 1 ? matches[0] : null;
+      const organized = matched ? { itemName: matched.name, specification: matched.specification } : organizeImportedProduct(input.itemName, input.specification, input.unit);
+      return { ...item, itemName: organized.itemName, spec: organized.specification || null,
+        ...(item.source ? { source: { ...item.source, rawText: item.source.rawText ?? item.itemName } } : {}) };
+    }) };
+  } catch (error) {
+    logger.warn(`导入草稿整理失败，保留识别结果：${error instanceof Error ? error.message : String(error)}`);
+    return draft;
+  }
 }
 
 /** Recheck within the confirmation transaction, including products created earlier in this batch. */

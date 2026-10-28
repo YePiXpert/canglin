@@ -45,10 +45,26 @@ describe('采购纠错弹窗', () => {
     expect(wrapper.text()).toContain('修改后合计 ¥100.00');
     await save();
     expect(api.updatePurchase).toHaveBeenCalledWith(17, expect.objectContaining({ version: 3, supplierId: 2, reason: '核实下单数量', lines: [
-      { id: 21, quantity: '4', unitPrice: '10', purchaseLink: 'https://shop.example/item' },
-      { id: 22, quantity: '3', unitPrice: '20', overPurchaseQuantity: '2', purchaseLink: null },
+      { id: 21, quantity: '4', unitPrice: '10' },
+      { id: 22, quantity: '3', unitPrice: '20', overPurchaseQuantity: '2' },
     ] }));
+    // 没改的备注和链接不提交，服务器保留别处可能刚做的修改
+    expect(api.updatePurchase.mock.calls[0]![1]).not.toHaveProperty('note');
     expect(wrapper.emitted('recorded')).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('集中采购批次');
+  });
+  it('改过的备注和链接照常提交，清空链接为 null；批次生成的采购单提示原安排保留', async () => {
+    wrapper = mount(PurchaseEditDialog, { props: { open: true, document: { ...structuredClone(documentRow), procurementBatchId: 8 } }, global: { stubs: { Dialog: DialogStub } } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('集中采购批次 #8');
+    await input('U盘 采购链接')[0].setValue('');
+    await wrapper.find('textarea').setValue('改后的备注');
+    await input('修改原因')[0].setValue('更正链接和备注');
+    await save();
+    expect(api.updatePurchase).toHaveBeenCalledWith(17, expect.objectContaining({ note: '改后的备注', lines: [
+      { id: 21, quantity: '2', unitPrice: '10', purchaseLink: null },
+      { id: 22, quantity: '3', unitPrice: '20' },
+    ] }));
   });
   it('无效数量、单价和缺少原因时保持弹窗并给出字段错误', async () => {
     await open();

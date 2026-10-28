@@ -21,7 +21,8 @@ import { buttonClass } from '@/components/ui/button';
 import { draftLineAmount, moneyLabel, priceError, quantityError, quantityLabel, unitPriceLabel, webLink } from './presentation';
 
 const props = defineProps<{ open: boolean; request: WorkflowRequestRow }>();
-const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
+/** message：多家供应商分别生成采购单时的提示；只有一张时沿用通用提示 */
+const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow, message?: string] }>();
 const catalog = useCatalogStore();
 const form = reactive({ date: todayString(), supplierId: '', note: '' });
 const suppliers = ref<SupplierRow[]>([]);
@@ -179,6 +180,7 @@ async function save() {
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
   if (!parsed.success) { failure.value = issueText(parsed.error); return; }
+  let count = 1;
   const result = await submit(async () => {
     const { lines: rows, ...header } = parsed.data;
     if (new Set(rows.map(line => line.supplierId)).size === 1)
@@ -187,11 +189,14 @@ async function save() {
         ...(line.overPurchaseQuantity ? { overPurchaseQuantity: line.overPurchaseQuantity } : {}),
         ...(line.purchaseLink ? { purchaseLink: line.purchaseLink } : {}),
       })) });
-    return (await workflowApi.registerPurchases(parsed.data)).documents[0];
+    const { documents } = await workflowApi.registerPurchases(parsed.data);
+    count = documents.length;
+    return documents[0];
   });
   if (result === undefined) return;
   emit('update:open', false);
-  emit('recorded', result);
+  if (count > 1) emit('recorded', result, `已按供应商分别登记 ${count} 张采购单`);
+  else emit('recorded', result);
 }
 
 /*

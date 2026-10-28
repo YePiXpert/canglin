@@ -17,7 +17,8 @@ import { draftLineAmount, moneyLabel, priceError, quantityError, quantityLabel }
 const props = defineProps<{ open: boolean; document: WorkflowDocumentRow }>();
 const emit = defineEmits<{ 'update:open': [value: boolean]; recorded: [document: WorkflowDocumentRow] }>();
 const form = reactive({ date: '', supplierId: '', note: '', reason: '' });
-const lines = ref<{ id: number; requestLineId: number; itemName: string; specification: string; unit: string; available: string; quantity: string; unitPrice: string; purchaseLink: string }[]>([]);
+/** originalLink：打开时的链接。备注和链接只在改过时提交，不覆盖别处同时做的修改。 */
+const lines = ref<{ id: number; requestLineId: number; itemName: string; specification: string; unit: string; available: string; quantity: string; unitPrice: string; purchaseLink: string; originalLink: string }[]>([]);
 const suppliers = ref<SupplierRow[]>([]), loadingSuppliers = ref(false), supplierError = ref('');
 let supplierRequest = 0;
 const { saving, failure, errors, dirty, reset, submit } = useDialogForm(() => JSON.stringify({ form, lines: lines.value }));
@@ -34,7 +35,7 @@ watch(() => props.open, (open) => {
   Object.assign(form, { date: props.document.date, supplierId: String(props.document.supplierId ?? ''), note: props.document.note ?? '', reason: '' });
   lines.value = [...props.document.lines].sort((a, b) => a.id - b.id).map(line => ({
     id: line.id, requestLineId: line.requestLineId!, itemName: line.itemName, specification: line.specification, unit: line.unit,
-    available: line.purchaseAvailableQuantity ?? '0', quantity: line.quantity, unitPrice: line.unitPrice ?? '', purchaseLink: line.purchaseLink ?? '',
+    available: line.purchaseAvailableQuantity ?? '0', quantity: line.quantity, unitPrice: line.unitPrice ?? '', purchaseLink: line.purchaseLink ?? '', originalLink: line.purchaseLink ?? '',
   }));
   reset(); void loadSuppliers();
 }, { immediate: true });
@@ -78,8 +79,10 @@ async function save() {
   }
   errors.value = invalid;
   if (Object.keys(invalid).length) return;
-  const parsed = workflowPurchaseUpdateSchema.safeParse({ ...form, version: props.document.purchaseVersion, lines: lines.value.map(line => ({
-    id: line.id, quantity: line.quantity, unitPrice: line.unitPrice, purchaseLink: line.purchaseLink.trim() || null,
+  const { note, ...header } = form;
+  const parsed = workflowPurchaseUpdateSchema.safeParse({ ...header, ...(note !== (props.document.note ?? '') ? { note } : {}), version: props.document.purchaseVersion, lines: lines.value.map(line => ({
+    id: line.id, quantity: line.quantity, unitPrice: line.unitPrice,
+    ...(line.purchaseLink.trim() !== line.originalLink ? { purchaseLink: line.purchaseLink.trim() || null } : {}),
     ...(surplus.value.get(line.id) !== '0' ? { overPurchaseQuantity: surplus.value.get(line.id) } : {}),
   })) });
   if (!parsed.success) { failure.value = issueText(parsed.error); return; }
@@ -98,6 +101,7 @@ async function save() {
         <Notice v-if="supplierError" tone="red" variant="inline" size="sm" role="alert" class="mt-2">供应商加载失败：{{ supplierError }}<template #actions><Button variant="link" :loading="loadingSuppliers" @click="loadSuppliers">重试</Button></template></Notice>
       </div>
     </div>
+    <Notice v-if="document.procurementBatchId" tone="blue" size="sm" class="mt-4">这张采购单由集中采购批次 #{{ document.procurementBatchId }} 生成。修改只更正本采购单，批次里的原安排保留作对照。</Notice>
     <div class="mt-5 space-y-3">
       <section v-for="line in lines" :key="line.id" class="rounded-(--radius-card) border border-line p-4">
         <div class="mb-3 flex flex-wrap items-start justify-between gap-2">

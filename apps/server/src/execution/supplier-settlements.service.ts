@@ -67,7 +67,7 @@ export class SupplierSettlementsService {
       audit.confirmedPreviouslyUnpaid = legacyIds;
       audit.previous = rows.map(row => ({ documentId: row.documentId, mode: row.mode, version: row.version, netPaid: row.netPaid, payable: row.payable, legacyPaymentStatus: row.legacyPaymentStatus }));
       const payment = await this.finance.createTx(tx, { kind: 'PAYMENT', date: input.date, supplierId: input.supplierId, payer: 'COMPANY', employee: '', sourceId: null, amount: input.amount, method: input.method, reference: input.reference, note: input.note, allocations });
-      await tx.financialRecord.update({ where: { id: payment.id }, data: { settlementFrom: input.dateFrom ?? null, settlementTo: input.dateTo ?? null } });
+      await tx.financialRecord.update({ where: { id: payment.id }, data: { settlementFrom: input.dateFrom ?? null, settlementTo: input.dateTo ?? null, supplierSettlement: true } });
       return this.finance.detailTx(tx, payment.id);
     });
   }

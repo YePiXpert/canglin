@@ -129,7 +129,8 @@ export const workflowPurchaseRegistrationSchema = z.object({
 export type WorkflowPurchaseRegistrationInput = z.infer<typeof workflowPurchaseRegistrationSchema>;
 export interface WorkflowPurchaseRegistrationResult { documents: WorkflowDocumentRow[] }
 
-/** 原采购明细原位纠错，保留单据与明细编号；版本和多购数量均由服务端重新核对。 */
+/** 原采购明细原位纠错，保留单据与明细编号；版本和多购数量均由服务端重新核对。
+ *  备注（note）与各行链接（purchaseLink）不参与版本：不提交表示保留原值，null 表示去掉链接。 */
 export const workflowPurchaseUpdateSchema = z.object({
   version: z.number().int().nonnegative(),
   date: workflowDateSchema,
@@ -317,6 +318,8 @@ export interface WorkflowDocumentRow {
   receiptVersion?: number;
   purchaseVersion?: number;
   purchaseEditReason?: string | null;
+  /** 由集中采购批次确认生成的采购单；批次只保留原安排，修改采购单不回写批次。 */
+  procurementBatchId?: number;
   settlement?: import('./execution.js').SettlementRow;
   invoiceManaged?: boolean;
   settlementMode?: 'LEGACY' | 'DETAIL';
