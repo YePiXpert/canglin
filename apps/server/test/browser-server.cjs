@@ -28,6 +28,7 @@ const { configureApp } = require('../dist/bootstrap');
 const { OcrClient } = require('../dist/imports/ocr.client');
 const { LlmClient, AiResponseError } = require('../dist/ai/llm.client');
 const { capabilityImage } = require('../dist/ai/capability-image');
+const { AutoBackupService } = require('../dist/system/auto-backup.service');
 let sequence = 0;
 const ocr = {
   inspect: async () => ({ pageCount: 1 }),
@@ -131,6 +132,8 @@ const llm = {
     .compile();
   const app = module.createNestApplication(new FastifyAdapter(), { logger: false });
   await configureApp(app);
+  // 每次都是全新的库：关掉默认开启的自动备份，免得跑到一半备份、接口短暂维护
+  await app.get(AutoBackupService).updateConfig({ enabled: false, intervalHours: 24, keepCount: 7 });
   await app.listen(3301, '127.0.0.1');
   const stop = async () => {
     await app.close();
