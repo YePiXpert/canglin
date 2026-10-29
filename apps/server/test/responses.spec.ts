@@ -88,6 +88,20 @@ it.each([
   expect(param in first && !(param in second)).toBe(true);
   expect(onRejected).toHaveBeenCalledWith([param]);
 });
+it('reports an unsupported reasoning effort value instead of silently dropping reasoning; high efforts reserve output budget', async () => {
+  const fetch = vi.fn(async () => failure(400, "Unsupported value: 'xhigh' is not supported with this model. Supported values are: 'low', 'medium', and 'high'.", 'reasoning.effort'));
+  vi.stubGlobal('fetch', fetch);
+  const onRejected = vi.fn();
+  await expect(new LlmClient().chat({ ...opts, reasoningEffort: 'xhigh', onRejected })).rejects.toThrow('不接受推理强度「xhigh」');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(onRejected).not.toHaveBeenCalled();
+  const ok = vi.fn(async () => result());
+  vi.stubGlobal('fetch', ok);
+  await new LlmClient().chat({ ...opts, maxTokens: 1000, reasoningEffort: 'max' });
+  expect(bodies(ok)[0]).toMatchObject({ max_output_tokens: 33_000, reasoning: { effort: 'max' } });
+  await new LlmClient().chat({ ...opts, maxTokens: 1000, reasoningEffort: 'medium' });
+  expect(bodies(ok)[1].max_output_tokens).toBe(1000);
+});
 it('resends a rejected parameter only once and does not retry other 400 errors', async () => {
   const twice = vi.fn(async () => failure(400, 'temperature is not supported'));
   vi.stubGlobal('fetch', twice);

@@ -21,7 +21,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { clientIp } from '../common/request.util';
 import { AiService } from './ai.service';
 import { AiConfigService } from './ai-config.service';
-import { LlmClient } from './llm.client';
+import { AiResponseError, LlmClient } from './llm.client';
 
 @Controller('ai')
 export class AiController {
@@ -66,12 +66,14 @@ export class AiController {
   @Post('capabilities')
   async capabilities() {
     const cfg = await this.aiConfig.getConfig();
+    await this.aiConfig.forgetRejectedParams();
     const result = {
       checkedAt: new Date().toISOString(),
       text: false,
       image: false,
       structured: false,
       tools: false,
+      detail: undefined as string | undefined,
     };
     const base = {
       baseUrl: cfg.baseUrl,
@@ -104,14 +106,18 @@ export class AiController {
         required: ['value'],
         additionalProperties: false,
       };
+      // 带上设置里的推理强度：模型不接受这个档位时在这里就报出来，不等识别、问答时才失败
       const value = await this.llm.chat({
         ...base,
+        ...(await this.aiConfig.params(cfg, 'ask')),
+        timeoutMs: 90_000,
         schema,
         messages: [{ role: 'user', content: 'Return value 7.' }],
       });
       result.structured = JSON.stringify(JSON.parse(value.content || '{}')) === '{"value":7}';
-    } catch {
-      /* report unsupported schema */
+    } catch (error) {
+      // 结构化输出不可用照常只记 false；推理强度不被接受要把原因带回设置页
+      if (error instanceof AiResponseError && error.kind === 'UNSUPPORTED_EFFORT') result.detail = error.message;
     }
     try {
       const first = await this.llm.chat({

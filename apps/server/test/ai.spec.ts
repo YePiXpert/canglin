@@ -69,31 +69,29 @@ async function seedRequest(itemName: string, quantity = '10'): Promise<void> {
 }
 
 describe('AI 配置', () => {
-  it('启用时只接受允许列表里的模型，GPT 保存和恢复加载均使用中等思考', async () => {
+  it('模型不受限时任意模型都能保存；推理强度按提交值保存，同一模型不带强度沿用、换模型回到自动', async () => {
     const service = ctx.app.get(AiConfigService);
     const current = await service.getConfig();
-    const input = { enabled: false, baseUrl: current.baseUrl, model: 'gpt-6.1-sol', semanticSearch: true, reasoningEffort: 'high' };
-    const rejected = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...input, model: 'arbitrary-model', enabled: true, apiKey: 'k' } }) });
-    expect(rejected.statusCode).toBe(400);
-    const saved = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: input }) });
+    const base = { enabled: false, baseUrl: current.baseUrl, model: 'gpt-6.1-terra', semanticSearch: true };
+    const saved = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, reasoningEffort: 'max' } }) });
     expect(saved.statusCode).toBe(200);
-    expect(saved.json()).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'medium' });
-    await ctx.app.get(PrismaService).setting.update({ where: { key: 'aiConfig' }, data: { value: JSON.stringify({ ...await service.getConfig(), reasoningEffort: 'high' }) } });
-    expect((await service.getConfig()).reasoningEffort).toBe('medium');
+    expect(saved.json()).toMatchObject({ model: 'gpt-6.1-terra', reasoningEffort: 'max', models: null });
+    expect((await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: base }) })).json().reasoningEffort).toBe('max');
+    expect((await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model: 'gpt-6.1-sol' } }) })).json().reasoningEffort).toBe('auto');
+    expect((await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, reasoningEffort: 'ultra' } }) })).statusCode).toBe(400);
     await service.updateConfig({ ...current, model: 'gemini-3.8-flash-high', reasoningEffort: 'auto' });
   });
 
-  it('允许列表来自 LLM_ALLOWED_MODELS：随配置下发并在保存时校验；* 不限制时任意模型可保存、模型列表原样返回', async () => {
+  it('默认不限制：任意模型可保存、模型列表原样返回；LLM_ALLOWED_MODELS 限定时随配置下发并在保存时校验', async () => {
     const service = ctx.app.get(AiConfigService);
     const previous = { models: config.llmAllowedModels, apiKey: config.llmDefaults.apiKey };
     const base = { enabled: false, baseUrl: (await service.getConfig()).baseUrl, semanticSearch: true };
     const put = (model: string) => ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model } }) });
     const ids = (body: { models: { id: string }[] | null }) => body.models?.map((m) => m.id) ?? null;
     try {
-      // 未设置：默认的三个，GPT 带固定的中等思考
+      // 未设置：不限制
       const current = await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() });
-      expect(ids(current.json())).toEqual(['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7']);
-      expect(current.json().models[1]).toMatchObject({ label: 'gpt-6.1-sol（中等思考）', reasoningEffort: 'medium' });
+      expect(ids(current.json())).toBeNull();
 
       Object.defineProperty(config, 'llmAllowedModels', { value: [{ id: 'grok-4.7', label: 'grok-4.7' }, { id: 'house-model', label: 'house-model' }] });
       const outside = await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, model: 'gemini-3.8-flash-high', enabled: true, apiKey: 'k' } }) });
@@ -114,8 +112,6 @@ describe('AI 配置', () => {
       const free = await put('anything-goes');
       expect(free.statusCode).toBe(200);
       expect(free.json()).toMatchObject({ model: 'anything-goes', models: null });
-      // 列表外的 GPT 仍固定中等思考
-      expect((await put('gpt-6.1-sol')).json().reasoningEffort).toBe('medium');
       Object.defineProperty(config.llmDefaults, 'apiKey', { value: 'server-only-secret' });
       const models = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
       expect(models.json()).toEqual({ models: ['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7', 'other-model'] });
@@ -157,7 +153,7 @@ describe('AI 配置', () => {
       });
       expect(current.body).not.toContain('server-only-secret');
       const models = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
-      expect(models.json()).toEqual({ models: ['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7'] });
+      expect(models.json()).toEqual({ models: ['gemini-3.8-flash-high', 'gpt-6.1-sol', 'grok-4.7', 'other-model'] });
       expect(fake.modelCalls.at(-1)?.apiKey).toBe('server-only-secret');
       const save = await ctx.inject({
         method: 'PUT',
@@ -413,7 +409,7 @@ describe('AI 调用参数', () => {
     await prisma().setting.deleteMany({ where: { key: 'aiParamSupport' } });
   });
 
-  it('能力检测不发送推理强度与温度，并重新学习服务接受的参数', async () => {
+  it('能力检测按设置的推理强度检测结构化输出、不带温度，并重新学习服务接受的参数', async () => {
     const service = ctx.app.get(AiConfigService);
     const cfg = await service.getConfig();
     await (await service.params(cfg, 'ask')).onRejected!(['reasoning']);
@@ -422,7 +418,9 @@ describe('AI 调用参数', () => {
     expect(res.statusCode).toBe(201);
     const calls = fake.calls.slice(before);
     expect(calls.length).toBeGreaterThan(0);
-    expect(calls.every((c) => c.reasoningEffort === undefined && c.temperature === undefined)).toBe(true);
+    expect(calls.every((c) => c.temperature === undefined)).toBe(true);
+    // 「自动」只在结构化输出探测里按问答用途发 medium，图片与工具探测不带推理
+    expect(calls.filter((c) => c.reasoningEffort !== undefined).map((c) => c.reasoningEffort)).toEqual(['medium']);
     expect(calls.some((c) => c.messages.some((m) => m.images?.length === 1))).toBe(true);
     expect(await service.params(cfg, 'ask')).toMatchObject({ reasoningEffort: 'medium' });
   });

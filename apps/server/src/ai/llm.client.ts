@@ -6,6 +6,7 @@ import type {
   ResponseOutputItem,
   ResponseCreateParamsNonStreaming,
 } from 'openai/resources/responses/responses';
+import type { ReasoningLevel } from '@canglin/shared';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -36,7 +37,7 @@ export interface ChatCallOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
 }
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type ReasoningEffort = ReasoningLevel;
 export type RejectableParam = 'temperature' | 'reasoning';
 export interface ChatCompletionResult {
   content: string | null;
@@ -59,6 +60,19 @@ export class AiResponseError extends ServiceUnavailableException {
 function mentions(error: InstanceType<typeof OpenAI.APIError>, param: RejectableParam) {
   return [error.message, error.param, JSON.stringify(error.error ?? '')].join(' ').toLowerCase().includes(param);
 }
+/**
+ * 400 说的是 reasoning.effort 这个值不被模型接受（OpenAI 给 code unsupported_value，如 GPT-6.1 Sol 不接受 none），
+ * 不是整个参数不支持：这是设置问题，要报出来让人换档，不能当成参数被拒而悄悄去掉推理。
+ */
+function unsupportedEffort(error: InstanceType<typeof OpenAI.APIError>, effort: ReasoningLevel) {
+  if (!mentions(error, 'reasoning')) return false;
+  const text = [error.message, JSON.stringify(error.error ?? '')].join(' ');
+  if (/unsupported parameter/i.test(text)) return false;
+  return error.code === 'unsupported_value' || /unsupported value|invalid value|supported values/i.test(text) || new RegExp(`['"\`]${effort}['"\`]`).test(text);
+}
+/** 推理 token 也计入 max_output_tokens：高档位另留预算，免得想得多就把回答截断；低、中档位沿用调用方的预算 */
+const REASONING_RESERVE: Partial<Record<ReasoningLevel, number>> = { high: 8_000, xhigh: 16_000, max: 32_000 };
+const reasoningReserve = (effort?: ReasoningLevel) => (effort && REASONING_RESERVE[effort]) || 0;
 /** Strict output contracts require all properties; formerly optional fields become nullable. */
 export function strictSchema(raw: Record<string, unknown>): Record<string, unknown> {
   const schema = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
@@ -162,7 +176,7 @@ export class LlmClient {
       model: opts.model,
       input,
       store: false,
-      max_output_tokens: opts.maxTokens ?? 4096,
+      max_output_tokens: (opts.maxTokens ?? 4096) + reasoningReserve(opts.reasoningEffort),
       ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
       ...(opts.reasoningEffort ? { reasoning: { effort: opts.reasoningEffort } } : {}),
       ...(opts.tools?.length
@@ -250,6 +264,8 @@ export class LlmClient {
           throw error;
         }
         if (!rejected.length && error instanceof OpenAI.APIError && error.status === 400) {
+          if ('reasoning' in body && opts.reasoningEffort && unsupportedEffort(error, opts.reasoningEffort))
+            throw new AiResponseError(`模型 ${opts.model} 不接受推理强度「${opts.reasoningEffort}」，请在系统设置里换一档`, 'UNSUPPORTED_EFFORT');
           const unsupported = (['temperature', 'reasoning'] as const).filter(
             (param) => param in body && mentions(error, param),
           );

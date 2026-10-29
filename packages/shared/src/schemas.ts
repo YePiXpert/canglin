@@ -158,28 +158,18 @@ export type AutoBackupConfig = z.infer<typeof autoBackupConfigSchema>;
 
 /* ----------------------------------- AI ----------------------------------- */
 
-/** 设置页里的一个模型选项 */
+/** 设置页里的一个模型选项：运维用 LLM_ALLOWED_MODELS 限定了可选模型时由服务端下发 */
 export interface AiModelOption {
   id: string;
   label: string;
-  /** 选这个模型时推理强度固定为此值，设置页不能改（GPT 6.1 Sol 的识别和问答固定中等思考） */
-  reasoningEffort?: ReasoningSetting;
 }
 
 /**
- * 默认允许的模型。服务端按环境变量 LLM_ALLOWED_MODELS 给出允许列表（未设置时就是这三个，`*` = 不限制），
- * 随 GET /api/ai/config 的 models 下发；这里的 label 与固定推理强度对列表外的同名模型也生效。
+ * Responses API 的 reasoning.effort 取值，从低到高。各模型支持的子集不同（如 GPT-6.1 Sol 不接受 none、minimal），
+ * 模型不接受所选档位时请求会报错并提示换档，不会悄悄改成别的强度。
  */
-export const DEFAULT_AI_MODELS: AiModelOption[] = [
-  { id: 'gemini-3.8-flash-high', label: 'gemini-3.8-flash-high' },
-  { id: 'gpt-6.1-sol', label: 'gpt-6.1-sol（中等思考）', reasoningEffort: 'medium' },
-  { id: 'grok-4.7', label: 'grok-4.7' },
-];
-
-/** 选这个模型时固定的推理强度；没有固定值时返回 undefined */
-export function fixedReasoningEffort(model: string): ReasoningSetting | undefined {
-  return DEFAULT_AI_MODELS.find((m) => m.id === model)?.reasoningEffort;
-}
+export const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
 /** OpenAI 兼容 LLM 服务配置（存 Setting 表，设置页可随时改） */
 export const aiConfigSchema = z.object({
@@ -197,8 +187,8 @@ export const aiConfigSchema = z.object({
   inputPrice: z.number().nonnegative().nullish(),
   outputPrice: z.number().nonnegative().nullish(),
   monthlyBudget: z.number().positive().nullish(),
-  /** 推理强度：auto 按用途（识别 low、问答 medium），off 不发送 reasoning 与 temperature */
-  reasoningEffort: z.enum(['auto', 'off', 'minimal', 'low', 'medium', 'high']).optional(),
+  /** 推理强度：auto 按用途（识别 low、问答 medium），off 不发送 reasoning 与 temperature，其余按所选档位发送 */
+  reasoningEffort: z.enum(['auto', 'off', ...REASONING_LEVELS]).optional(),
   /** 文本层 PDF 也调用模型核对品名拆分与单位（审核模式）；关闭后文本层页面同截图一样走识别模式 */
   reviewTextPdf: z.boolean().optional(),
 });
@@ -224,6 +214,8 @@ export interface AiConfigView {
     text: boolean;
     image: boolean;
     structured: boolean;
+    /** 检测未通过的原因（如模型不接受所选推理强度），有才显示 */
+    detail?: string;
     tools: boolean;
   };
   keySource?: 'server' | 'database';

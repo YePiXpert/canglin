@@ -6,7 +6,7 @@ const imageFile = (marker: string) => Buffer.concat([Buffer.from(capabilityImage
 /** 合成原件上的申请日期；后续采购、到货、发放都用同一天 */
 const businessDate = '2026-09-27';
 
-test('服务器已配置密钥时可直接选择三个模型，列表故障仍可选择', async ({ page, request }) => {
+test('已配置密钥时自动获取模型列表供选择，也可直接填写；推理强度自选；列表故障不影响已选模型', async ({ page, request }) => {
   const password = 'browser-test-password';
   await request.post('/api/auth/setup', { data: { password } });
   await page.goto('/login');
@@ -16,9 +16,9 @@ test('服务器已配置密钥时可直接选择三个模型，列表故障仍�
   await page.request.put('/api/ai/config', {
     data: {
       enabled: false,
-      baseUrl: 'https://example.invalid/v1',
+      baseUrl: 'https://api.openai.com/v1',
       apiKey: 'synthetic',
-      model: 'gemini-3.8-flash-high',
+      model: 'gpt-6.1-sol',
       semanticSearch: false,
       autoImport: false,
     },
@@ -29,30 +29,44 @@ test('服务器已配置密钥时可直接选择三个模型，列表故障仍�
     await route.fulfill({ response, json: { ...(await response.json()), keySource: 'server' } });
   });
   await page.route('**/api/ai/models', (route) =>
-    route.fulfill({ json: { models: ['listed-gpt'] } }),
+    route.fulfill({ json: { models: ['gpt-6.1-sol', 'gpt-6.1-terra', 'text-embedding-4'] } }),
   );
   await page.goto('/settings');
-  await expect(page.getByText('服务已配置 · 修改连接', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('接口地址', { exact: true })).not.toBeVisible();
-  await expect(page.getByText('高级设置', { exact: true })).toHaveCount(0);
-  await page.getByText('服务已配置 · 修改连接', { exact: true }).click();
-  await expect(page.getByText('服务器已配置 Key，无需填写')).toBeVisible();
-  await page.getByText('服务已配置 · 修改连接', { exact: true }).click();
-  await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0);
-  const model = page.getByRole('combobox', { name: '模型', exact: true });
-  await expect(model).toContainText('gemini-3.8-flash-high');
-  await model.click();
+  const panel = page.getByRole('region', { name: 'AI 助手', exact: true });
+  await expect(panel.getByText('服务已配置 · 修改连接', { exact: true })).toBeVisible();
+  await expect(panel.getByLabel('接口地址', { exact: true })).not.toBeVisible();
+  await panel.getByText('服务已配置 · 修改连接', { exact: true }).click();
+  await expect(panel.getByText('服务器已配置 Key，无需填写')).toBeVisible();
+  await panel.getByText('服务已配置 · 修改连接', { exact: true }).click();
+  await expect(panel.getByLabel('API Key', { exact: true })).toHaveCount(0);
+  // 模型：可输入下拉，候选来自服务商接口
+  const model = panel.getByRole('combobox', { name: '模型', exact: true });
+  await expect(model).toHaveValue('gpt-6.1-sol');
+  await expect(panel.getByText('列表来自服务商接口，共 3 个')).toBeVisible();
+  await panel.getByRole('button', { name: '展开模型的选项', exact: true }).click();
   await expect(page.getByRole('option')).toHaveCount(3);
-  await page.getByRole('option', { name: 'gpt-6.1-sol（中等思考）', exact: true }).click();
-  await expect(model).toContainText('gpt-6.1-sol（中等思考）');
-  await expect(page.getByRole('button', { name: '手动填写', exact: true })).toHaveCount(0);
-  // Retrieval failure must keep the three configured choices usable.
+  await page.getByRole('option', { name: 'gpt-6.1-terra', exact: true }).click();
+  await expect(model).toHaveValue('gpt-6.1-terra');
+  // 推理强度自选，高档位有提醒
+  const effort = panel.getByRole('combobox', { name: '推理强度', exact: true });
+  await effort.click();
+  await page.getByRole('option', { name: 'max · 最高', exact: true }).click();
+  await expect(effort).toContainText('max · 最高');
+  await expect(panel.getByText('high 以上档位会明显增加')).toBeVisible();
+  // 列表获取失败：已选模型不变，仍可直接填写
   await page.route('**/api/ai/models', (route) =>
     route.fulfill({ status: 503, json: { message: '无法获取模型列表' } }),
   );
-  await page.getByRole('button', { name: '获取模型列表', exact: true }).click();
-  await expect(page.getByText('无法获取模型列表', { exact: true })).toBeVisible();
-  await expect(model).toContainText('gpt-6.1-sol（中等思考）');
+  await panel.getByRole('button', { name: '刷新模型列表', exact: true }).click();
+  await expect(panel.getByText('无法获取模型列表', { exact: true })).toBeVisible();
+  await expect(model).toHaveValue('gpt-6.1-terra');
+  await model.fill('typed-model');
+  const [saved] = await Promise.all([
+    page.waitForRequest((r) => r.url().endsWith('/api/ai/config') && r.method() === 'PUT'),
+    panel.getByRole('button', { name: '保存', exact: true }).click(),
+  ]);
+  expect(saved.postDataJSON()).toMatchObject({ model: 'typed-model', reasoningEffort: 'max' });
+  await expect(page.getByText('AI 配置已保存')).toBeVisible();
 });
 
 test('放弃草稿会删除原件并退出任务，保存失败也可以主动放弃', async ({ page, request }) => {

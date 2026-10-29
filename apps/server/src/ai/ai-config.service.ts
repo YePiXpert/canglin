@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
-import { fixedReasoningEffort, type AiConfigInput, type AiConfigView, type ReasoningSetting } from '@canglin/shared';
+import type { AiConfigInput, AiConfigView, ReasoningSetting } from '@canglin/shared';
 import type { ChatCallOptions, RejectableParam } from './llm.client';
 
 export interface StoredAiConfig {
@@ -57,8 +57,6 @@ export class AiConfigService {
     for (const key of ['importModel', 'askModel', 'searchModel'])
       Reflect.deleteProperty(result, key);
     if (config.llmDefaults.apiKey) result.apiKey = config.llmDefaults.apiKey;
-    const fixed = fixedReasoningEffort(result.model);
-    if (fixed) result.reasoningEffort = fixed;
     return result;
   }
   fingerprint(cfg: StoredAiConfig) {
@@ -98,9 +96,11 @@ export class AiConfigService {
       },
     };
   }
-  async saveCapabilities(cfg: StoredAiConfig, values: Omit<Capabilities, 'fingerprint'>) {
-    // A fresh capability check also re-learns which request parameters the service accepts.
+  /** 检测连接开始时忘掉服务拒绝过的参数：这一轮检测重新学，学到的保留给之后的调用 */
+  async forgetRejectedParams() {
     await this.prisma.setting.deleteMany({ where: { key: 'aiParamSupport' } });
+  }
+  async saveCapabilities(cfg: StoredAiConfig, values: Omit<Capabilities, 'fingerprint'>) {
     const result = {
       ...values,
       fingerprint: this.fingerprint(cfg),
@@ -130,8 +130,8 @@ export class AiConfigService {
       ...input,
       protocol: 'responses',
       apiKey: config.llmDefaults.apiKey || input.apiKey || current.apiKey,
-      reasoningEffort: fixedReasoningEffort(input.model)
-        ?? input.reasoningEffort ?? (input.model === current.model ? current.reasoningEffort : 'auto'),
+      // 没提交强度时：同一个模型沿用原值，换了模型回到「自动」
+      reasoningEffort: input.reasoningEffort ?? (input.model === current.model ? current.reasoningEffort : 'auto'),
     };
     if (stored.enabled && !stored.apiKey) throw new BadRequestException('请先配置 API Key');
     if (stored.enabled && stored.autoImport) {
@@ -181,6 +181,7 @@ export class AiConfigService {
             image: caps.image,
             structured: caps.structured,
             tools: caps.tools,
+            ...(caps.detail ? { detail: caps.detail } : {}),
           }
         : undefined,
     };
