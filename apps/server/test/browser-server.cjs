@@ -71,6 +71,8 @@ const ocr = {
 };
 const llm = {
   ping: async () => true,
+  // 合成服务商：模型只接受 low 到 max，默认 medium（像 GPT-6.1 Sol）
+  probeEfforts: async () => ({ supported: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium', reasoningParam: true }),
   chat: async (opts) => {
     const last = opts.messages.at(-1);
     if (opts.tools)

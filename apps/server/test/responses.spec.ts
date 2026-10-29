@@ -283,3 +283,52 @@ it.each([401, 404, 500, 200])(
     expect(fetch).toHaveBeenCalledTimes(1);
   },
 );
+/** 探测档位的假服务商：按请求里的 reasoning.effort 回应 */
+function provider(reply: (effort: string | undefined, body: Record<string, unknown>) => Response) {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(init.body as string) as { reasoning?: { effort?: string } };
+    return reply(body.reasoning?.effort, body);
+  });
+  vi.stubGlobal('fetch', fetch);
+  return fetch;
+}
+const tiny = (effort?: string) =>
+  new Response(
+    JSON.stringify({
+      id: 'resp_probe',
+      object: 'response',
+      status: 'incomplete',
+      incomplete_details: { reason: 'max_output_tokens' },
+      output: [],
+      reasoning: { effort: effort ?? 'medium', summary: null },
+      usage: { input_tokens: 5, output_tokens: 16, total_tokens: 21 },
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+it('probes every reasoning effort with 16 output tokens, keeps the accepted ones and reads the default from the provider', async () => {
+  const fetch = provider((effort) =>
+    effort === 'none' || effort === 'minimal'
+      ? failure(400, `Unsupported value: '${effort}' is not supported with this model. Supported values are: 'low', 'medium', 'high', 'xhigh', and 'max'.`, 'reasoning.effort')
+      : tiny(effort),
+  );
+  expect(await new LlmClient().probeEfforts(opts.baseUrl + '/', opts.apiKey, 'gpt-6.1-sol')).toEqual({
+    supported: ['low', 'medium', 'high', 'xhigh', 'max'],
+    defaultEffort: 'medium',
+    reasoningParam: true,
+  });
+  const sent = bodies(fetch);
+  expect(sent).toHaveLength(8);
+  expect(sent.every((b) => b.model === 'gpt-6.1-sol' && b.max_output_tokens === 16 && b.store === false)).toBe(true);
+  expect(sent.filter((b) => !b.reasoning)).toHaveLength(1);
+  expect(sent.map((b) => b.reasoning?.effort).filter(Boolean).sort()).toEqual(['high', 'low', 'max', 'medium', 'minimal', 'none', 'xhigh']);
+  expect(String((fetch.mock.calls[0] as unknown as [string])[0])).toBe('https://provider.example/v1/responses');
+});
+it('tells a model without reasoning parameter from one that rejects a value, and reports unconfirmed probes without provider text', async () => {
+  provider((effort) => (effort ? failure(400, "Unsupported parameter: 'reasoning' is not supported with this model.", 'reasoning') : result()));
+  expect(await new LlmClient().probeEfforts(opts.baseUrl, opts.apiKey, 'chat-model')).toEqual({ supported: [], defaultEffort: null, reasoningParam: false });
+  provider(() => failure(401, 'Incorrect API key provided: test-secret'));
+  const denied = await new LlmClient().probeEfforts(opts.baseUrl, opts.apiKey, 'chat-model');
+  expect(denied).toEqual({ supported: null, defaultEffort: null, reasoningParam: true, detail: '服务返回 401' });
+  provider((effort) => (effort === 'max' ? failure(400, 'Invalid value for max_output_tokens: test-secret') : tiny(effort)));
+  expect(await new LlmClient().probeEfforts(opts.baseUrl, opts.apiKey, 'odd-model')).toEqual({ supported: null, defaultEffort: null, reasoningParam: true, detail: '服务返回 400' });
+});

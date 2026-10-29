@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { config } from '../config';
-import type { AiConfigInput, AiConfigView, ReasoningSetting } from '@canglin/shared';
-import type { ChatCallOptions, RejectableParam } from './llm.client';
+import type { AiConfigInput, AiConfigView, AiEffortSupport, ReasoningLevel, ReasoningSetting } from '@canglin/shared';
+import type { ChatCallOptions, EffortProbe, RejectableParam } from './llm.client';
 
 export interface StoredAiConfig {
   enabled: boolean;
@@ -24,6 +24,9 @@ export interface StoredAiConfig {
 export type CallPurpose = 'import' | 'ask' | 'search';
 const AUTO_EFFORT: Record<CallPurpose, ChatCallOptions['reasoningEffort']> = { import: 'low', ask: 'medium', search: undefined };
 export type Capabilities = NonNullable<AiConfigView['capabilities']> & { fingerprint: string };
+/** 服务商确认过的模型推理档位：按「接口地址 + 密钥 + 模型」的哈希记在 aiEffortSupport 设置里，最多留最近 20 个模型 */
+type StoredEffortSupport = Pick<AiEffortSupport, 'supported' | 'defaultEffort' | 'reasoningParam' | 'checkedAt'> & { supported: ReasoningLevel[] };
+const EFFORT_SUPPORT_LIMIT = 20;
 @Injectable()
 export class AiConfigService {
   constructor(
@@ -100,6 +103,40 @@ export class AiConfigService {
   async forgetRejectedParams() {
     await this.prisma.setting.deleteMany({ where: { key: 'aiParamSupport' } });
   }
+  private effortKey(cfg: StoredAiConfig, model: string) {
+    return createHash('sha256').update(JSON.stringify([cfg.baseUrl, cfg.apiKey, model])).digest('hex');
+  }
+  private async effortSupportMap(): Promise<Record<string, StoredEffortSupport>> {
+    const row = await this.prisma.setting.findUnique({ where: { key: 'aiEffortSupport' } });
+    try {
+      return row ? (JSON.parse(row.value) as Record<string, StoredEffortSupport>) : {};
+    } catch {
+      return {};
+    }
+  }
+  /** 这个模型在当前服务上确认过的档位；没确认过（或换了地址、密钥）为 undefined */
+  async effortSupport(cfg: StoredAiConfig, model: string): Promise<AiEffortSupport | undefined> {
+    const hit = (await this.effortSupportMap())[this.effortKey(cfg, model)];
+    return hit ? { model, ...hit } : undefined;
+  }
+  /** 记下探测结果并返回设置页用的视图；没能确认的不记，下次再探 */
+  async saveEffortSupport(cfg: StoredAiConfig, model: string, probe: EffortProbe): Promise<AiEffortSupport> {
+    const checkedAt = new Date().toISOString();
+    if (!probe.supported)
+      return { model, supported: null, defaultEffort: null, reasoningParam: true, checkedAt, ...(probe.detail ? { detail: probe.detail } : {}) };
+    const entry: StoredEffortSupport = { supported: probe.supported, defaultEffort: probe.defaultEffort, reasoningParam: probe.reasoningParam, checkedAt };
+    const map = await this.effortSupportMap();
+    const key = this.effortKey(cfg, model);
+    delete map[key];
+    map[key] = entry;
+    for (const stale of Object.keys(map).slice(0, Math.max(0, Object.keys(map).length - EFFORT_SUPPORT_LIMIT))) delete map[stale];
+    await this.prisma.setting.upsert({
+      where: { key: 'aiEffortSupport' },
+      create: { key: 'aiEffortSupport', value: JSON.stringify(map) },
+      update: { value: JSON.stringify(map) },
+    });
+    return { model, ...entry };
+  }
   async saveCapabilities(cfg: StoredAiConfig, values: Omit<Capabilities, 'fingerprint'>) {
     const result = {
       ...values,
@@ -169,11 +206,13 @@ export class AiConfigService {
   async view(cfg: StoredAiConfig): Promise<AiConfigView> {
     const { apiKey, ...rest } = cfg;
     const caps = await this.capabilities(cfg);
+    const effortSupport = apiKey ? await this.effortSupport(cfg, cfg.model) : undefined;
     return {
       ...rest,
       apiKeySet: !!apiKey,
       keySource: config.llmDefaults.apiKey ? 'server' : 'database',
       models: config.llmAllowedModels,
+      ...(effortSupport ? { effortSupport } : {}),
       capabilities: caps
         ? {
             checkedAt: caps.checkedAt,

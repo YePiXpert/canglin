@@ -166,7 +166,7 @@ services:
 
 输出契约 v2 每行带名称单元格原文 `rawText`、`amount` 与可选的 `catalogSuggestion`，不再要求每行写 `reason`；单据带 `templateType`。附带物品目录（最近 300 个「品名 + 规格 + 单位」）时，模型可给出与已有物品完全相同的一条作为归一建议，界面显示「匹配到已有物品」，由用户点「采用已有物品」替换，绝不自动替换。调用记录 `AiCall` 新增 `mode`（`RECOGNITION` | `REVIEW`）与 `promptVersion`（附带目录或分段时带 `+catalog` / `+strips`），任务视图的调用记录一并返回。AI 路径的 `parserVersion` 为 `ai-primary-2`；审核页的页模式（`pages[].mode`）为 `AI_REVIEW`，整份结果的 `mode` 仍按 `AI_IMAGE` 汇总，回退到旧版本时旧契约也能读取已保存的结果。
 
-**调用参数**：识别与审核 `max_output_tokens` 12000；`temperature` 与 `reasoning` 真正写入请求，默认识别 `low`、问答 `medium`、搜索与能力检测不发；服务以 400 点名拒绝时去掉该参数重发一次，并按配置指纹记在 `aiParamSupport` 设置里，之后不再发送（重新做能力检测或更换服务、密钥、模型后重新学习）。输出因 `max_output_tokens` 截断时提示「模型输出超过上限，请减少单页行数或拆分页面」，原因记入调用记录。设置页「高级配置」可选推理强度（自动 / 不发送 / 最低 / 低 / 中 / 高，「不发送」时温度也不带）与「文本层 PDF 也请模型核对」（默认开；关闭后文本层页面同截图一样走识别模式）。重试只把定位所需的 `lineId、itemName、spec、quantity、unit` 作为 `existingRows` 发给模型。
+**调用参数**：识别与审核 `max_output_tokens` 12000；`temperature` 与 `reasoning` 真正写入请求，默认识别 `low`、问答 `medium`、搜索与能力检测不发；服务以 400 点名拒绝时去掉该参数重发一次，并按配置指纹记在 `aiParamSupport` 设置里，之后不再发送（重新做能力检测或更换服务、密钥、模型后重新学习）。输出因 `max_output_tokens` 截断时提示「模型输出超过上限，请减少单页行数或拆分页面」，原因记入调用记录。设置页的推理强度只列服务商确认所选模型接受的档位（`GET /api/ai/efforts` 逐档试发、按地址 + 密钥 + 模型缓存在 `aiEffortSupport` 设置里；没能确认时列出 none 到 max 全部），另有「不指定」（不发 `reasoning` 与 `temperature`，按模型默认）与「按用途」（识别 low、问答 medium）；「文本层 PDF 也请模型核对」默认开，关闭后文本层页面同截图一样走识别模式。重试只把定位所需的 `lineId、itemName、spec、quantity、unit` 作为 `existingRows` 发给模型。
 
 **只读问答**：提示词补充相对日期换算、最多 6 轮工具调用与先汇总后钻取、同名多物品先列候选、Markdown 表格与截断提示；工具结果改为结构化精简（去掉空值与时间戳，附件只留类型和文件名，每张单据最多 20 行，仍超过 16000 字符时从末尾删条目并标记 `truncated` 与 `hint`），不再截出残缺 JSON；`query_documents` 默认每页 10 条、`query_stock` 默认 30 条。语义搜索的缓存键带词表哈希，词表变化后旧的扩展结果失效。
 
@@ -182,7 +182,7 @@ services:
 | --- | --- | --- |
 | 网格重建 | OCR 环境变量 `OCR_GRID_REBUILD=0` | 跳过网格重建，回到 `find_tables` 与逐行解析 |
 | 审核模式 | 设置页「文本层 PDF 也请模型核对」 | 关闭后文本层页面走识别模式，网格结果仍作为本地结果 |
-| 调用参数 | 设置页推理强度「不发送」 | 请求不带 `reasoning` 与 `temperature` |
+| 调用参数 | 设置页推理强度「不指定」（原「不发送」） | 请求不带 `reasoning` 与 `temperature` |
 | 页图预处理 | OCR 环境变量 `OCR_PAGE_PREPROCESS=0` | `/page` 只渲染与缩放，照片不转 JPEG |
 | 照片 OCR 预处理 | OCR 环境变量 `OCR_PHOTO_PREPROCESS=0` | 识别前不转灰度、不拉伸对比度 |
 | 检测尺寸 | OCR 环境变量 `OCR_DET_LIMIT_SIDE_LEN=0` | 回到 Paddle 默认的检测缩放 |

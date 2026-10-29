@@ -6,6 +6,7 @@ import type {
   AiAskResponse,
   AiConfigInput,
   AiConfigView,
+  AiEffortSupport,
   AutoBackupConfig,
   WorkflowImportConfirmInput,
   ParseResult,
@@ -207,6 +208,11 @@ export const systemApi = {
 /* ----------------------------------- AI ----------------------------------- */
 export const aiApi = {
   models: () => http.get<{ models: string[] }>('/ai/models', { timeout: 20_000 }).then((r) => r.data),
+  /** 向服务商确认模型接受的推理档位（服务端按模型缓存）；refresh 重新探测 */
+  efforts: (model: string, refresh = false) =>
+    http
+      .get<AiEffortSupport>('/ai/efforts', { params: { model, ...(refresh ? { refresh: '1' } : {}) }, timeout: 60_000 })
+      .then((r) => r.data),
   capabilities: () =>
     http
       .post<

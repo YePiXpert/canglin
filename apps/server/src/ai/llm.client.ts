@@ -5,8 +5,9 @@ import type {
   ResponseInput,
   ResponseOutputItem,
   ResponseCreateParamsNonStreaming,
+  Response as ProviderResponse,
 } from 'openai/resources/responses/responses';
-import type { ReasoningLevel } from '@canglin/shared';
+import { REASONING_LEVELS, type ReasoningLevel } from '@canglin/shared';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -45,6 +46,17 @@ export interface ChatCompletionResult {
   outputItems?: ResponseOutputItem[];
   usage?: { input: number; output: number };
   requestId?: string;
+}
+/** 探测一个模型接受哪些推理档位的结果（probeEfforts） */
+export interface EffortProbe {
+  /** 接受的档位，按 REASONING_LEVELS 的顺序；null = 没能确认 */
+  supported: ReasoningLevel[] | null;
+  /** 不带 reasoning 时服务回报的默认档位 */
+  defaultEffort: ReasoningLevel | null;
+  /** false = 模型没有推理参数（整个 reasoning 被拒） */
+  reasoningParam: boolean;
+  /** 没能确认时的原因 */
+  detail?: string;
 }
 type CallMetadata = Pick<ChatCompletionResult, 'usage' | 'requestId'> & { incompleteReason?: string };
 export class AiResponseError extends ServiceUnavailableException {
@@ -313,5 +325,81 @@ export class LlmClient {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 探测模型接受哪些推理档位：不带 reasoning 发一次（读服务回报的默认档位），再把每个档位各发一次，
+   * 全部并行、每次只要 16 个输出 token（Responses API 的下限，答没答完不重要，只看服务收不收）。
+   * 400 按内容分辨：unsupported_value 是模型不接受这个档位；「reasoning 参数不支持」是模型根本没有推理参数；
+   * 别的错误（鉴权、限流重试一次仍失败、模型不存在、其他 400）当没能确认，由调用方列出全部档位。
+   */
+  async probeEfforts(baseUrl: string, apiKey: string, model: string): Promise<EffortProbe> {
+    const client = new OpenAI({
+      apiKey,
+      baseURL: baseUrl.replace(/\/+$/, ''),
+      maxRetries: 0,
+      timeout: 20_000,
+    });
+    const request = (effort?: ReasoningLevel) =>
+      client.responses.create({
+        model,
+        input: 'Reply OK',
+        store: false,
+        max_output_tokens: 16,
+        ...(effort ? { reasoning: { effort } } : {}),
+      });
+    type Outcome = { ok: true; response: ProviderResponse } | { ok: false; error: unknown };
+    const attempt = async (effort?: ReasoningLevel): Promise<Outcome> => {
+      try {
+        return { ok: true, response: await request(effort) };
+      } catch (error) {
+        if (!(error instanceof OpenAI.APIError && [429, 500, 502, 503].includes(error.status ?? 0)))
+          return { ok: false, error };
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+          return { ok: true, response: await request(effort) };
+        } catch (again) {
+          return { ok: false, error: again };
+        }
+      }
+    };
+    // Provider errors may echo credentials or request headers; only the status goes back to the page.
+    const unconfirmed = (error: unknown): EffortProbe => ({
+      supported: null,
+      defaultEffort: null,
+      reasoningParam: true,
+      detail:
+        error instanceof OpenAI.APIError
+          ? `服务返回 ${error.status ?? '连接错误'}`
+          : error instanceof Error && !(error instanceof OpenAI.OpenAIError)
+            ? error.message
+            : '连接错误',
+    });
+    const [base, ...outcomes] = await Promise.all([attempt(), ...REASONING_LEVELS.map((level) => attempt(level))]);
+    if (!base.ok) return unconfirmed(base.error);
+    const reported = base.response.reasoning?.effort;
+    const supported: ReasoningLevel[] = [];
+    let paramRejected = false;
+    for (const [index, outcome] of outcomes.entries()) {
+      const level = REASONING_LEVELS[index];
+      if (outcome.ok) {
+        supported.push(level);
+        continue;
+      }
+      const { error } = outcome;
+      if (!(error instanceof OpenAI.APIError && error.status === 400)) return unconfirmed(error);
+      if (unsupportedEffort(error, level)) continue;
+      if (mentions(error, 'reasoning')) {
+        paramRejected = true;
+        continue;
+      }
+      return unconfirmed(error);
+    }
+    const reasoningParam = supported.length > 0 || !paramRejected;
+    return {
+      supported,
+      defaultEffort: reasoningParam ? (REASONING_LEVELS.find((level) => level === reported) ?? null) : null,
+      reasoningParam,
+    };
   }
 }

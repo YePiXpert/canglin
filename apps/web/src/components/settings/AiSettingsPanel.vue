@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import Badge from '@/components/ui/Badge.vue';
 import Button from '@/components/ui/Button.vue';
 import Combobox from '@/components/ui/Combobox.vue';
-import Disclosure from '@/components/ui/Disclosure.vue';
 import Icon from '@/components/ui/Icon.vue';
 import Input from '@/components/ui/Input.vue';
 import Notice from '@/components/ui/Notice.vue';
@@ -15,7 +14,14 @@ import { aiApi } from '@/api';
 import { apiError } from '@/api/client';
 import { useToastStore } from '@/stores/toast';
 import { formatDateTime } from '@/utils/datetime';
-import type { AiConfigView, AiModelOption, ReasoningSetting } from '@canglin/shared';
+import {
+  REASONING_LEVELS,
+  type AiConfigView,
+  type AiEffortSupport,
+  type AiModelOption,
+  type ReasoningLevel,
+  type ReasoningSetting,
+} from '@canglin/shared';
 
 const props = defineProps<{
   /** 设置页整页载入（或读取失败后重试）得到的配置；读取失败为 null。换成新的非空对象时回填表单 */
@@ -39,23 +45,6 @@ const aiForm = reactive({
   reasoningEffort: 'auto' as ReasoningSetting,
   reviewTextPdf: true,
 });
-/**
- * 推理强度：「自动」按用途取值（识别 low、问答 medium）；其余档位原样作为 reasoning.effort 发送。
- * 各模型支持的档位不同（如 GPT-6.1 Sol 不接受 none、minimal）：模型不接受时识别、问答和检测连接会报错提示换档，不会悄悄改成别的强度。
- */
-const reasoningOptions: { label: string; value: ReasoningSetting }[] = [
-  { label: '自动（识别低、问答中）', value: 'auto' },
-  { label: '不发送（模型没有推理参数）', value: 'off' },
-  { label: 'none · 不推理', value: 'none' },
-  { label: 'minimal · 最低', value: 'minimal' },
-  { label: 'low · 低', value: 'low' },
-  { label: 'medium · 中', value: 'medium' },
-  { label: 'high · 高', value: 'high' },
-  { label: 'xhigh · 很高', value: 'xhigh' },
-  { label: 'max · 最高', value: 'max' },
-];
-/** high 以上：每次调用的耗时与费用明显上升，提醒一句 */
-const heavyEffort = computed(() => ['high', 'xhigh', 'max'].includes(aiForm.reasoningEffort));
 const aiCapabilities = ref<AiConfigView['capabilities']>();
 /** 识别检测通过 = 图片输入与结构化输出都可用 */
 const aiCapabilitiesOk = computed(() => !!aiCapabilities.value?.image && !!aiCapabilities.value?.structured);
@@ -94,6 +83,112 @@ const modelHint = computed(() => {
   return aiKeySet.value ? '可以直接填写模型名。' : '保存连接后可获取模型列表，也可以直接填写模型名。';
 });
 
+/*
+ * 推理强度：档位由服务商确认（GET /api/ai/efforts 对所选模型逐档试发一次），只列模型接受的，并标出模型默认档位；
+ * 没能确认时列出全部（OpenAI 文档的 none 到 max），模型不接受时识别、问答和检测连接会报错提示换档，不会悄悄改成别的强度。
+ * 「不指定」不发 reasoning，按模型默认；「按用途」识别 low、问答 medium。
+ */
+const LEVEL_NAMES: Record<ReasoningLevel, string> = { none: '不推理', minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高' };
+/** 「按用途」会发送的档位 */
+const AUTO_LEVELS: ReasoningLevel[] = ['low', 'medium'];
+const effortSupport = ref<AiEffortSupport | null>(null);
+const effortLoading = ref(false);
+const effortError = ref('');
+let effortRevision = 0;
+let effortTimer: ReturnType<typeof setTimeout> | undefined;
+/** 服务商确认过的档位，只认当前填的模型 */
+const currentSupport = computed(() =>
+  effortSupport.value && effortSupport.value.model === aiForm.model.trim() ? effortSupport.value : null,
+);
+/** 已确认接受的档位；null = 没确认 */
+const confirmedLevels = computed(() => currentSupport.value?.supported ?? null);
+function effortLabel(value: ReasoningSetting, support: AiEffortSupport | null): string {
+  if (value === 'off') return support?.defaultEffort ? `不指定 · 模型默认 ${support.defaultEffort}` : '不指定 · 用模型默认';
+  if (value === 'auto') return '按用途 · 识别 low、问答 medium';
+  return `${value} · ${LEVEL_NAMES[value]}${value === support?.defaultEffort ? '（默认）' : ''}`;
+}
+const effortOptions = computed<{ label: string; value: ReasoningSetting }[]>(() => {
+  const support = currentSupport.value;
+  const confirmed = confirmedLevels.value;
+  const values: ReasoningSetting[] = ['off'];
+  if (!confirmed || confirmed.length) values.push('auto');
+  values.push(...(confirmed ?? REASONING_LEVELS));
+  const options = values.map((value) => ({ value, label: effortLabel(value, support) }));
+  // 当前值被服务商确认为模型不接受：仍列出来，看得见也换得掉
+  const current = aiForm.reasoningEffort;
+  if (!values.includes(current)) options.push({ value: current, label: `${effortLabel(current, support)}（模型不接受）` });
+  return options;
+});
+/** 所选档位（「按用途」则是它会发的档位）被服务商确认为模型不接受：提醒换档 */
+const effortUnsupported = computed(() => {
+  const support = currentSupport.value;
+  const confirmed = confirmedLevels.value;
+  const value = aiForm.reasoningEffort;
+  if (!support || !confirmed || value === 'off') return '';
+  if (!confirmed.length) return `${support.model} 没有推理参数，请选「不指定」。`;
+  const missing = (value === 'auto' ? AUTO_LEVELS : [value as ReasoningLevel]).filter((level) => !confirmed.includes(level));
+  if (!missing.length) return '';
+  return value === 'auto'
+    ? `「按用途」会发送 ${missing.join('、')}，${support.model} 不接受，请改选具体档位。`
+    : `${support.model} 不接受「${value}」，请换一档。`;
+});
+/** 推理强度下面那行说明：档位是谁确认的、确认了什么 */
+const effortHint = computed(() => {
+  const model = aiForm.model.trim();
+  if (!aiKeySet.value || aiConnectionDirty.value) return '保存连接后会向服务商确认模型接受的档位，只列出能用的。';
+  if (!model) return '填写模型后向服务商确认它接受的档位。';
+  if (effortLoading.value) return `正在向服务商确认 ${model} 接受的档位…`;
+  const support = currentSupport.value;
+  if (!support?.supported) {
+    const why = support?.detail || effortError.value;
+    return `没能确认 ${model} 接受的档位${why ? `（${why}）` : ''}，先列出全部；模型不接受时识别、问答和检测连接会报错提示换档。`;
+  }
+  if (!support.reasoningParam) return `服务商确认 ${model} 没有推理参数，按模型默认调用。`;
+  if (!support.supported.length) return `服务商没有接受 ${model} 的任何档位，只能按模型默认调用。`;
+  return `服务商确认 ${model} 接受：${support.supported.map((level) => (level === support.defaultEffort ? `${level}（默认）` : level)).join('、')}。`;
+});
+/** high 以上：每次调用的耗时与费用明显上升，提醒一句 */
+const heavyEffort = computed(() => ['high', 'xhigh', 'max'].includes(aiForm.reasoningEffort));
+
+/** 有保存过的连接、填了模型才问服务商 */
+const canProbe = () => !!aiForm.model.trim() && !aiConnectionDirty.value && aiKeySet.value;
+function scheduleEffortProbe(delay: number): void {
+  clearTimeout(effortTimer);
+  // 等待的这一小会儿也算「正在确认」，免得先显示一句「没能确认」
+  effortLoading.value = canProbe() && !currentSupport.value;
+  effortTimer = setTimeout(() => void loadEffortSupport(), delay);
+}
+async function loadEffortSupport(refresh = false): Promise<void> {
+  const model = aiForm.model.trim();
+  if (!canProbe() || (!refresh && currentSupport.value)) {
+    effortLoading.value = false;
+    return;
+  }
+  const revision = ++effortRevision;
+  effortLoading.value = true;
+  effortError.value = '';
+  try {
+    const result = await aiApi.efforts(model, refresh);
+    if (revision !== effortRevision) return;
+    effortSupport.value = result;
+  } catch (e) {
+    if (revision !== effortRevision) return;
+    effortSupport.value = null;
+    effortError.value = apiError(e);
+  } finally {
+    if (revision === effortRevision) effortLoading.value = false;
+  }
+}
+/* 换了模型就重新确认：下拉里选一个很快生效，手打模型名等打完再问 */
+watch(
+  () => aiForm.model.trim(),
+  () => {
+    effortError.value = '';
+    scheduleEffortProbe(800);
+  },
+);
+onBeforeUnmount(() => clearTimeout(effortTimer));
+
 function applyAiView(view: AiConfigView): void {
   aiKeySet.value = view.apiKeySet;
   aiKeySource.value = view.keySource ?? 'database';
@@ -106,7 +201,12 @@ function applyAiView(view: AiConfigView): void {
   aiModelsError.value = '';
   aiModelsLoading.value = false;
   aiConfigRevision++;
-  if (view.apiKeySet) void loadAiModels();
+  effortSupport.value = view.effortSupport ?? null;
+  effortError.value = '';
+  if (view.apiKeySet) {
+    void loadAiModels();
+    scheduleEffortProbe(0);
+  }
 }
 
 async function loadAiModels(): Promise<void> {
@@ -185,7 +285,7 @@ async function saveAiConfig(): Promise<void> {
   }
 }
 
-/** 测试连接 = 先保存再探活，测到的才是表单里填的配置（含推理强度） */
+/** 测试连接 = 先保存再探活，测到的才是表单里填的配置（含推理强度）；顺便重新确认一遍模型接受的档位 */
 async function testAi(): Promise<void> {
   if (!validateAi()) return;
   aiTesting.value = true;
@@ -197,6 +297,7 @@ async function testAi(): Promise<void> {
     aiForm.autoImport = false;
     if (res.image && res.structured) toast.success('AI 服务连接正常');
     else toast.error(res.detail ?? 'AI 服务连接失败，请检查接口地址、API Key、模型名与推理强度');
+    await loadEffortSupport(true);
   } catch (e) {
     toast.error(apiError(e));
   } finally {
@@ -207,8 +308,8 @@ async function testAi(): Promise<void> {
 
 <template>
   <!--
-    AI 助手：标题行 + 设置行。连接是一行可展开的折叠区（已配置时默认收起），
-    其后是模型与推理强度、两个开关、识别检测、高级配置，最后一行「保存」。
+    AI 助手：标题行 + 设置行，全部平铺、不折叠：连接（接口地址、API Key）、模型与推理强度、
+    三个开关（启用、自动识别、文本层 PDF 核对）、识别检测，最后一行「保存」。
   -->
   <Panel title="AI 助手" description="原件识别与 AI 问答共用这里的连接、模型和推理强度；密钥只保存在服务端，页面不显示明文。" flush>
     <div v-if="loadError && !initial" class="px-5 py-4">
@@ -220,57 +321,44 @@ async function testAi(): Promise<void> {
       </Notice>
     </div>
     <div v-else class="divide-y divide-line">
-      <Disclosure
-        :open="!aiKeySet"
-        chevron="end"
-        :chevron-size="16"
-        summary-class="px-5 py-3.5 hover:bg-surface-2/40"
-      >
-        <template #summary>
-          <span class="min-w-0">
-            <span class="block text-[13.5px] leading-5 font-medium text-ink">{{ aiKeySet ? '服务已配置 · 修改连接' : '连接 AI 服务' }}</span>
-            <span v-if="aiKeySet && aiSavedBaseUrl" class="mt-0.5 block truncate font-mono text-xs leading-[18px] text-muted">{{ aiSavedBaseUrl }}</span>
-            <span v-else-if="!aiKeySet" class="mt-0.5 block text-[12.5px] leading-[18px] text-muted">填写服务商的接口地址与 API Key，只需填写一次</span>
-          </span>
-        </template>
-        <div class="grid gap-4 px-5 pb-4 sm:grid-cols-2">
-          <Input
-            v-model="aiForm.baseUrl"
-            label="接口地址"
-            placeholder="https://api.openai.com/v1"
-            :error="aiErrors.baseUrl"
-          />
-          <div
-            v-if="aiKeySet && !aiChangeKey"
-            class="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-9 text-sm text-muted sm:mt-6.5 sm:self-start"
-          >
-            <p class="flex items-center gap-1.5">
-              <Icon name="check-circle" :size="15" class="shrink-0 text-teal" />
-              {{
-                aiKeySource === 'server'
-                  ? '服务器已配置 Key，无需填写'
-                  : 'Key 已保存，无需重复填写'
-              }}
-            </p>
-            <Button v-if="aiKeySource !== 'server'" variant="link" class="text-[13px]" @click="aiChangeKey = true">
-              更换密钥
-            </Button>
-          </div>
-          <Input
-            v-else
-            v-model="aiForm.apiKey"
-            type="password"
-            label="API Key"
-            :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
-            autocomplete="new-password"
-            :error="aiErrors.apiKey"
-          />
+      <!-- 连接：已保存密钥时右边只显示状态，点「更换密钥」才出现输入框 -->
+      <div class="grid gap-4 px-5 py-4 sm:grid-cols-2">
+        <Input
+          v-model="aiForm.baseUrl"
+          label="接口地址"
+          placeholder="https://api.openai.com/v1"
+          :error="aiErrors.baseUrl"
+        />
+        <div
+          v-if="aiKeySet && !aiChangeKey"
+          class="flex flex-wrap items-center gap-x-3 gap-y-1 min-h-9 text-sm text-muted sm:mt-6.5 sm:self-start"
+        >
+          <p class="flex items-center gap-1.5">
+            <Icon name="check-circle" :size="15" class="shrink-0 text-teal" />
+            {{
+              aiKeySource === 'server'
+                ? '服务器已配置 Key，无需填写'
+                : 'Key 已保存，无需重复填写'
+            }}
+          </p>
+          <Button v-if="aiKeySource !== 'server'" variant="link" class="text-[13px]" @click="aiChangeKey = true">
+            更换密钥
+          </Button>
         </div>
-      </Disclosure>
+        <Input
+          v-else
+          v-model="aiForm.apiKey"
+          type="password"
+          label="API Key"
+          :placeholder="aiKeySet ? '留空保留已保存的密钥' : '只需填写一次'"
+          autocomplete="new-password"
+          :error="aiErrors.apiKey"
+        />
+      </div>
 
-      <!-- 模型与推理强度：模型从服务商的列表里选（也能直接填），强度自选；两者并排，下面各一行说明 -->
+      <!-- 模型与推理强度：模型从服务商的列表里选（也能直接填），档位由服务商按模型确认；两者并排，下面各一行说明 -->
       <div class="space-y-2 px-5 py-4">
-        <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
+        <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_16rem]">
           <div class="flex items-start gap-3">
             <Select
               v-if="modelOptions"
@@ -300,10 +388,11 @@ async function testAi(): Promise<void> {
               >刷新模型列表</Button
             >
           </div>
-          <Select v-model="aiForm.reasoningEffort" label="推理强度" :options="reasoningOptions" />
+          <Select v-model="aiForm.reasoningEffort" label="推理强度" :options="effortOptions" />
         </div>
         <p v-if="!modelOptions" class="text-xs text-muted">{{ modelHint }}</p>
-        <p class="text-xs text-muted">推理强度按所选档位发送；各模型支持的档位不同，模型不接受时识别、问答和检测连接会报错提示换档，不会悄悄改成别的强度。</p>
+        <p class="text-xs text-muted">{{ effortHint }}</p>
+        <Notice v-if="effortUnsupported" variant="inline" size="sm" tone="amber" role="status">{{ effortUnsupported }}</Notice>
         <Notice v-if="heavyEffort" variant="inline" size="sm" tone="amber" role="status">
           high 以上档位会明显增加每次识别、问答的耗时与费用；系统会多留输出预算，避免推理占满后回答被截断。
         </Notice>
@@ -330,6 +419,14 @@ async function testAi(): Promise<void> {
       >
         <span class="text-[13.5px] font-medium text-ink">上传后自动识别单据</span>
       </Switch>
+      <Switch
+        v-model="aiForm.reviewTextPdf"
+        label-position="left"
+        description="带文本层的 PDF 先按表格边框读出明细，再请模型拆分品名与规格、判断单位；数量与链接以文本层为准。每页会多一次模型调用。"
+        class="w-full justify-between px-5 py-3.5 [&_.text-meta]:text-[12.5px] [&_.text-meta]:text-muted"
+      >
+        <span class="text-[13.5px] font-medium text-ink">文本层 PDF 也请模型核对</span>
+      </Switch>
 
       <SettingRow label="识别检测" :description="aiCapabilitiesText">
         <Badge v-if="aiCapabilities" :tone="aiCapabilitiesOk ? 'teal' : 'amber'" dot>
@@ -344,17 +441,6 @@ async function testAi(): Promise<void> {
           >检测连接</Button
         >
       </SettingRow>
-
-      <Disclosure chevron="end" :chevron-size="16" summary="高级配置" summary-class="px-5 py-3.5 text-[13.5px] font-medium text-ink hover:bg-surface-2/40">
-        <Switch
-          v-model="aiForm.reviewTextPdf"
-          label-position="left"
-          description="带文本层的 PDF 先按表格边框读出明细，再请模型拆分品名与规格、判断单位；数量与链接以文本层为准。每页会多一次模型调用。"
-          class="w-full justify-between px-5 py-3.5 [&_.text-meta]:text-[12.5px] [&_.text-meta]:text-muted"
-        >
-          <span class="text-[13.5px] font-medium text-ink">文本层 PDF 也请模型核对</span>
-        </Switch>
-      </Disclosure>
 
       <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
         <p class="text-meta">修改连接、模型、推理强度或开关后，保存才会生效。</p>

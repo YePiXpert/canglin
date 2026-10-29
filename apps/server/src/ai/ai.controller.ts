@@ -7,14 +7,17 @@ import {
   HttpCode,
   Post,
   Put,
+  Query,
   Req,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import {
   aiAskSchema,
   aiConfigSchema,
+  aiEffortsQuerySchema,
   type AiAskInput,
   type AiConfigInput,
+  type AiEffortsQuery,
 } from '@canglin/shared';
 import { config } from '../config';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -61,6 +64,18 @@ export class AiController {
     // 有允许列表时只回列表里服务商也提供的模型；不限制时原样返回
     const allowed = config.llmAllowedModels;
     return { models: allowed ? allowed.map((m) => m.id).filter((id) => available.includes(id)) : available };
+  }
+
+  /** 向服务商确认一个模型接受哪些推理档位；结果按「地址 + 密钥 + 模型」缓存，refresh=1 重新探测 */
+  @Get('efforts')
+  async efforts(@Query(new ZodValidationPipe(aiEffortsQuerySchema)) query: AiEffortsQuery) {
+    const cfg = await this.aiConfig.getConfig();
+    if (!cfg.apiKey) throw new BadRequestException('请先配置服务密钥，再确认推理强度');
+    if (!query.refresh) {
+      const cached = await this.aiConfig.effortSupport(cfg, query.model);
+      if (cached) return cached;
+    }
+    return this.aiConfig.saveEffortSupport(cfg, query.model, await this.llm.probeEfforts(cfg.baseUrl, cfg.apiKey, query.model));
   }
 
   @Post('capabilities')

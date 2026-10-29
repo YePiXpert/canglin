@@ -171,6 +171,26 @@ export interface AiModelOption {
 export const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
+/** 服务商对一个模型确认过的推理档位（GET /api/ai/efforts）：设置页按它列出可选档位、标出默认档位 */
+export interface AiEffortSupport {
+  model: string;
+  /** 模型接受的档位（按 REASONING_LEVELS 的顺序）；null = 没能确认，设置页列出全部档位 */
+  supported: ReasoningLevel[] | null;
+  /** 不带 reasoning 调用时服务回报的默认档位；服务没回报则 null */
+  defaultEffort: ReasoningLevel | null;
+  /** false = 模型根本没有推理参数（整个 reasoning 参数被拒），只能按模型默认调用 */
+  reasoningParam: boolean;
+  checkedAt: string;
+  /** 没能确认时的原因（鉴权、限流、模型不存在等） */
+  detail?: string;
+}
+export const aiEffortsQuerySchema = z.object({
+  model: z.string().trim().min(1, '模型名不能为空').max(100),
+  /** 1 = 不用缓存，重新向服务商探测 */
+  refresh: z.literal('1').optional(),
+});
+export type AiEffortsQuery = z.infer<typeof aiEffortsQuerySchema>;
+
 /** OpenAI 兼容 LLM 服务配置（存 Setting 表，设置页可随时改） */
 export const aiConfigSchema = z.object({
   enabled: z.boolean(),
@@ -221,6 +241,8 @@ export interface AiConfigView {
   keySource?: 'server' | 'database';
   /** 设置页可选的模型（服务端 LLM_ALLOWED_MODELS）；null = 不限制，可以填写任意模型名 */
   models: AiModelOption[] | null;
+  /** 已保存模型的推理档位（服务商确认过才有），设置页载入时不必再探测 */
+  effortSupport?: AiEffortSupport;
 }
 
 export const aiAskSchema = z.object({

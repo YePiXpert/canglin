@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { createApp, closeApp, type TestApp } from './utils';
-import { LlmClient, type ChatCallOptions, type ChatCompletionResult } from '../src/ai/llm.client';
+import { LlmClient, type ChatCallOptions, type ChatCompletionResult, type EffortProbe } from '../src/ai/llm.client';
 import { config } from '../src/config';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AiSearchService } from '../src/ai/ai-search.service';
@@ -33,6 +33,13 @@ class FakeLlm {
 
   async ping(): Promise<boolean> {
     return true;
+  }
+
+  effortCalls: string[] = [];
+  effortProbe: EffortProbe = { supported: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium', reasoningParam: true };
+  async probeEfforts(_baseUrl: string, _apiKey: string, model: string): Promise<EffortProbe> {
+    this.effortCalls.push(model);
+    return this.effortProbe;
   }
 }
 
@@ -139,6 +146,45 @@ describe('AI 配置', () => {
     const missing = await ctx.inject({ method: 'GET', url: '/api/ai/models', ...auth() });
     expect(missing.statusCode).toBe(400);
     expect(fake.modelCalls).toHaveLength(0);
+  });
+
+  it('推理档位向服务商确认一次后按模型缓存，refresh=1 重新探测，没能确认的不缓存；已保存模型的档位随配置下发', async () => {
+    const service = ctx.app.get(AiConfigService);
+    const prisma = ctx.app.get(PrismaService);
+    const base = { enabled: false, baseUrl: (await service.getConfig()).baseUrl, model: 'gpt-6.1-sol', semanticSearch: true };
+    const efforts = (query: string) => ctx.inject({ method: 'GET', url: `/api/ai/efforts?${query}`, ...auth() });
+    expect((await ctx.inject({ method: 'GET', url: '/api/ai/efforts?model=gpt-6.1-sol' })).statusCode).toBe(401);
+    expect((await efforts('model=gpt-6.1-sol')).statusCode).toBe(400); // 没有密钥，不访问服务商
+    expect(fake.effortCalls).toHaveLength(0);
+    await ctx.inject({ method: 'PUT', url: '/api/ai/config', ...auth({ payload: { ...base, apiKey: 'k' } }) });
+    try {
+      const first = await efforts('model=gpt-6.1-sol');
+      expect(first.statusCode).toBe(200);
+      expect(first.json()).toMatchObject({ model: 'gpt-6.1-sol', supported: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium', reasoningParam: true });
+      expect(first.json().checkedAt).toBeTruthy();
+      expect((await efforts('model=gpt-6.1-sol')).json()).toEqual(first.json());
+      expect(fake.effortCalls).toEqual(['gpt-6.1-sol']);
+      // 已保存模型的档位随配置视图下发，设置页载入时不必再探测
+      expect((await ctx.inject({ method: 'GET', url: '/api/ai/config', ...auth() })).json().effortSupport).toEqual(first.json());
+      // 换个模型要重新探测；refresh=1 不用缓存
+      fake.effortProbe = { supported: [], defaultEffort: null, reasoningParam: false };
+      expect((await efforts('model=chat-model')).json()).toMatchObject({ model: 'chat-model', supported: [], reasoningParam: false });
+      expect((await efforts('model=gpt-6.1-sol&refresh=1')).json()).toMatchObject({ model: 'gpt-6.1-sol', supported: [] });
+      expect(fake.effortCalls).toEqual(['gpt-6.1-sol', 'chat-model', 'gpt-6.1-sol']);
+      // 没能确认：带原因返回、不缓存，下次再探
+      fake.effortProbe = { supported: null, defaultEffort: null, reasoningParam: true, detail: '服务返回 404' };
+      expect((await efforts('model=missing-model')).json()).toMatchObject({ model: 'missing-model', supported: null, detail: '服务返回 404' });
+      await efforts('model=missing-model');
+      expect(fake.effortCalls.filter((m) => m === 'missing-model')).toHaveLength(2);
+      expect((await efforts('model=')).statusCode).toBe(400);
+    } finally {
+      fake.effortCalls.length = 0;
+      fake.effortProbe = { supported: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium', reasoningParam: true };
+      await service.updateConfig({ ...base, model: 'gemini-3.8-flash-high', reasoningEffort: 'auto' });
+      const row = await prisma.setting.findUnique({ where: { key: 'aiConfig' } });
+      if (row) await prisma.setting.update({ where: { key: 'aiConfig' }, data: { value: JSON.stringify({ ...JSON.parse(row.value), apiKey: '' }) } });
+      await prisma.setting.deleteMany({ where: { key: 'aiEffortSupport' } });
+    }
   });
 
   it('服务器密钥无需页面填写即可获取模型，且不回传或保存到数据库', async () => {

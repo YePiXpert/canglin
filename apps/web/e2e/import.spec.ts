@@ -6,7 +6,7 @@ const imageFile = (marker: string) => Buffer.concat([Buffer.from(capabilityImage
 /** 合成原件上的申请日期；后续采购、到货、发放都用同一天 */
 const businessDate = '2026-09-27';
 
-test('已配置密钥时自动获取模型列表供选择，也可直接填写；推理强度自选；列表故障不影响已选模型', async ({ page, request }) => {
+test('已配置密钥时自动获取模型列表供选择，也可直接填写；推理强度只列服务商确认的档位；列表故障不影响已选模型', async ({ page, request }) => {
   const password = 'browser-test-password';
   await request.post('/api/auth/setup', { data: { password } });
   await page.goto('/login');
@@ -31,28 +31,42 @@ test('已配置密钥时自动获取模型列表供选择，也可直接填写�
   await page.route('**/api/ai/models', (route) =>
     route.fulfill({ json: { models: ['gpt-6.1-sol', 'gpt-6.1-terra', 'text-embedding-4'] } }),
   );
+  // 服务商确认的档位：sol 不接受 none、minimal；terra 连 max 也不接受
+  await page.route('**/api/ai/efforts*', (route) => {
+    const model = new URL(route.request().url()).searchParams.get('model');
+    const supported = model === 'gpt-6.1-terra' ? ['low', 'medium', 'high', 'xhigh'] : ['low', 'medium', 'high', 'xhigh', 'max'];
+    return route.fulfill({ json: { model, supported, defaultEffort: 'medium', reasoningParam: true, checkedAt: '2026-10-29T08:00:00Z' } });
+  });
   await page.goto('/settings');
   const panel = page.getByRole('region', { name: 'AI 助手', exact: true });
-  await expect(panel.getByText('服务已配置 · 修改连接', { exact: true })).toBeVisible();
-  await expect(panel.getByLabel('接口地址', { exact: true })).not.toBeVisible();
-  await panel.getByText('服务已配置 · 修改连接', { exact: true }).click();
+  // 连接信息平铺、不折叠：地址可见，密钥只显示状态
+  await expect(panel.getByLabel('接口地址', { exact: true })).toBeVisible();
   await expect(panel.getByText('服务器已配置 Key，无需填写')).toBeVisible();
-  await panel.getByText('服务已配置 · 修改连接', { exact: true }).click();
   await expect(panel.getByLabel('API Key', { exact: true })).toHaveCount(0);
+  await expect(panel.getByText('文本层 PDF 也请模型核对', { exact: true })).toBeVisible();
   // 模型：可输入下拉，候选来自服务商接口
   const model = panel.getByRole('combobox', { name: '模型', exact: true });
   await expect(model).toHaveValue('gpt-6.1-sol');
   await expect(panel.getByText('列表来自服务商接口，共 3 个')).toBeVisible();
+  // 推理强度：只列服务商确认 sol 接受的档位，标出默认
+  await expect(panel.getByText('服务商确认 gpt-6.1-sol 接受：low、medium（默认）、high、xhigh、max。')).toBeVisible();
+  const effort = panel.getByRole('combobox', { name: '推理强度', exact: true });
+  await effort.click();
+  await expect(page.getByRole('option')).toHaveCount(7);
+  await expect(page.getByRole('option', { name: 'none · 不推理', exact: true })).toHaveCount(0);
+  await page.getByRole('option', { name: 'max · 最高', exact: true }).click();
+  await expect(effort).toContainText('max · 最高');
+  await expect(panel.getByText('high 以上档位会明显增加')).toBeVisible();
+  // 换成 terra：重新向服务商确认，max 不接受就提醒换档
   await panel.getByRole('button', { name: '展开模型的选项', exact: true }).click();
   await expect(page.getByRole('option')).toHaveCount(3);
   await page.getByRole('option', { name: 'gpt-6.1-terra', exact: true }).click();
   await expect(model).toHaveValue('gpt-6.1-terra');
-  // 推理强度自选，高档位有提醒
-  const effort = panel.getByRole('combobox', { name: '推理强度', exact: true });
+  await expect(panel.getByText('gpt-6.1-terra 不接受「max」，请换一档。')).toBeVisible();
   await effort.click();
-  await page.getByRole('option', { name: 'max · 最高', exact: true }).click();
-  await expect(effort).toContainText('max · 最高');
-  await expect(panel.getByText('high 以上档位会明显增加')).toBeVisible();
+  await page.getByRole('option', { name: 'xhigh · 很高', exact: true }).click();
+  await expect(effort).toContainText('xhigh · 很高');
+  await expect(panel.getByText('不接受「max」')).toHaveCount(0);
   // 列表获取失败：已选模型不变，仍可直接填写
   await page.route('**/api/ai/models', (route) =>
     route.fulfill({ status: 503, json: { message: '无法获取模型列表' } }),
@@ -65,7 +79,7 @@ test('已配置密钥时自动获取模型列表供选择，也可直接填写�
     page.waitForRequest((r) => r.url().endsWith('/api/ai/config') && r.method() === 'PUT'),
     panel.getByRole('button', { name: '保存', exact: true }).click(),
   ]);
-  expect(saved.postDataJSON()).toMatchObject({ model: 'typed-model', reasoningEffort: 'max' });
+  expect(saved.postDataJSON()).toMatchObject({ model: 'typed-model', reasoningEffort: 'xhigh' });
   await expect(page.getByText('AI 配置已保存')).toBeVisible();
 });
 
